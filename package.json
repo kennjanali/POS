@@ -12,7 +12,8 @@
     "verify:demo": "node scripts/verify-demo.mjs",
     "verify:auth": "node scripts/verify-auth.mjs",
     "check": "npm run typecheck && npm run lint && npm run verify:tax && npm run verify:auth && npm run verify:demo",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "deploy": "next build && wrangler deploy"
   },
   "dependencies": {
     "clsx": "^2.1.1",
@@ -31,6 +32,7 @@
     "eslint": "^9.18.0",
     "eslint-config-next": "^15.5.23",
     "tailwindcss": "^4.0.0",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "wrangler": "^4.136.3"
   }
 }

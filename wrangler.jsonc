@@ -1,0 +1,16 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "pos",
+  "account_id": "95b931194e93e924460507e04c746e46",
+  "compatibility_date": "2026-09-22",
+
+  // Static export only — no server code. `next build` writes ./out.
+  // trailingSlash: true in next.config.ts, so canonicalise to the slashed form.
+  "assets": {
+    "directory": "./out",
+    "html_handling": "force-trailing-slash",
+    "not_found_handling": "404-page"
+  },
+
+  "observability": { "enabled": true }
+}

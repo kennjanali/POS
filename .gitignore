@@ -7,3 +7,6 @@ next-env.d.ts
 
 # local tool artifacts
 .playwright-mcp/
+
+# wrangler local state
+.wrangler/
