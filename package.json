@@ -1,0 +1,36 @@
+{
+  "name": "kramgen-pos",
+  "version": "7.0.0",
+  "private": true,
+  "description": "Offline-first point of sale for Philippine carinderias and small restaurants.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint src",
+    "verify:tax": "node scripts/verify-tax.mjs",
+    "verify:demo": "node scripts/verify-demo.mjs",
+    "verify:auth": "node scripts/verify-auth.mjs",
+    "check": "npm run typecheck && npm run lint && npm run verify:tax && npm run verify:auth && npm run verify:demo",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.469.0",
+    "next": "^15.5.23",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "zustand": "^5.0.3"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3.3.6",
+    "@tailwindcss/postcss": "^4.0.0",
+    "@types/node": "^22.10.5",
+    "@types/react": "^19.0.7",
+    "@types/react-dom": "^19.0.3",
+    "eslint": "^9.18.0",
+    "eslint-config-next": "^15.5.23",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^5.7.3"
+  }
+}

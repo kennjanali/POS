@@ -1,0 +1,9 @@
+node_modules/
+.next/
+out/
+.env*.local
+*.tsbuildinfo
+next-env.d.ts
+
+# local tool artifacts
+.playwright-mcp/

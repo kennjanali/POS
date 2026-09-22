@@ -1,0 +1,158 @@
+@import 'tailwindcss';
+
+/* ───────────────────────────────────────────────────────────────────────
+   Design tokens carried over from the v6 build. The warm-neutral ground,
+   near-black rail, and single orange accent are the product's existing
+   identity — this rewrite changes the architecture, not the face of it.
+   ─────────────────────────────────────────────────────────────────────── */
+
+@theme {
+  --color-ground: #f0ede9;
+  --color-surface: #ffffff;
+  --color-raised: #f7f5f2;
+  --color-line: #e5e2dd;
+
+  --color-ink: #111111;
+  --color-ink-2: #444444;
+  --color-ink-3: #888888;
+  --color-ink-4: #cccccc;
+
+  --color-accent: #ff5c1a;
+  --color-good: #15803d;
+  --color-bad: #b91c1c;
+  --color-warn: #b45309;
+  --color-info: #1d4ed8;
+  --color-note: #6d28d9;
+  --color-cool: #0e7490;
+
+  --color-rail: #080808;
+  --color-rail-line: #1c1c1c;
+  --color-rail-hover: #111111;
+  --color-rail-active: #1a1a1a;
+
+  --font-sans: ui-sans-serif, -apple-system, system-ui, 'Segoe UI', sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', 'Cascadia Mono', Menlo, monospace;
+}
+
+:root {
+  --rail-w: 210px;
+  --topbar-h: 52px;
+}
+
+[data-rail='collapsed'] {
+  --rail-w: 56px;
+}
+
+[data-theme='dark'] {
+  --color-ground: #0d0d0d;
+  --color-surface: #161616;
+  --color-raised: #1e1e1e;
+  --color-line: #2a2a2a;
+  --color-ink: #f0f0f0;
+  --color-ink-2: #aaaaaa;
+  --color-ink-3: #555555;
+  --color-ink-4: #333333;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--color-ground);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+/* Visible focus everywhere. Never outline:none without a replacement. */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Tabular figures for every money column, so digits line up in tables. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+.scroll-y {
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-ink-4) transparent;
+}
+.scroll-y::-webkit-scrollbar {
+  width: 8px;
+}
+.scroll-y::-webkit-scrollbar-thumb {
+  background: var(--color-ink-4);
+  border-radius: 4px;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.animate-rise {
+  animation: rise 0.16s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Wrong PIN. The only feedback a keypad gets — no hint about whose PIN it is. */
+@keyframes shake {
+  10%,
+  90% {
+    transform: translateX(-2px);
+  }
+  20%,
+  80% {
+    transform: translateX(4px);
+  }
+  30%,
+  50%,
+  70% {
+    transform: translateX(-7px);
+  }
+  40%,
+  60% {
+    transform: translateX(7px);
+  }
+}
+.animate-shake {
+  animation: shake 0.45s cubic-bezier(0.36, 0.07, 0.19, 0.97);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media print {
+  body {
+    overflow: visible;
+    background: #fff;
+  }
+  .no-print {
+    display: none !important;
+  }
+}
