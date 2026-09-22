@@ -2,8 +2,8 @@
 
 Offline-first point of sale for Philippine carinderias and small restaurants.
 A rewrite of the v6 single-file HTML build onto Next.js 15, correcting the
-statutory discount computation and replacing the client-side data model with
-one that survives contact with a second terminal.
+statutory discount computation and replacing a data model that lost sales
+once the day got busy.
 
 ```bash
 npm install
@@ -53,8 +53,8 @@ at closing.
 | Money | JS floats | integer centavos behind a branded `Centavos` type |
 | Storage | whole-DB localStorage, silent failure | IndexedDB per-record; failures surface in the topbar |
 | Overselling | `Math.max(0, …)` | negative stock recorded and flagged as variance |
-| Order numbers | localStorage counter | per-branch gapless sequence, offline block allocation |
-| Audit log | capped at 150, O(n) unshift | append-only, 2000 retained, syncs to server |
+| Order numbers | localStorage counter | per-branch gapless sequence that no reset can restart |
+| Audit log | capped at 150, O(n) unshift | append-only, 2000 retained, carried into each backup |
 | Markup | string concat, `esc()` missing `'` | React; the injection class is gone |
 | Access | one screen, everyone saw everything | three roles behind a six-digit PIN, with who-did-what on every sale |
 
@@ -108,13 +108,11 @@ Every order records who opened it, who served it, who took the money and who
 voided it; stock moves and audit entries carry the actor too. Orders history
 shows served-by and paid-by; the activity log names the person on each line.
 
-**This is UI-level access control, not a security boundary.** The app is a
-static export: there is no server and no middleware, the guards run in the
-browser, and anyone determined enough can reach the data in IndexedDB with
-devtools. What it does is keep three people on the job each was given. The
-app has no server, so this is the only boundary there is; anyone with
-devtools on the till can work around it. Sales carry actor columns either way, so
-the server model is already shaped for it.
+**This is UI-level access control, not a security boundary.** There is no
+server and no middleware; the guards run in the browser, and anyone determined
+enough can reach IndexedDB with devtools. What it does is keep three people on
+the job each was given. Every sale still records who did what, so the trail
+holds even where the guard does not.
 
 ---
 
@@ -140,7 +138,7 @@ npm run verify:auth
 ```
 
 ```bash
-npm run check      # typecheck + lint + tax, auth and demo verification
+npm run check      # typecheck + lint + tax, auth, demo and safeguard checks
 ```
 
 ---
@@ -189,15 +187,21 @@ readable after a rename or a re-price.
 Every sale is written to the device the moment it happens, so nothing is lost
 to a closed tab, a flat battery or a reload. The device itself is the risk.
 
-A bar appears on every screen when the day's sales are not in a backup yet,
-naming how many are at risk. One click saves
-`kramgen-backup-YYYY-MM-DD.json`; the bar clears and returns the next day.
+The day's backup saves itself. `kramgen-backup-YYYY-MM-DD.json` is written at
+**23:59**, or on the next launch if the till was already switched off, and only
+when there are sales not already in a file. No button, no reminder to dismiss.
+
+It polls the clock once a minute rather than sleeping until midnight, because
+a tablet that suspends overnight never fires a long timer — and it runs behind
+the lock screen, since closing time is exactly when the till is locked.
 Settings → Monthly archive additionally saves a whole finished month as one
 file, with its totals precomputed so opening it answers "how did we do" without
 a rescan.
 
-**Keep the files in a OneDrive or Google Drive folder.** That is the entire
-disaster-recovery story: the copy leaves the building by itself.
+**Point Chrome’s download folder at OneDrive or Google Drive** (Settings →
+Downloads → Location). That is the entire disaster-recovery story — files land
+there and sync off the device by themselves. Without it they sit in Downloads
+on the very machine that could be lost.
 
 Measured, about 1.67 KB per sale:
 
@@ -262,7 +266,7 @@ src/
   app/                    routes: POS, orders, inventory, dashboard, settings
   components/
     auth/                 keypad, lock screen, first-run setup, route gate
-    layout/               rail, topbar, backup bar, shell, new-order dialog
+    layout/               rail, topbar, auto-backup, shell, new-order dialog
     pos/                  menu grid, order panel, checkout, receipt
     settings/             branches, users, monthly archive
     ui/                   Button, Modal, Field, Toggle, Toast, Empty

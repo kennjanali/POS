@@ -43,7 +43,7 @@ const { usePos, orderGross } = await load('usePos');
 const { computeBill } = await load('tax');
 const { DEFAULT_PRODUCTS, DEFAULT_BRANCH } = await load('seed');
 const { monthOf, orderMonth } = await load('archive');
-const { backupIsDue, backupFileName } = await load('backup');
+const { backupIsDue, backupFileName, autoBackupDue, CUTOFF_MINUTES } = await load('backup');
 const { DEFAULT_PIN, DEFAULT_SUPERADMIN, hasDefaultPin } = await load('seed');
 const { verifyPin } = await load('crypto');
 
@@ -424,6 +424,61 @@ console.log('\n— Default account: the till can never lock its owner out —');
   check('the new PIN does', (await verifyPin('481902', S().users[0].pin)) === true);
   check('a changed credential is not recognised as the default one',
     hasDefaultPin(S().users[0]) === false);
+}
+
+
+console.log('\n— Automatic backup: fires by itself, never twice —');
+{
+  const at = (y, m, d, hh, mm) => new Date(y, m - 1, d, hh, mm, 0, 0).getTime();
+  const NOON     = at(2026, 9, 23, 12, 0);
+  const CLOSING  = at(2026, 9, 23, 23, 59);
+  const LATE     = at(2026, 9, 23, 23, 30);
+  const NEXT_AM  = at(2026, 9, 24, 8, 30);
+  const YESTERDAY= at(2026, 9, 22, 23, 59);
+
+  check('cutoff is 23:59', CUTOFF_MINUTES === 23 * 60 + 59, String(CUTOFF_MINUTES));
+
+  check('mid-day with today already saved: no',
+    autoBackupDue(NOON - 3600000, 5, NOON) === false);
+  check('mid-day, never saved, sales waiting: YES (catch-up)',
+    autoBackupDue(null, 5, NOON) === true);
+  check('mid-day, last saved yesterday, sales waiting: YES (catch-up)',
+    autoBackupDue(YESTERDAY, 5, NOON) === true);
+
+  check('23:30 with today already saved: no',
+    autoBackupDue(at(2026, 9, 23, 9, 0), 5, LATE) === false);
+  check('23:59 with today not saved: YES (closing)',
+    autoBackupDue(YESTERDAY, 5, CLOSING) === true);
+  check('23:59 but today already saved: no',
+    autoBackupDue(at(2026, 9, 23, 9, 0), 5, CLOSING) === false);
+
+  check('no unsaved sales: never fires, even at 23:59',
+    autoBackupDue(YESTERDAY, 0, CLOSING) === false);
+  check('no unsaved sales and never backed up: still no',
+    autoBackupDue(null, 0, NOON) === false);
+
+  check('next morning after an unsaved night: YES',
+    autoBackupDue(YESTERDAY, 3, NEXT_AM) === true);
+
+  // The loop the interval would run: once it saves, it must go quiet.
+  let last = YESTERDAY;
+  let saves = 0;
+  for (let m = 0; m < 24 * 60; m += 1) {
+    const now = at(2026, 9, 23, 0, 0) + m * 60000;
+    if (autoBackupDue(last, 4, now)) { saves += 1; last = now; }
+  }
+  check('over a whole day of minute ticks it saves exactly once', saves === 1,
+    'saves: ' + saves);
+
+  // Two quiet days then a sale: one file, not a backlog of them.
+  last = at(2026, 9, 20, 23, 59);
+  saves = 0;
+  for (let m = 0; m < 3 * 24 * 60; m += 1) {
+    const now = at(2026, 9, 21, 0, 0) + m * 60000;
+    if (autoBackupDue(last, 4, now)) { saves += 1; last = now; }
+  }
+  check('three days running produces three files, one per day', saves === 3,
+    'saves: ' + saves);
 }
 
 rmSync(dir, { recursive: true, force: true });

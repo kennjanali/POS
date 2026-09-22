@@ -1117,7 +1117,7 @@ export const usePos = create<PosState>()(
           audit: log(
             state.audit,
             'data.backup',
-            `Backup saved — ${state.orders.length} orders`,
+            `Backup saved — ${state.orders.length} order${state.orders.length === 1 ? '' : 's'}`,
             'success',
             state.activeBranchId,
           ),

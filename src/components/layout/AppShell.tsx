@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
-import { BackupBar } from './BackupBar';
+import { AutoBackup } from './AutoBackup';
 import { DefaultPinBar } from './DefaultPinBar';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
@@ -135,7 +135,6 @@ function Frame({ children }: { children: React.ReactNode }) {
       <Topbar />
       <main className="ml-[var(--rail-w)] flex h-screen flex-col pt-[var(--topbar-h)] transition-[margin] duration-200">
         <DefaultPinBar />
-        <BackupBar />
         <div className="min-h-0 flex-1">{children}</div>
       </main>
       {canOpenOrders && <NewOrderDialog />}
@@ -149,6 +148,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <AuthGate>
         <Frame>{children}</Frame>
       </AuthGate>
+      {/* Outside the gate: closing time is when the till is locked, and a
+          locked till still has to save the day. */}
+      <AutoBackup />
       {/* Outside the gate: the keypad and the first-run screen raise toasts too. */}
       <Toaster />
     </ShellProvider>

@@ -27,7 +27,7 @@ Three roles:
 | **Gross profit** | Used the product's *current* cost, so re-pricing the menu rewrote past margins. Cost is now frozen on the line at the moment of sale. |
 | **Restore** | Accepted almost any file. Now validates version and shape before replacing anything, and logs the restore. |
 
-All covered by `npm run verify:safeguards` — 74 checks, part of `npm run check`.
+All covered by `npm run verify:safeguards` — 86 checks, part of `npm run check`.
 
 ### Getting in
 
@@ -96,11 +96,18 @@ the blob automatically on first load, leaving the blob at 3.5 KB. Reads are
 unchanged and still instant — filtering a full year takes 2.6 ms — because
 orders stay in memory. **A year of sales stays on the device and searchable.**
 
-**~~3. No backup between archives.~~ FIXED.** A warning bar now appears on
-every screen whenever the day's sales are not in a backup yet, naming how many
-are at risk. One click saves `kramgen-backup-YYYY-MM-DD.json` and the bar
-clears; it returns the next day. Keep the file in a OneDrive or Google Drive
-folder and the copy leaves the device by itself.
+**~~3. No backup between archives.~~ FIXED.** The day's backup saves itself —
+no button, no reminder to dismiss. `kramgen-backup-YYYY-MM-DD.json` is written
+at **23:59**, or on the next launch if the till was already switched off, and
+only when there are sales not already saved.
+
+It runs on a one-minute tick rather than a timer set for midnight: a tablet
+that suspends overnight never fires a long timer. It also runs behind the lock
+screen, because closing time is exactly when the till is locked.
+
+**Point Chrome's download folder at OneDrive or Google Drive** (Settings →
+Downloads → Location). That is what gets the copy off the device; without it
+the files sit in Downloads on the machine that could be lost.
 
 **4. Roles are not a security boundary.** Anyone with browser devtools on the
 till can edit stored data and make themselves superadmin. Inherent to a
