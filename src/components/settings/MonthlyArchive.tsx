@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Archive, Check, Download, FolderOpen } from 'lucide-react';
 
 import { Button } from '@/components/ui/Button';
@@ -9,6 +9,7 @@ import { toast } from '@/components/ui/Toast';
 import { cn } from '@/components/ui/cn';
 import { peso, fmtDate } from '@/lib/format';
 import {
+  archivableMonths,
   archiveFileName,
   describeBadArchive,
   monthLabel,
@@ -26,7 +27,10 @@ import { usePos } from '@/store/usePos';
  * sales go out.
  */
 export function MonthlyArchive() {
-  const months = usePos((s) => s.archivableMonths());
+  // Derived here rather than through a store method: a selector that returns
+  // a fresh array re-renders forever. Same reason as DefaultPinBar.
+  const orders = usePos((s) => s.orders);
+  const months = useMemo(() => archivableMonths(orders), [orders]);
   const build = usePos((s) => s.buildMonthlyArchive);
   const prune = usePos((s) => s.pruneArchivedMonth);
   const currency = usePos((s) => s.settings.currency);

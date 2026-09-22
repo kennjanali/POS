@@ -6,6 +6,7 @@ import { ShoppingCart } from 'lucide-react';
 import { PinPad } from './PinPad';
 import { usePos } from '@/store/usePos';
 import { useAuth } from '@/store/useAuth';
+import { DEFAULT_PIN } from '@/lib/seed';
 
 /**
  * The keypad. No usernames, no password field, no list of who works here —
@@ -16,6 +17,8 @@ export function LockScreen() {
   const users = usePos((s) => s.users);
   const recordLogin = usePos((s) => s.recordLogin);
   const businessName = usePos((s) => s.settings.businessName);
+  // Only while nobody has set a real PIN yet.
+  const untouched = usePos((s) => s.defaultPinAccounts().length > 0);
 
   const signIn = useAuth((s) => s.signIn);
   const lockedUntil = useAuth((s) => s.lockedUntil);
@@ -70,6 +73,16 @@ export function LockScreen() {
               locked ? `Too many attempts. Try again in ${secondsLeft}s.` : (error ?? ' ')
             }
           />
+
+          {/* A brand-new till has no one to ask for the PIN, so it says so.
+              Disappears for good the moment a real PIN is set. */}
+          {untouched && (
+            <p className="mt-4 rounded-md border border-line bg-raised px-3 py-2 text-center text-[11.5px] leading-relaxed text-ink-2">
+              First time on this device? Sign in with{' '}
+              <strong className="tnum text-ink">{DEFAULT_PIN}</strong>, then change
+              it in Settings → Users.
+            </p>
+          )}
         </div>
       </div>
     </div>

@@ -27,7 +27,17 @@ Three roles:
 | **Gross profit** | Used the product's *current* cost, so re-pricing the menu rewrote past margins. Cost is now frozen on the line at the moment of sale. |
 | **Restore** | Accepted almost any file. Now validates version and shape before replacing anything, and logs the restore. |
 
-All covered by `npm run verify:safeguards` — 61 checks, part of `npm run check`.
+All covered by `npm run verify:safeguards` — 74 checks, part of `npm run check`.
+
+### Getting in
+
+Every install ships with one superadmin, **PIN 000000**, shown on the lock
+screen of a new device. There is no server to reset a forgotten PIN against,
+so a till that could lock its owner out permanently was not acceptable.
+
+That PIN is also an open door on a device handling cash, so a red bar sits on
+every screen until it is changed, and 000000 cannot be set again afterwards —
+by anyone, for any account. Change it in Settings → Users on day one.
 
 ---
 

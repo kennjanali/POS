@@ -93,10 +93,16 @@ purpose, without disturbing what is on the floor. The failed-attempt counter is
 the one thing kept in `localStorage` — five wrong PINs locks the keypad for
 thirty seconds, and a lockout you can clear by pressing F5 is not a lockout.
 
-A fresh install has no users and ships **no default PIN**. It asks for the
-first superadmin before anything else loads. Nobody is ever deleted, only
-deactivated, because orders and audit rows point at them — and the last active
-superadmin can be neither deactivated nor demoted.
+A fresh install ships with one superadmin whose PIN is **000000**, stated on
+the lock screen of a new device. There is no server to reset a forgotten PIN
+against, so a till that can lock its owner out permanently is not a design
+worth having. That PIN is equally an open door on a device handling cash: a
+red bar sits on every screen until it is changed, and once changed, `000000`
+can never be set again — by anyone, for any account.
+
+Nobody is ever deleted, only deactivated, because orders and audit rows point
+at them — and the last active superadmin can be neither deactivated nor
+demoted.
 
 Every order records who opened it, who served it, who took the money and who
 voided it; stock moves and audit entries carry the actor too. Orders history

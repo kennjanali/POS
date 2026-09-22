@@ -44,6 +44,8 @@ const { computeBill } = await load('tax');
 const { DEFAULT_PRODUCTS, DEFAULT_BRANCH } = await load('seed');
 const { monthOf, orderMonth } = await load('archive');
 const { backupIsDue, backupFileName } = await load('backup');
+const { DEFAULT_PIN, DEFAULT_SUPERADMIN, hasDefaultPin } = await load('seed');
+const { verifyPin } = await load('crypto');
 
 let failures = 0;
 function check(name, ok, detail = '') {
@@ -389,6 +391,39 @@ console.log('\n— Daily backup: the device is not the only copy —');
   usePos.setState({ lastBackupAt: Date.now() - DAY });
   check('yesterday\'s backup does not cover today\'s sales', S().unbackedUp() === 2,
     'at risk ' + S().unbackedUp());
+}
+
+
+console.log('\n— Default account: the till can never lock its owner out —');
+{
+  check('a fresh install ships with exactly one account',
+    DEFAULT_SUPERADMIN.role === 'superadmin' && DEFAULT_SUPERADMIN.active === true);
+
+  const opens = await verifyPin(DEFAULT_PIN, DEFAULT_SUPERADMIN.pin);
+  check(`the shipped PIN ${DEFAULT_PIN} actually opens it`, opens === true);
+  check('a different PIN does not', (await verifyPin('123456', DEFAULT_SUPERADMIN.pin)) === false);
+  // Only the credential matters here: the sentinel user id is a run of zeros
+  // and contains '000000' by coincidence, which is not the PIN being stored.
+  check('the credential holds no plaintext PIN',
+    !JSON.stringify(DEFAULT_SUPERADMIN.pin).includes(DEFAULT_PIN));
+
+  usePos.setState({ users: [{ ...DEFAULT_SUPERADMIN }] });
+  check('the warning is showing', S().defaultPinAccounts().length === 1);
+
+  const back = await S().setUserPin(DEFAULT_SUPERADMIN.id, DEFAULT_PIN);
+  check('the default PIN cannot be re-set deliberately', back.ok === false, back.ok ? '' : back.error);
+
+  const dupe = await S().addUser({ name: 'Waiter', role: 'waiter', pin: DEFAULT_PIN });
+  check('a new user cannot claim the default PIN', dupe.ok === false, dupe.ok ? '' : dupe.error);
+
+  const changed = await S().setUserPin(DEFAULT_SUPERADMIN.id, '481902');
+  check('the owner can set a real PIN', changed.ok === true, changed.ok ? '' : changed.error);
+  check('the warning clears once changed', S().defaultPinAccounts().length === 0);
+  check('the old default no longer opens the account',
+    (await verifyPin(DEFAULT_PIN, S().users[0].pin)) === false);
+  check('the new PIN does', (await verifyPin('481902', S().users[0].pin)) === true);
+  check('a changed credential is not recognised as the default one',
+    hasDefaultPin(S().users[0]) === false);
 }
 
 rmSync(dir, { recursive: true, force: true });

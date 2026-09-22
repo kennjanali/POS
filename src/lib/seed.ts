@@ -1,5 +1,5 @@
 import { cents } from './money';
-import type { Branch, Product, Settings } from './types';
+import type { Branch, Product, Settings, User } from './types';
 
 export const QUICK_LABELS = [
   'Table 1',
@@ -86,3 +86,45 @@ export const DEFAULT_PRODUCTS: Product[] = SEED_PRODUCTS.map((p) => ({
 }));
 
 export const OPENING_STOCK = 30;
+
+// ── The account that ships with the till ─────────────────────────────────
+//
+// A POS you cannot sign in to is useless, and there is no server here to
+// reset a forgotten PIN against. So every fresh install starts with one
+// superadmin whose PIN is 000000, printed below in plain sight because it is
+// meant to be public — it is a way in, not a secret.
+//
+// It is also a wide-open door on a till that handles cash, so the app nags
+// about it on every screen until the PIN is changed, and the nag only clears
+// when the credential stops being this one.
+
+export const DEFAULT_PIN = '000000';
+
+/**
+ * PBKDF2-HMAC-SHA256 of DEFAULT_PIN, 210k iterations, with a fixed salt.
+ *
+ * Precomputed because hashing is async and the store's initial state is not.
+ * A fixed, published salt is worthless for a PIN that is already published;
+ * the moment the owner sets their own, `setUserPin` generates a fresh random
+ * one like every other credential.
+ */
+export const DEFAULT_PIN_CREDENTIAL = {
+  salt: 'hxRzD6XAW5G58j3SvP9tFg==',
+  hash: 'ENXUQFRiYGBFGugQc0ZaJHIN5JTDkBj4LGr86lPyirE=',
+  iterations: 210_000,
+} as const;
+
+export const DEFAULT_SUPERADMIN: User = {
+  id: '00000000-0000-7000-8000-000000000001',
+  name: 'Owner',
+  role: 'superadmin',
+  active: true,
+  pin: { ...DEFAULT_PIN_CREDENTIAL },
+  createdAt: 0,
+  lastLoginAt: null,
+};
+
+/** True while this account can still be opened with 000000. */
+export function hasDefaultPin(user: { pin: { salt: string } }): boolean {
+  return user.pin.salt === DEFAULT_PIN_CREDENTIAL.salt;
+}

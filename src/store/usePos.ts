@@ -24,7 +24,10 @@ import {
   DEFAULT_BRANCH,
   DEFAULT_PRODUCTS,
   DEFAULT_SETTINGS,
+  DEFAULT_PIN,
+  DEFAULT_SUPERADMIN,
   OPENING_STOCK,
+  hasDefaultPin,
 } from '@/lib/seed';
 import { actorId } from './useAuth';
 import type {
@@ -161,6 +164,8 @@ interface PosState {
   unbackedUp: () => number;
   /** Called once a backup file has actually been handed to the browser. */
   recordBackup: () => void;
+  /** Active accounts that can still be opened with the shipped PIN. */
+  defaultPinAccounts: () => User[];
   clearPersistError: () => void;
 }
 
@@ -319,9 +324,11 @@ export const usePos = create<PosState>()(
   persist(
     (set, get) => ({
       branches: [DEFAULT_BRANCH],
-      // No default user and no default PIN. A fresh install prompts for the
-      // first superadmin before anything else loads.
-      users: [],
+      // Every install ships able to be signed into: one superadmin, PIN
+      // 000000. There is no server to reset a forgotten PIN against, so a till
+      // that can lock its owner out permanently is not an acceptable design.
+      // The app nags on every screen until this PIN is changed.
+      users: [DEFAULT_SUPERADMIN],
       products: DEFAULT_PRODUCTS,
       orders: [],
       stock: { [DEFAULT_BRANCH.id]: initialStock(DEFAULT_PRODUCTS) },
@@ -720,6 +727,12 @@ export const usePos = create<PosState>()(
         if (!isValidPin(pin)) {
           return { ok: false, error: `The PIN has to be ${PIN_LENGTH} digits.` };
         }
+        if (pin === DEFAULT_PIN) {
+          return {
+            ok: false,
+            error: `${DEFAULT_PIN} is the default PIN this till ships with. Pick another one.`,
+          };
+        }
         const clash = await pinTaken(get().users, pin);
         if (clash) {
           return {
@@ -756,6 +769,16 @@ export const usePos = create<PosState>()(
         if (!target) return { ok: false, error: 'That user no longer exists.' };
         if (!isValidPin(pin)) {
           return { ok: false, error: `The PIN has to be ${PIN_LENGTH} digits.` };
+        }
+        // The shipped PIN is printed in the source and on the lock screen.
+        // Allowing it back would also defeat hasDefaultPin, which recognises
+        // the shipped credential by its salt — a re-set to 000000 would get a
+        // fresh salt and silently clear the warning while the door stayed open.
+        if (pin === DEFAULT_PIN) {
+          return {
+            ok: false,
+            error: `${DEFAULT_PIN} is the default PIN this till ships with. Pick another one.`,
+          };
         }
         const clash = await pinTaken(get().users, pin, id);
         if (clash) {
@@ -1099,6 +1122,8 @@ export const usePos = create<PosState>()(
             state.activeBranchId,
           ),
         })),
+
+      defaultPinAccounts: () => get().users.filter((u) => u.active && hasDefaultPin(u)),
 
       clearPersistError: () => set({ persistError: null }),
     }),
