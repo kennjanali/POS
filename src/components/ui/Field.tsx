@@ -52,16 +52,22 @@ interface ToggleProps {
   hint?: string;
   checked: boolean;
   onChange: (next: boolean) => void;
+  /** For a switch that has latched — see the training-mode one-way door. */
+  disabled?: boolean;
 }
 
-export function Toggle({ label, hint, checked, onChange }: ToggleProps) {
+export function Toggle({ label, hint, checked, onChange, disabled }: ToggleProps) {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={checked}
+      disabled={disabled}
       onClick={() => onChange(!checked)}
-      className="flex w-full items-center justify-between gap-4 rounded-md border border-line bg-raised px-3 py-2.5 text-left transition-colors hover:bg-ground"
+      className={cn(
+        'flex w-full items-center justify-between gap-4 rounded-md border border-line bg-raised px-3 py-2.5 text-left transition-colors',
+        disabled ? 'cursor-not-allowed opacity-60' : 'hover:bg-ground',
+      )}
     >
       <span className="min-w-0">
         <span className="block text-[13px] font-semibold">{label}</span>

@@ -36,17 +36,3 @@ export const subC = (a: Centavos, b: Centavos): Centavos => (a - b) as Centavos;
 
 export const mulQty = (unit: Centavos, qty: number): Centavos =>
   (unit * qty) as Centavos;
-
-/**
- * Split a total across n payers, giving the remainder centavos to the
- * earliest shares so the parts always sum back to the whole.
- * Used for shared-bill senior discounts (RR 7-2010 group billing).
- */
-export function splitEvenly(total: Centavos, parts: number): Centavos[] {
-  if (parts < 1) return [total];
-  const base = Math.floor(total / parts);
-  const remainder = total - base * parts;
-  return Array.from({ length: parts }, (_, i) =>
-    cents(base + (i < remainder ? 1 : 0)),
-  );
-}

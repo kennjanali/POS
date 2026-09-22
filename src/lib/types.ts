@@ -80,6 +80,10 @@ export interface OrderLine {
   /** Denormalised so a renamed or deleted product never rewrites history. */
   name: string;
   unitCents: Centavos;
+  /** Cost at the moment of sale, frozen for the same reason as `unitCents`.
+   *  Optional: lines written before this field existed fall back to the
+   *  product's current cost, which is the best the old data can do. */
+  costCents?: Centavos;
   qty: number;
   served: boolean;
   servedAt: number | null;

@@ -48,6 +48,16 @@ export default function InventoryPage() {
   const negative = rows.filter((r) => r.onHand < 0);
   const low = rows.filter((r) => r.onHand >= 0 && r.onHand <= settings.lowStockAt);
 
+  function edit(product: Product) {
+    setDraft({
+      id: product.id,
+      name: product.name,
+      unit: product.unit,
+      price: (product.priceCents / 100).toFixed(2),
+      cost: (product.costCents / 100).toFixed(2),
+    });
+  }
+
   function save() {
     if (!draft) return;
     const name = draft.name.trim();
@@ -151,23 +161,21 @@ export default function InventoryPage() {
             {rows.map(({ product, onHand }) => {
               const margin = product.priceCents - product.costCents;
               return (
-                <tr key={product.id} className="border-b border-line/60">
+                <tr
+                  key={product.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => edit(product)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      edit(product);
+                    }
+                  }}
+                  className="cursor-pointer border-b border-line/60 hover:bg-raised focus-visible:bg-raised focus-visible:outline-none"
+                >
                   <td className="py-2 pr-3">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setDraft({
-                          id: product.id,
-                          name: product.name,
-                          unit: product.unit,
-                          price: (product.priceCents / 100).toFixed(2),
-                          cost: (product.costCents / 100).toFixed(2),
-                        })
-                      }
-                      className="font-semibold hover:text-accent"
-                    >
-                      {product.name}
-                    </button>
+                    <span className="font-semibold">{product.name}</span>
                     <span className="ml-1.5 text-[11px] text-ink-3">/{product.unit}</span>
                   </td>
                   <td className="tnum py-2 pr-3 text-right">
@@ -197,7 +205,7 @@ export default function InventoryPage() {
                     {onHand}
                   </td>
                   <td className="py-2">
-                    <div className="flex gap-1">
+                    <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
                       {[-1, +1, +10].map((delta) => (
                         <button
                           key={delta}

@@ -11,9 +11,10 @@
     "verify:tax": "node scripts/verify-tax.mjs",
     "verify:demo": "node scripts/verify-demo.mjs",
     "verify:auth": "node scripts/verify-auth.mjs",
-    "check": "npm run typecheck && npm run lint && npm run verify:tax && npm run verify:auth && npm run verify:demo",
+    "check": "npm run typecheck && npm run lint && npm run verify:tax && npm run verify:auth && npm run verify:demo && npm run verify:safeguards",
     "typecheck": "tsc --noEmit",
-    "deploy": "next build && wrangler deploy"
+    "deploy": "next build && wrangler deploy",
+    "verify:safeguards": "node scripts/verify-safeguards.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",

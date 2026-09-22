@@ -10,3 +10,9 @@ next-env.d.ts
 
 # wrangler local state
 .wrangler/
+
+# Scratch dir used by scripts/verify-safeguards.mjs
+.verify-tmp/
+
+# Playwright MCP session artifacts
+.playwright-mcp/

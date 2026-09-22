@@ -11,7 +11,7 @@ npm run dev        # http://localhost:3000
 ```
 
 No backend is required to run it. The app is fully functional offline against
-IndexedDB; Supabase is optional and additive.
+IndexedDB. There is no server and nothing to sign up for.
 
 ---
 
@@ -106,8 +106,8 @@ shows served-by and paid-by; the activity log names the person on each line.
 static export: there is no server and no middleware, the guards run in the
 browser, and anyone determined enough can reach the data in IndexedDB with
 devtools. What it does is keep three people on the job each was given. The
-real boundary arrives with Supabase — `supabase/001_schema.sql` carries the
-`users` table and actor columns, and `002_rls.sql` the matching policies, so
+app has no server, so this is the only boundary there is; anyone with
+devtools on the till can work around it. Sales carry actor columns either way, so
 the server model is already shaped for it.
 
 ---
@@ -142,82 +142,63 @@ npm run check      # typecheck + lint + tax, auth and demo verification
 ## Architecture
 
 ```
-Browser (static bundle on Cloudflare Pages)
-  UI  ->  IndexedDB          source of truth for the open shift
+Browser (static bundle on Cloudflare)
+  UI  ->  zustand (in memory)
             |
-            +-> outbox       append-only event log, batched flush
+            +-> IndexedDB  kv          settings, menu, staff, stock  (~3 KB)
+            +-> IndexedDB  orders      one record per sale
+            +-> IndexedDB  stockMoves  one record per movement
                   |
                   v
-Supabase (PostgREST + RLS)
-  order_events -> orders -> daily rollups -> object storage archive
+            JSON backup files -> OneDrive / Google Drive
 ```
+
+There is no server and no account to sign up for. Everything runs on the
+device; the only thing that leaves it is a backup file you save yourself.
 
 Three decisions carry most of the weight:
 
 **Static export, no server functions.** `output: 'export'` produces a plain
-static bundle. The browser talks to PostgREST directly and RLS is the entire
-authorization boundary. Nothing is metered per request, and the deploy target
-is Cloudflare Pages rather than Vercel — Vercel's Hobby plan prohibits
-commercial use, which a POS taking real money violates on day one.
+static bundle. Nothing is metered per request, and the deploy target is
+Cloudflare rather than Vercel — Vercel's Hobby plan prohibits commercial use,
+which a POS taking real money violates on day one.
 
-**Local-first.** In Bacolod the connection drops mid-service. A POS that stops
-taking orders when the internet dies is worse than a notebook. Reads never hit
-the network for data already held locally, which is also what keeps the app
-inside a 5 GB/month egress budget.
+**Sales are rows, not part of a blob.** Settings, menu, staff and stock are
+small and rarely change, so they persist as one small JSON blob. Sales are
+neither, so they get their own IndexedDB stores written one record at a time.
+A tap costs the same whether the device holds a week or a decade of trading;
+putting them in the blob cost 182 ms per tap after a year. Reads stay in
+memory, so every screen that filters or sums sales is plain synchronous code.
 
-**Append-only events, not row updates.** Clients emit immutable events keyed
-by client-generated UUIDv7, so a retried flush is `ON CONFLICT DO NOTHING`
-rather than a duplicate sale, two terminals never clobber each other, and the
-BIR audit trail falls out for free.
+**Frozen totals, append-only history.** An order's totals are computed once at
+close and stored, so changing the menu or the tax settings later never rewrites
+a receipt. Sales are voided, never deleted; products and staff are deactivated,
+never removed. Line items carry their own name and cost so history stays
+readable after a rename or a re-price.
 
 ---
 
-## Fitting 1M transactions in 500 MB
+## Backups
 
-Supabase's free tier gives 500 MB. A textbook normalized schema hits that wall
-at roughly 350,000 orders — 1M orders plus 3.5M line rows runs ~875 MB with
-naive types, ~460 MB even with tight ones, and that's before products, stock,
-audit, WAL, and bloat.
+Every sale is written to the device the moment it happens, so nothing is lost
+to a closed tab, a flat battery or a reload. The device itself is the risk.
 
-A closed order's line items never change again, so they stop being rows:
+A bar appears on every screen when the day's sales are not in a backup yet,
+naming how many are at risk. One click saves
+`kramgen-backup-YYYY-MM-DD.json`; the bar clears and returns the next day.
+Settings → Monthly archive additionally saves a whole finished month as one
+file, with its totals precomputed so opening it answers "how did we do" without
+a rescan.
 
-| | Rows | Size |
+**Keep the files in a OneDrive or Google Drive folder.** That is the entire
+disaster-recovery story: the copy leaves the building by itself.
+
+Measured, about 1.67 KB per sale:
+
+| Volume | Per day | Per year on the device |
 |---|---|---|
-| `orders` hot (≤90 days), normalized | 90,000 | 14 MB |
-| `order_lines` hot only | 315,000 | 28 MB |
-| `orders` closed, lines as compressed `jsonb` | 910,000 | 125 MB |
-| `daily_product_sales` rollup, kept forever | 40,000 | 4 MB |
-| `daily_sales` rollup | 5,000 | <1 MB |
-| products / stock / branches / audit | — | ~15 MB |
-| **Total** | | **~190 MB** |
-
-Normalize hot, denormalize cold, aggregate always. You give up SQL-level
-`GROUP BY product` over history and gain rollups that answer the same
-questions in single-digit milliseconds instead of scanning 3.5M rows on a
-shared CPU with 500 MB of RAM.
-
----
-
-## Supabase setup
-
-Optional. Apply in order:
-
-```
-supabase/001_schema.sql     tables, gapless invoice sequence, tenancy
-supabase/002_rls.sql        row-level security, immutability, explicit grants
-supabase/003_rollups.sql    daily rollups, Z-reading hash chain, 90-day fold
-```
-
-Then `cp .env.example .env.local` and fill in the project URL and anon key.
-
-Two things to know about `002_rls.sql`. It's written multi-tenant from day one
-because retrofitting tenancy onto a live POS is miserable. And it issues
-explicit `grant` statements: Supabase projects created after 2026-05-30 need
-these for PostgREST access, and existing free projects are affected from
-2026-10-30 — without them the Data API returns nothing regardless of policies.
-
-`org_id` is read from `app_metadata`, which is server-controlled. Never
-`user_metadata`, which the user can write.
+| 40 orders/day | ~67 KB | ~24 MB |
+| 100 orders/day | ~167 KB | ~59 MB |
 
 ---
 
@@ -275,8 +256,9 @@ src/
   app/                    routes: POS, orders, inventory, dashboard, settings
   components/
     auth/                 keypad, lock screen, first-run setup, route gate
-    layout/               rail, topbar, shell context, new-order dialog
+    layout/               rail, topbar, backup bar, shell, new-order dialog
     pos/                  menu grid, order panel, checkout, receipt
+    settings/             branches, users, monthly archive
     ui/                   Button, Modal, Field, Toggle, Toast, Empty
   lib/
     permissions.ts        the role matrix — can(user, 'order.void')
@@ -284,13 +266,17 @@ src/
     money.ts              integer centavos, branded type
     tax.ts                RA 9994 / RA 10754 / RR 7-2010 engine
     types.ts              domain model
-    idb.ts                IndexedDB adapter
+    idb.ts                IndexedDB — the settings blob and the row stores
+    archive.ts            monthly archive: build, summarise, verify
+    backup.ts             daily backup file
     format.ts             the only place centavos become decimals
   store/usePos.ts         zustand store, all mutations
   store/useAuth.ts        session and lockout — never touches IndexedDB
-supabase/                 three migrations
 scripts/
   verify-tax.mjs          tax engine checks
+  verify-auth.mjs         role matrix and PIN hashing
+  verify-demo.mjs         demo generator invariants
+  verify-safeguards.mjs   the safeguards that protect the books (61 checks)
   migrate-v6.mjs          v6 export converter
 ```
 
@@ -298,24 +284,29 @@ scripts/
 
 ## Known gaps
 
-- **No automatic backup.** Supabase free has none. Settings → Download backup
-  is manual and should be done daily until a nightly `pg_dump` to object
-  storage is wired up. This is the highest-value thing left undone.
-- **One tab at a time.** Two tabs of the app on one machine each hold their own
-  copy of the state and overwrite each other on write — the second tab's sales
-  win and the first tab's are lost, silently. Until the sync engine lands, run
-  one tab per device. Nothing in the app currently enforces this.
-- **Orders history shows the 200 most recent matches.** A month is ~3,800
-  orders and rendering all of them cost over a second of blocked main thread
-  per keystroke in the search box. The date and search filters reach the rest,
-  and the row count under the table always says how many are held back.
-- **Sync engine not built.** The schema and event model are in place; the
-  outbox flush is not. The app is single-terminal until that lands.
+- **Needs internet to load the page.** All the data is local, but the app
+  itself is fetched over the network, so a refresh with no signal shows a
+  blank page. A service worker would fix it; most POS needs internet anyway,
+  so this is recorded as a choice rather than a defect.
+- **One tab at a time.** Two tabs on one machine each hold their own copy of
+  the state and overwrite each other — the second tab's sales win and the
+  first tab's are lost, silently. Nothing in the app enforces this yet.
+- **One device.** Sales live on the device that took them. Two tills would
+  each keep their own books and would issue colliding invoice numbers, so a
+  second terminal needs a server first.
+- **Roles are not a security boundary.** Anyone with browser devtools on the
+  till can edit stored data and make themselves superadmin. Inherent to an
+  app with no server.
+- **Orders history shows the 200 most recent matches.** Rendering a whole
+  month cost over a second of blocked main thread per keystroke in the search
+  box. The date and search filters reach the rest, and the row count under the
+  table always says how many are held back.
 - **Thermal printing is browser print.** ESC/POS over WebUSB works in Chrome
   and Edge but not Safari or iOS, which constrains terminal hardware.
-- **Three high-severity advisories** remain in Next's bundled `postcss` and
-  `sharp`. Both are build-time only and `sharp` never executes here since
-  images are unoptimized. Clearing them requires Next 16.
+- **Four advisories** (1 critical, 3 high) remain in Next's build tooling.
+  None is reachable in the deployed app — static export, no server, no image
+  optimization — but the critical one affects `next dev` on Windows.
+  Currently on 15.5.23; a 15.5.26 backport exists and is worth testing.
 
 ## Open questions
 

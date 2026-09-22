@@ -5,9 +5,18 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 
 import { buildDemoData } from '@/lib/demo';
 import { hashPin, isValidPin, verifyPin, PIN_LENGTH } from '@/lib/crypto';
-import { idbStorage, onPersistWrite } from '@/lib/idb';
+import { ROWS, idbStorage, onPersistWrite, readRows, writeRows } from '@/lib/idb';
 import { uuidv7 } from '@/lib/id';
 import { businessDate } from '@/lib/format';
+import {
+  archiveCoversDevice,
+  archivableMonths,
+  buildArchive,
+  describeBadArchive,
+  monthLabel,
+  orderMonth,
+  type MonthlyArchive,
+} from '@/lib/archive';
 import { isLastActiveSuperadmin } from '@/lib/permissions';
 import { type Centavos, addC, cents, mulQty } from '@/lib/money';
 import { computeBill, type DiscountKind } from '@/lib/tax';
@@ -55,6 +64,8 @@ interface PosState {
 
   activeBranchId: string;
   activeOrderId: string | null;
+  /** When a backup was last saved. The device is the only copy until then. */
+  lastBackupAt: number | null;
   hydrated: boolean;
   persistError: string | null;
 
@@ -127,9 +138,29 @@ interface PosState {
    * returns the number of orders written, or 0 if the install is locked.
    */
   loadDemoData: (options?: { days?: number; ordersPerDay?: number }) => number;
+  // ── monthly archive ─────────────────────────────────────────────────
+  /** Finished months still held on this device, newest first. */
+  archivableMonths: () => { month: string; orders: number; net: Centavos }[];
+  /** Build the file for one month. Nothing is removed by this. */
+  buildMonthlyArchive: (month: string) => MonthlyArchive;
+  /**
+   * Remove a month from the device, but only against an archive file that has
+   * been read back and proven to hold every sale in it. Export alone is never
+   * enough — a download can silently fail or land truncated.
+   */
+  pruneArchivedMonth: (archive: MonthlyArchive) => UserResult;
+
   exportSnapshot: () => DataSnapshot;
-  importSnapshot: (snapshot: DataSnapshot) => void;
-  resetAll: () => void;
+  importSnapshot: (snapshot: DataSnapshot) => UserResult;
+  /** Training mode only. False when the install is locked. */
+  resetAll: () => boolean;
+  /**
+   * Sales not yet in any backup. The device holds them and nothing else does,
+   * so this is the number at risk if it is lost tonight.
+   */
+  unbackedUp: () => number;
+  /** Called once a backup file has actually been handed to the browser. */
+  recordBackup: () => void;
   clearPersistError: () => void;
 }
 
@@ -152,7 +183,7 @@ function log(
     actorUserId: actorId(),
   };
   // Append-only, newest first, retained to 2000. v6 truncated at 150 with an
-  // O(n) unshift — this is audit-trail data and gets synced to the server.
+  // O(n) unshift — this is audit-trail data and goes into the monthly archive.
   return [entry, ...audit].slice(0, 2000);
 }
 
@@ -167,9 +198,16 @@ export function orderGross(order: Order): Centavos {
   );
 }
 
-export function tenderedTotal(order: Order): Centavos {
+/**
+ * What the till actually keeps: everything handed over, less every peso of
+ * change given back. This is the figure that has to match the bill — the sum
+ * of `amountCents` does not, because a cash tender records the full amount
+ * received and hands part of it straight back.
+ */
+export function keptByTill(order: Order): Centavos {
   return order.tenders.reduce<Centavos>(
-    (sum, t) => addC(sum, t.amountCents),
+    (sum, t) =>
+      cents(sum + (t.tenderedCents ?? t.amountCents) - (t.changeCents ?? 0)),
     cents(0),
   );
 }
@@ -236,6 +274,43 @@ async function pinTaken(users: User[], pin: string, exceptId?: string): Promise<
   return null;
 }
 
+const SNAPSHOT_VERSION = 7;
+
+/**
+ * Why a restore was refused, or null if the file is usable. Restoring replaces
+ * every order on the device, so a half-readable file has to be rejected before
+ * it lands rather than diagnosed afterwards.
+ */
+function describeBadSnapshot(snapshot: DataSnapshot): string | null {
+  if (!snapshot || typeof snapshot !== 'object') {
+    return 'That file is not a KRAMGEN backup.';
+  }
+  if (snapshot.version !== SNAPSHOT_VERSION) {
+    return (
+      `That backup is version ${snapshot.version ?? 'unknown'}; this app reads ` +
+      `version ${SNAPSHOT_VERSION}. Convert it first — see scripts/migrate-v6.mjs.`
+    );
+  }
+  if (!Array.isArray(snapshot.products) || snapshot.products.length === 0) {
+    return 'That backup has no menu items in it. It may be truncated.';
+  }
+  for (const [key, value] of Object.entries({
+    branches: snapshot.branches,
+    users: snapshot.users,
+    orders: snapshot.orders,
+    stockMoves: snapshot.stockMoves,
+    audit: snapshot.audit,
+  })) {
+    if (value !== undefined && !Array.isArray(value)) {
+      return `That backup is damaged — "${key}" is not a list.`;
+    }
+  }
+  if (snapshot.stock !== undefined && typeof snapshot.stock !== 'object') {
+    return 'That backup is damaged — the stock record is unreadable.';
+  }
+  return null;
+}
+
 function initialStock(products: Product[]): Record<string, number> {
   return Object.fromEntries(products.map((p) => [p.id, OPENING_STOCK]));
 }
@@ -256,6 +331,7 @@ export const usePos = create<PosState>()(
       invoiceSeq: {},
       activeBranchId: DEFAULT_BRANCH.id,
       activeOrderId: null,
+      lastBackupAt: null,
       hydrated: false,
       persistError: null,
 
@@ -332,6 +408,7 @@ export const usePos = create<PosState>()(
               productId,
               name: product.name,
               unitCents: product.priceCents,
+              costCents: product.costCents,
               qty,
               served: false,
               servedAt: null,
@@ -489,8 +566,13 @@ export const usePos = create<PosState>()(
           eligibleDiners: order.eligibleDiners,
         });
 
-        const paid = order.tenders.reduce<number>((s, t) => s + t.amountCents, 0);
-        if (paid < bill.amountDue) return false;
+        // Money kept has to equal the bill exactly. Checking the tender total
+        // alone was not enough: applying a discount or voiding a line *after*
+        // payment was recorded leaves a stale tender behind. Cash change was
+        // worked out against the old, higher total, and an e-wallet transfer
+        // cannot give change at all — settling either way books money the
+        // wallet statement will never show. Re-record the tender instead.
+        if (keptByTill(order) !== bill.amountDue) return false;
 
         set((s) => ({
           ...s,
@@ -783,7 +865,34 @@ export const usePos = create<PosState>()(
         }),
 
       updateSettings: (patch) =>
-        set((state) => ({ ...state, settings: { ...state.settings, ...patch } })),
+        set((state) => {
+          const settings = { ...state.settings, ...patch };
+
+          // Leaving training mode is a one-way door. A POS that has gone live
+          // must not be able to re-enter it: training mode unlocks the demo
+          // loader and the reset, either of which would write fabricated sales
+          // over registered books. types.ts has always claimed this; until now
+          // the Settings toggle handed it straight back.
+          if (settings.trainingMode && !state.settings.trainingMode) {
+            settings.trainingMode = false;
+          }
+
+          if (state.settings.trainingMode && !settings.trainingMode) {
+            return {
+              ...state,
+              settings,
+              audit: log(
+                state.audit,
+                'settings.golive',
+                'Training mode turned off — this install is now live and ' +
+                  'cannot be put back into training mode',
+                'warn',
+                state.activeBranchId,
+              ),
+            };
+          }
+          return { ...state, settings };
+        }),
 
       loadDemoData: (options) => {
         const state = get();
@@ -828,6 +937,61 @@ export const usePos = create<PosState>()(
         return demo.orders.length;
       },
 
+      // ── monthly archive ───────────────────────────────────────────
+      archivableMonths: () => archivableMonths(get().orders),
+
+      buildMonthlyArchive: (month) => {
+        const s = get();
+        return buildArchive({
+          month,
+          businessName: s.settings.businessName,
+          branches: s.branches,
+          products: s.products,
+          users: s.users,
+          orders: s.orders,
+          stockMoves: s.stockMoves,
+        });
+      },
+
+      pruneArchivedMonth: (archive) => {
+        const problem = describeBadArchive(archive);
+        if (problem) return { ok: false, error: problem };
+
+        const covers = archiveCoversDevice(archive, get().orders);
+        if (!covers.ok) return covers;
+
+        set((state) => {
+          // Open orders are never archived and never pruned — an unpaid table
+          // from last month is still on the floor and still needs settling.
+          const keep = state.orders.filter(
+            (o) => o.status === 'open' || orderMonth(o) !== archive.month,
+          );
+          const gone = new Set(
+            state.orders.filter((o) => !keep.includes(o)).map((o) => o.id),
+          );
+          const removed = state.orders.length - keep.length;
+
+          return {
+            ...state,
+            orders: keep,
+            // Stock moves follow their order. Loose moves (counts, restocks)
+            // are kept: on-hand is a running balance and dropping the
+            // adjustments that produced it would leave it unexplainable.
+            stockMoves: state.stockMoves.filter(
+              (m) => !m.refOrderId || !gone.has(m.refOrderId),
+            ),
+            audit: log(
+              state.audit,
+              'archive.prune',
+              `Archived and removed ${removed} sales for ${monthLabel(archive.month)}`,
+              'warn',
+              state.activeBranchId,
+            ),
+          };
+        });
+        return { ok: true };
+      },
+
       exportSnapshot: () => {
         const s = get();
         return {
@@ -845,33 +1009,95 @@ export const usePos = create<PosState>()(
         };
       },
 
-      importSnapshot: (snapshot) =>
-        set((state) => ({
-          ...state,
-          branches: snapshot.branches ?? state.branches,
-          // An empty or missing user list is never restored over a working
-          // one — a pre-logins backup would leave nobody able to sign in.
-          users: snapshot.users?.length ? snapshot.users : state.users,
-          products: snapshot.products ?? state.products,
-          orders: snapshot.orders ?? [],
-          stock: snapshot.stock ?? {},
-          stockMoves: snapshot.stockMoves ?? [],
-          audit: snapshot.audit ?? [],
-          settings: { ...state.settings, ...snapshot.settings },
-          invoiceSeq: snapshot.invoiceSeq ?? {},
-          activeOrderId: null,
-        })),
+      importSnapshot: (snapshot) => {
+        // A restore replaces the books wholesale, so the file has to earn it.
+        // Checking only that `products` was an array let a truncated or
+        // hand-edited export through, and it reported success either way.
+        const problem = describeBadSnapshot(snapshot);
+        if (problem) return { ok: false, error: problem };
 
-      resetAll: () =>
+        set((state) => {
+          const settings = { ...state.settings, ...snapshot.settings };
+          // A backup must not be able to reopen the door updateSettings just
+          // closed — otherwise the one-way lock is one file import wide.
+          if (!state.settings.trainingMode) settings.trainingMode = false;
+
+          return {
+            ...state,
+            branches: snapshot.branches ?? state.branches,
+            // An empty or missing user list is never restored over a working
+            // one — a pre-logins backup would leave nobody able to sign in.
+            users: snapshot.users?.length ? snapshot.users : state.users,
+            products: snapshot.products,
+            orders: snapshot.orders ?? [],
+            stock: snapshot.stock ?? {},
+            stockMoves: snapshot.stockMoves ?? [],
+            audit: log(
+              snapshot.audit ?? [],
+              'data.import',
+              `Restored ${snapshot.orders?.length ?? 0} orders from a backup ` +
+                `exported ${snapshot.exportedAt ?? 'at an unknown time'}`,
+              'warn',
+              state.activeBranchId,
+            ),
+            settings,
+            invoiceSeq: snapshot.invoiceSeq ?? {},
+            activeOrderId: null,
+          };
+        });
+        return { ok: true };
+      },
+
+      resetAll: () => {
+        // Same lock as loadDemoData. Clearing the books on a registered POS is
+        // not a thing the owner may do; corrections go through a void, and a
+        // fresh start goes through Restore from a backup.
+        if (!get().settings.trainingMode) return false;
+
         set((state) => ({
           ...state,
           orders: [],
           stockMoves: [],
-          audit: [],
-          invoiceSeq: {},
           activeOrderId: null,
           products: DEFAULT_PRODUCTS,
           stock: { [state.activeBranchId]: initialStock(DEFAULT_PRODUCTS) },
+          // The invoice sequence is deliberately NOT reset. Restarting it at 1
+          // reissues numbers that have already been on a printed receipt, and
+          // a duplicated invoice number is worse than a large one.
+          //
+          // The audit log is deliberately NOT cleared either. Wiping the
+          // record along with the data leaves nothing to say the wipe ever
+          // happened, which is precisely the pattern an audit looks for.
+          audit: log(
+            state.audit,
+            'data.reset',
+            `Cleared ${state.orders.length} orders and ` +
+              `${state.stockMoves.length} stock movements`,
+            'danger',
+            state.activeBranchId,
+          ),
+        }));
+        return true;
+      },
+
+      unbackedUp: () => {
+        const { orders, lastBackupAt } = get();
+        // Never backed up: everything on the device is at risk.
+        if (lastBackupAt === null) return orders.length;
+        return orders.filter((o) => (o.closedAt ?? o.openedAt) > lastBackupAt).length;
+      },
+
+      recordBackup: () =>
+        set((state) => ({
+          ...state,
+          lastBackupAt: Date.now(),
+          audit: log(
+            state.audit,
+            'data.backup',
+            `Backup saved — ${state.orders.length} orders`,
+            'success',
+            state.activeBranchId,
+          ),
         })),
 
       clearPersistError: () => set({ persistError: null }),
@@ -880,17 +1106,20 @@ export const usePos = create<PosState>()(
       name: 'kramgen-pos-v7',
       version: 7,
       storage: createJSONStorage(() => idbStorage),
+      // `orders` and `stockMoves` are deliberately absent: they go to their own
+      // row stores, written one record at a time. Everything listed here is
+      // small and rarely touched, so rewriting it wholesale is free.
+      // See the note at the top of lib/idb.ts.
       partialize: (state) => ({
         branches: state.branches,
         users: state.users,
         products: state.products,
-        orders: state.orders,
         stock: state.stock,
-        stockMoves: state.stockMoves,
         audit: state.audit,
         settings: state.settings,
         invoiceSeq: state.invoiceSeq,
         activeBranchId: state.activeBranchId,
+        lastBackupAt: state.lastBackupAt,
       }),
       onRehydrateStorage: () => (state, error) => {
         if (error) {
@@ -902,7 +1131,10 @@ export const usePos = create<PosState>()(
           return;
         }
         state?.setActiveOrder(null);
-        usePos.setState({ hydrated: true });
+        // The blob is back; the sales are not. Nothing may be marked hydrated
+        // until they are, or the first render would show an empty till and a
+        // subsequent write could persist that emptiness.
+        void loadRows(state);
       },
     },
   ),
@@ -918,6 +1150,105 @@ onPersistWrite((error) => {
   if (usePos.getState().persistError === error) return;
   usePos.setState({ persistError: error });
 });
+
+// ── Sales persistence ────────────────────────────────────────────────────
+// Orders and stock moves live in their own row stores rather than the blob.
+// They stay in memory for reading — every screen that filters or sums them is
+// untouched — but only the rows that actually changed are written.
+
+/** What each row store already holds, so a change can be spotted by identity. */
+const writtenOrders = new Map<string, Order>();
+const writtenMoves = new Map<string, StockMove>();
+
+/**
+ * Rows whose object identity changed since the last write. Every mutation in
+ * this store rebuilds changed rows with a spread and leaves the rest alone, so
+ * a reference comparison is an exact and very cheap change detector — no
+ * serialising, no deep equality.
+ */
+function diffRows<T extends { id: string }>(
+  current: T[],
+  written: Map<string, T>,
+): { changed: T[]; removed: string[] } {
+  const changed: T[] = [];
+  const seen = new Set<string>();
+
+  for (const row of current) {
+    seen.add(row.id);
+    if (written.get(row.id) !== row) changed.push(row);
+  }
+
+  // Removals only happen when a month is archived away, so the extra pass is
+  // skipped entirely in the common case.
+  const removed: string[] =
+    written.size === seen.size
+      ? []
+      : [...written.keys()].filter((id) => !seen.has(id));
+
+  for (const row of changed) written.set(row.id, row);
+  for (const id of removed) written.delete(id);
+  return { changed, removed };
+}
+
+let lastOrders: Order[] | null = null;
+let lastMoves: StockMove[] | null = null;
+
+usePos.subscribe((state) => {
+  if (!state.hydrated) return;
+
+  if (state.orders !== lastOrders) {
+    lastOrders = state.orders;
+    const { changed, removed } = diffRows(state.orders, writtenOrders);
+    void writeRows(ROWS.orders, changed, removed);
+  }
+  if (state.stockMoves !== lastMoves) {
+    lastMoves = state.stockMoves;
+    const { changed, removed } = diffRows(state.stockMoves, writtenMoves);
+    void writeRows(ROWS.stockMoves, changed, removed);
+  }
+});
+
+/**
+ * Read the sales back and open the till. Installs written before the row
+ * stores existed carry their sales inside the rehydrated blob instead; those
+ * are adopted here and written across on the way through, so the upgrade
+ * costs the owner nothing and loses nothing.
+ */
+async function loadRows(rehydrated: PosState | undefined): Promise<void> {
+  try {
+    const [rows, moves] = await Promise.all([
+      readRows<Order>(ROWS.orders),
+      readRows<StockMove>(ROWS.stockMoves),
+    ]);
+
+    const legacy = rehydrated as unknown as
+      | { orders?: Order[]; stockMoves?: StockMove[] }
+      | undefined;
+    const orders = rows.length > 0 ? rows : (legacy?.orders ?? []);
+    const stockMoves = moves.length > 0 ? moves : (legacy?.stockMoves ?? []);
+
+    for (const order of orders) writtenOrders.set(order.id, order);
+    for (const move of stockMoves) writtenMoves.set(move.id, move);
+    lastOrders = orders;
+    lastMoves = stockMoves;
+
+    usePos.setState({ orders, stockMoves, hydrated: true });
+
+    // Migrating from the blob: put the rows where they now belong.
+    if (rows.length === 0 && orders.length > 0) {
+      void writeRows(ROWS.orders, orders, []);
+    }
+    if (moves.length === 0 && stockMoves.length > 0) {
+      void writeRows(ROWS.stockMoves, stockMoves, []);
+    }
+  } catch {
+    usePos.setState({
+      hydrated: true,
+      persistError:
+        'Could not read saved sales. Work in this session may not be saved.',
+    });
+  }
+}
 
 /**
  * Serving deducts stock. Overselling is recorded as a negative balance and

@@ -5,7 +5,7 @@ import type { NextConfig } from 'next';
  * Deploy target is Cloudflare Pages: static asset requests are free and
  * unlimited, and there is no non-commercial restriction (unlike Vercel Hobby).
  *
- * All data access goes browser -> Supabase PostgREST, guarded by RLS.
+ * All data lives in the browser (IndexedDB), archived to JSON monthly.
  */
 const nextConfig: NextConfig = {
   output: 'export',

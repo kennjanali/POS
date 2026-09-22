@@ -4,6 +4,7 @@ import { useRef, useState } from 'react';
 import { Download, FlaskConical, Info, Upload } from 'lucide-react';
 
 import { BranchManager } from '@/components/settings/BranchManager';
+import { MonthlyArchive } from '@/components/settings/MonthlyArchive';
 import { UserManager } from '@/components/settings/UserManager';
 import { Button } from '@/components/ui/Button';
 import { Field, Toggle } from '@/components/ui/Field';
@@ -11,7 +12,8 @@ import { Modal } from '@/components/ui/Modal';
 import { toast } from '@/components/ui/Toast';
 import { computeBill } from '@/lib/tax';
 import { cents } from '@/lib/money';
-import { peso } from '@/lib/format';
+import { peso, fmtDate } from '@/lib/format';
+import { downloadBackup } from '@/lib/backup';
 import type { DataSnapshot } from '@/lib/types';
 import { usePos } from '@/store/usePos';
 
@@ -21,6 +23,8 @@ export default function SettingsPage() {
   const exportSnapshot = usePos((s) => s.exportSnapshot);
   const importSnapshot = usePos((s) => s.importSnapshot);
   const resetAll = usePos((s) => s.resetAll);
+  const recordBackup = usePos((s) => s.recordBackup);
+  const lastBackupAt = usePos((s) => s.lastBackupAt);
   const loadDemoData = usePos((s) => s.loadDemoData);
   const audit = usePos((s) => s.audit);
   const users = usePos((s) => s.users);
@@ -28,6 +32,7 @@ export default function SettingsPage() {
   const fileRef = useRef<HTMLInputElement>(null);
   const [confirmReset, setConfirmReset] = useState(false);
   const [confirmDemo, setConfirmDemo] = useState(false);
+  const [confirmGoLive, setConfirmGoLive] = useState(false);
 
   // Live worked example so the owner can see what the tax settings actually do.
   const sample = cents(50_000);
@@ -35,17 +40,14 @@ export default function SettingsPage() {
   const senior = computeBill(sample, settings, { kind: 'senior' });
 
   function download() {
-    const snapshot = exportSnapshot();
-    const blob = new Blob([JSON.stringify(snapshot, null, 2)], {
-      type: 'application/json',
-    });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `kramgen-${new Date().toISOString().slice(0, 10)}.json`;
-    link.click();
-    URL.revokeObjectURL(url);
-    toast('Backup downloaded', 'success');
+    if (downloadBackup(exportSnapshot())) {
+      // Recorded here too, so saving from Settings clears the reminder the
+      // same way the bar's own button does.
+      recordBackup();
+      toast('Backup downloaded', 'success');
+    } else {
+      toast('The browser blocked the download. Check its download settings.', 'danger');
+    }
   }
 
   function upload(file: File) {
@@ -53,11 +55,16 @@ export default function SettingsPage() {
     reader.onload = () => {
       try {
         const parsed = JSON.parse(String(reader.result)) as DataSnapshot;
-        if (!Array.isArray(parsed.products)) throw new Error('Not a KRAMGEN backup');
-        importSnapshot(parsed);
-        toast(`Restored ${parsed.orders?.length ?? 0} orders`, 'success');
+        // The store validates the contents and refuses anything it cannot
+        // safely restore over the books — this only has to survive the parse.
+        const result = importSnapshot(parsed);
+        if (result.ok) {
+          toast(`Restored ${parsed.orders?.length ?? 0} orders`, 'success');
+        } else {
+          toast(result.error, 'danger');
+        }
       } catch {
-        toast('That file is not a KRAMGEN backup', 'danger');
+        toast('That file is not readable JSON', 'danger');
       }
     };
     reader.onerror = () => toast('Could not read that file', 'danger');
@@ -179,9 +186,14 @@ export default function SettingsPage() {
           />
           <Toggle
             label="Training mode"
-            hint="Marks every receipt as not valid. Once the POS is BIR-registered it may not be switched back into training mode — turn this off at go-live and leave it off."
+            hint={
+              settings.trainingMode
+                ? 'Marks every receipt as not valid, and unlocks the demo loader and "Clear all sales data". Turning this off is permanent — it cannot be switched back on.'
+                : 'This install is live. Training mode cannot be turned back on, so fabricated sales can never be written over the books.'
+            }
             checked={settings.trainingMode}
-            onChange={(trainingMode) => update({ trainingMode })}
+            disabled={!settings.trainingMode}
+            onChange={() => setConfirmGoLive(true)}
           />
         </Section>
 
@@ -195,11 +207,22 @@ export default function SettingsPage() {
           <UserManager />
         </Section>
 
+        {/* ── Monthly archive ──────────────────────────────────── */}
+        <Section title="Monthly archive" className="lg:col-span-2">
+          <MonthlyArchive />
+        </Section>
+
         {/* ── Data ─────────────────────────────────────────────── */}
         <Section title="Data">
           <p className="text-[12px] leading-relaxed text-ink-2">
-            Sales are stored in this browser. Download a backup at the end of every
-            trading day — there is no automatic copy anywhere else yet.
+            Every sale is saved to this device the moment it happens. A backup is
+            the second copy — save one at the end of each trading day and keep it
+            in a OneDrive or Google Drive folder.
+          </p>
+          <p className="text-[12px] font-semibold">
+            {lastBackupAt
+              ? `Last backup: ${fmtDate(lastBackupAt)}`
+              : 'No backup has ever been saved from this device.'}
           </p>
           <div className="flex gap-2">
             <Button variant="secondary" fullWidth onClick={download}>
@@ -236,9 +259,25 @@ export default function SettingsPage() {
             <FlaskConical size={14} aria-hidden />
             Load demo month
           </Button>
-          <Button variant="danger" fullWidth onClick={() => setConfirmReset(true)}>
+          <Button
+            variant="danger"
+            fullWidth
+            disabled={!settings.trainingMode}
+            onClick={() => setConfirmReset(true)}
+            title={
+              settings.trainingMode
+                ? undefined
+                : 'A live install cannot clear its own sales. Restore from a backup instead.'
+            }
+          >
             Clear all sales data
           </Button>
+          {!settings.trainingMode && (
+            <p className="text-[11px] leading-relaxed text-ink-3">
+              This install is live, so sales cannot be cleared from here. To start
+              over, restore a backup.
+            </p>
+          )}
         </Section>
 
         {/* ── Audit ────────────────────────────────────────────── */}
@@ -296,6 +335,40 @@ export default function SettingsPage() {
       </Modal>
 
       <Modal
+        open={confirmGoLive}
+        onClose={() => setConfirmGoLive(false)}
+        title="Turn off training mode"
+        width="sm"
+        footer={
+          <Button
+            fullWidth
+            variant="danger"
+            onClick={() => {
+              update({ trainingMode: false });
+              setConfirmGoLive(false);
+              toast('Training mode is off — this install is now live', 'success');
+            }}
+          >
+            Go live — this cannot be undone
+          </Button>
+        }
+      >
+        <p className="text-[12.5px] leading-relaxed text-ink-2">
+          Receipts stop being marked <strong>NOT A VALID RECEIPT</strong> and start
+          counting as real sales.
+        </p>
+        <p className="mt-2 text-[12.5px] leading-relaxed text-ink-2">
+          <strong>This is permanent.</strong> Training mode cannot be turned back
+          on, and with it off the demo loader and &ldquo;Clear all sales
+          data&rdquo; are locked for good — so fabricated sales can never be
+          written over your books.
+        </p>
+        <p className="mt-2 text-[12.5px] leading-relaxed text-ink-2">
+          Clear out any practice sales <em>before</em> you do this.
+        </p>
+      </Modal>
+
+      <Modal
         open={confirmReset}
         onClose={() => setConfirmReset(false)}
         title="Clear all sales data"
@@ -305,9 +378,14 @@ export default function SettingsPage() {
             fullWidth
             variant="danger"
             onClick={() => {
-              resetAll();
+              const cleared = resetAll();
               setConfirmReset(false);
-              toast('Sales data cleared', 'success');
+              toast(
+                cleared
+                  ? 'Sales data cleared'
+                  : 'A live install cannot clear its own sales',
+                cleared ? 'success' : 'danger',
+              );
             }}
           >
             Yes, clear everything

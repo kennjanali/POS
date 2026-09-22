@@ -418,6 +418,7 @@ function buildLines(rand: () => number, products: Product[]): OrderLine[] {
     productId: product.id,
     name: product.name,
     unitCents: product.priceCents,
+    costCents: product.costCents,
     qty: 1 + Math.floor(rand() * 3),
     served: true,
     servedAt: null,

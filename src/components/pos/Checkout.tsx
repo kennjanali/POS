@@ -71,8 +71,16 @@ export function Checkout({ order, open, onClose, onPaid }: CheckoutProps) {
     settings,
   ]);
 
-  const paid = order.tenders.reduce((sum, t) => sum + t.amountCents, 0);
-  const balance = cents(bill.amountDue - paid);
+  // What the till keeps once change is handed back — the figure that has to
+  // match the bill. See keptByTill in the store.
+  const kept = order.tenders.reduce(
+    (sum, t) => sum + (t.tenderedCents ?? t.amountCents) - (t.changeCents ?? 0),
+    0,
+  );
+  const balance = cents(bill.amountDue - kept);
+  // Negative balance means a discount was applied or a line voided after the
+  // payment was recorded, leaving a tender that is now too large.
+  const overRecorded = kept > bill.amountDue;
   const statutory = order.discountKind === 'senior' || order.discountKind === 'pwd';
   const needsRef = REFERENCED_METHODS.includes(method);
   const needsId = statutory && !order.discountIdNo?.trim();
@@ -137,6 +145,14 @@ export function Checkout({ order, open, onClose, onPaid }: CheckoutProps) {
       toast('Record the Senior / PWD ID number first', 'danger');
       return;
     }
+    if (overRecorded) {
+      toast(
+        `The bill changed after payment was recorded. Remove the tender and ` +
+          `take it again for ${peso(bill.amountDue, settings.currency)}.`,
+        'danger',
+      );
+      return;
+    }
     if (closeOrder(order.id)) {
       onPaid(order.id);
       onClose();
@@ -158,12 +174,14 @@ export function Checkout({ order, open, onClose, onPaid }: CheckoutProps) {
           size="lg"
           fullWidth
           variant="success"
-          disabled={balance > 0 || served.length === 0}
+          disabled={balance > 0 || overRecorded || served.length === 0}
           onClick={finish}
         >
           {balance > 0
             ? `${peso(balance, settings.currency)} still due`
-            : `Complete — ${peso(bill.amountDue, settings.currency)}`}
+            : overRecorded
+              ? `Over by ${peso(cents(-balance), settings.currency)} — re-record`
+              : `Complete — ${peso(bill.amountDue, settings.currency)}`}
         </Button>
       }
     >
@@ -420,6 +438,17 @@ export function Checkout({ order, open, onClose, onPaid }: CheckoutProps) {
                 </li>
               ))}
             </ul>
+          )}
+
+          {overRecorded && (
+            <p className="rounded-md border border-bad/40 bg-bad/5 px-2.5 py-2 text-[11.5px] leading-relaxed text-ink-2">
+              <strong className="text-bad">
+                Recorded payment is {peso(cents(-balance), settings.currency)} over
+                the total.
+              </strong>{' '}
+              The bill changed after this was taken. Remove the tender above and
+              record {peso(bill.amountDue, settings.currency)} instead.
+            </p>
           )}
 
           {totalChange > 0 && (

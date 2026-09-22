@@ -7,9 +7,9 @@
  * the eighth check written six months later disagrees with the first seven and
  * nobody notices until a waiter voids a sale.
  *
- * This is client-side, and a static export has no middleware to enforce it.
- * It keeps people on the job they were given; it is not a security boundary.
- * That arrives with Supabase RLS — see supabase/002_rls.sql.
+ * This is client-side. It keeps people on the job they were given; anyone with
+ * browser devtools on the till can work around it, so it is not a defence
+ * against a determined insider.
  */
 
 import type { Role } from './types';

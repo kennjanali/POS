@@ -25,7 +25,6 @@ export function Topbar() {
   const activeBranchId = usePos((s) => s.activeBranchId);
   const setActiveBranch = usePos((s) => s.setActiveBranch);
   const persistError = usePos((s) => s.persistError);
-  const trainingMode = usePos((s) => s.settings.trainingMode);
   const session = useAuth((s) => s.session);
   const lock = useAuth((s) => s.lock);
 
@@ -80,12 +79,6 @@ export function Topbar() {
 
       <div className="flex-1" />
 
-      {trainingMode && (
-        <span className="rounded-md bg-warn/15 px-2 py-1 text-[10px] font-bold tracking-wide text-warn uppercase">
-          Training mode
-        </span>
-      )}
-
       {persistError && (
         <span className="flex items-center gap-1.5 rounded-md bg-bad/15 px-2 py-1 text-[11px] font-semibold text-bad">
           <AlertTriangle size={12} aria-hidden />
@@ -96,7 +89,7 @@ export function Topbar() {
       {!online && (
         <span
           className="flex items-center gap-1.5 text-[11px] font-semibold text-ink-3"
-          title="Sales are still recorded. They sync when the connection returns."
+          title="Sales are saved on this device as normal — nothing is sent anywhere. Avoid reloading the page until the connection is back."
         >
           <WifiOff size={13} aria-hidden />
           Offline

@@ -64,8 +64,14 @@ export default function DashboardPage() {
       }
       for (const line of order.lines) {
         if (!line.served || line.voided) continue;
-        const product = products.find((p) => p.id === line.productId);
-        cost += (product?.costCents ?? 0) * line.qty;
+        // Cost as it stood when the sale happened. Falling back to the
+        // product's current cost is only for lines written before the field
+        // existed — for anything since, re-pricing the menu must not rewrite
+        // last month's margin.
+        const historic = line.costCents;
+        cost +=
+          (historic ?? products.find((p) => p.id === line.productId)?.costCents ?? 0) *
+          line.qty;
         const entry = byProduct.get(line.productId) ?? { qty: 0, revenue: 0 };
         entry.qty += line.qty;
         entry.revenue += line.unitCents * line.qty;
@@ -81,8 +87,13 @@ export default function DashboardPage() {
       .sort((a, b) => b.revenue - a.revenue)
       .slice(0, 8);
 
+    // Voids belong to the window the void happened in, like every other tile
+    // here. Left unfiltered, "Today" reported every void ever recorded.
     const voided = orders.filter(
-      (o) => o.status === 'voided' && o.branchId === branchId,
+      (o) =>
+        o.status === 'voided' &&
+        o.branchId === branchId &&
+        inRange(o.voidedAt ?? o.closedAt ?? o.openedAt),
     ).length;
 
     // Every branch over the same window, so the figures on screen can be
