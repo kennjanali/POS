@@ -81,7 +81,7 @@ export default function SettingsPage() {
       toast(
         count > 0
           ? `Loaded ${count.toLocaleString('en-PH')} demo orders`
-          : 'Demo data is only available in training mode',
+          : 'Only available in training mode',
         count > 0 ? 'success' : 'danger',
       );
     }, 50);
@@ -188,7 +188,7 @@ export default function SettingsPage() {
             label="Training mode"
             hint={
               settings.trainingMode
-                ? 'Marks every receipt as not valid, and unlocks the demo loader and "Clear all sales data". Turning this off is permanent — it cannot be switched back on.'
+                ? 'Marks every receipt as not valid, and unlocks Load and Remove demo data. Turning this off is permanent — it cannot be switched back on.'
                 : 'This install is live. Training mode cannot be turned back on, so fabricated sales can never be written over the books.'
             }
             checked={settings.trainingMode}
@@ -253,11 +253,11 @@ export default function SettingsPage() {
             title={
               settings.trainingMode
                 ? undefined
-                : 'Turn training mode on to load demo data'
+                : 'Only available in training mode'
             }
           >
             <FlaskConical size={14} aria-hidden />
-            Load demo month
+            Load demo data
           </Button>
           <Button
             variant="danger"
@@ -267,15 +267,15 @@ export default function SettingsPage() {
             title={
               settings.trainingMode
                 ? undefined
-                : 'A live install cannot clear its own sales. Restore from a backup instead.'
+                : 'Only available in training mode'
             }
           >
-            Clear all sales data
+            Remove demo data
           </Button>
           {!settings.trainingMode && (
             <p className="text-[11px] leading-relaxed text-ink-3">
-              This install is live, so sales cannot be cleared from here. To start
-              over, restore a backup.
+              Demo data is a training-mode tool. This install is live, so sales
+              cannot be loaded or wiped from here — restore a backup instead.
             </p>
           )}
         </Section>
@@ -313,24 +313,24 @@ export default function SettingsPage() {
       <Modal
         open={confirmDemo}
         onClose={() => setConfirmDemo(false)}
-        title="Load demo month"
+        title="Load demo data"
         width="sm"
         footer={
           <Button fullWidth onClick={loadDemo}>
-            Replace with demo data
+            Load demo data
           </Button>
         }
       >
         <p className="text-[12.5px] leading-relaxed text-ink-2">
-          Writes 30 days of trading — roughly 40 orders a day across three branches,
-          with senior, PWD and custom discounts, every tender type, a few voided
-          sales, and live tables on the floor right now.
+          Writes 30 days of pretend trading — roughly 40 orders a day across three
+          branches, with senior, PWD and custom discounts, every tender type, a few
+          voided sales, and live tables on the floor right now. Today is included,
+          so the Dashboard has something to show straight away.
         </p>
         <p className="mt-2 text-[12.5px] leading-relaxed text-ink-2">
-          <strong>Every existing order, stock movement and invoice number is
-          replaced.</strong>{' '}
-          Products and settings are kept, and branches you added yourself stay.
-          Download a backup first if this device has real sales on it.
+          <strong>Every order, stock movement and invoice number already on this
+          device is replaced.</strong>{' '}
+          Menu items and settings are kept, and branches you added yourself stay.
         </p>
       </Modal>
 
@@ -371,7 +371,7 @@ export default function SettingsPage() {
       <Modal
         open={confirmReset}
         onClose={() => setConfirmReset(false)}
-        title="Clear all sales data"
+        title="Remove demo data"
         width="sm"
         footer={
           <Button
@@ -382,20 +382,21 @@ export default function SettingsPage() {
               setConfirmReset(false);
               toast(
                 cleared
-                  ? 'Sales data cleared'
-                  : 'A live install cannot clear its own sales',
+                  ? 'Demo data removed'
+                  : 'Only available in training mode',
                 cleared ? 'success' : 'danger',
               );
             }}
           >
-            Yes, clear everything
+            Yes, remove it
           </Button>
         }
       >
         <p className="text-[12.5px] leading-relaxed text-ink-2">
-          Every order, stock movement, and activity entry on this device is removed and
-          the invoice sequence restarts. Download a backup first if you might need this
-          history. This cannot be undone.
+          Removes every order and stock movement on this device, leaving an empty
+          till to practise on. Menu items, branches, staff and settings all stay,
+          the activity log keeps a note that this happened, and invoice numbers
+          carry on rather than restarting. This cannot be undone.
         </p>
       </Modal>
     </div>

@@ -209,10 +209,25 @@ export function buildDemoData(options: DemoOptions): DemoDataset {
       // day's takings. The last 45 minutes are left for the live tables.
       const dayOpen = dayStart + 10 * 3_600_000;
       const dayClose = dayStart + 21 * 3_600_000;
-      const end = Math.min(dayClose, isToday ? now - 45 * 60_000 : dayClose);
-      const traded = isToday
-        ? Math.min(1, Math.max(0, (end - dayOpen) / (dayClose - dayOpen)))
-        : 1;
+
+      let sellFrom = dayOpen;
+      let end = dayClose;
+      let traded = 1;
+      if (isToday) {
+        end = Math.min(dayClose, now - 45 * 60_000);
+        // Loaded before the doors would have opened, today would otherwise
+        // have no takings at all and the dashboard — which opens on Today —
+        // would read zero against thousands of orders. Spread the morning
+        // over the hours that HAVE elapsed instead. Nothing is dated forward.
+        if (end <= dayOpen + 30 * 60_000) {
+          sellFrom = Math.max(dayStart, now - 5 * 3_600_000);
+          // The same 45-minute margin the normal path uses: serving and
+          // settling an order adds up to ~40 minutes to its opening time, so
+          // anything later than this would close in the future.
+          end = Math.max(sellFrom + 15 * 60_000, now - 45 * 60_000);
+        }
+        traded = Math.min(1, Math.max(0, (end - sellFrom) / (dayClose - dayOpen)));
+      }
       const count = Math.round(ordersPerDay * busy * (0.85 + rand() * 0.3) * traded);
 
       const built: Order[] = [];
@@ -225,7 +240,7 @@ export function buildDemoData(options: DemoOptions): DemoDataset {
       };
 
       for (let i = 0; i < count; i++) {
-        const openedAt = dayOpen + Math.floor(((i + rand()) / count) * (end - dayOpen));
+        const openedAt = sellFrom + Math.floor(((i + rand()) / count) * (end - sellFrom));
         const order = newOrder(rand, branch, invoiceSeq, openedAt, sellable);
         settleOrder(rand, order, settings);
         // A handful get voided after the fact, so that path has data too.
@@ -243,7 +258,10 @@ export function buildDemoData(options: DemoOptions): DemoDataset {
         const live = 3 + Math.floor(rand() * 2);
         for (let i = 0; i < live; i++) {
           // Oldest first, so the invoice sequence still tracks the clock.
-          const minutesAgo = 40 - Math.round((i * 36) / Math.max(1, live - 1));
+          // Stops at 10 minutes ago, not 4: leaveOpen marks the first line
+          // served 6 minutes after opening, and a table served in the future
+          // is not a thing.
+          const minutesAgo = 40 - Math.round((i * 30) / Math.max(1, live - 1));
           const openedAt = Math.max(dayStart, now - minutesAgo * 60_000);
           const order = newOrder(rand, branch, invoiceSeq, openedAt, sellable);
           leaveOpen(rand, order);

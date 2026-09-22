@@ -109,7 +109,15 @@ export default function DashboardPage() {
       };
     });
 
+    // An empty range and an empty till look identical on screen, and one of
+    // them means "nothing sold yet this morning" while the other means
+    // something is wrong. Counting what is on the device tells them apart.
+    const onDevice = orders.filter(
+      (o) => o.status === 'closed' && o.branchId === branchId,
+    ).length;
+
     return {
+      onDevice,
       byBranch,
       count: scoped.length,
       net,
@@ -149,6 +157,17 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid gap-3 p-4">
+        {stats.count === 0 && stats.onDevice > 0 && (
+          <p className="rounded-lg border border-info/40 bg-info/5 px-3.5 py-3 text-[12.5px] leading-relaxed">
+            <strong>No settled sales in this period.</strong>{' '}
+            <span className="text-ink-2">
+              This branch has {stats.onDevice.toLocaleString('en-PH')} on the device
+              overall — pick a wider range above to see them. Only paid-up sales
+              count here, so tables still open on the floor are not included.
+            </span>
+          </p>
+        )}
+
         <div className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-2.5">
           <Stat label="Net sales" value={peso(cents(stats.net), settings.currency)} big />
           <Stat label="Orders" value={String(stats.count)} />

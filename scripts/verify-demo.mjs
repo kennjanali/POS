@@ -172,6 +172,47 @@ for (const settings of [
 
 // Determinism: the same options must produce the same money, so two people
 // reading the dashboard see the same figures.
+// ── today ──────────────────────────────────────────────────────────────
+// The Dashboard opens on Today. A demo whose most recent sale was yesterday
+// puts thousands of orders on the Orders page and zeroes on the Dashboard,
+// which reads as a broken app rather than as a closed shop.
+console.log();
+console.log('— today —');
+{
+  const now = Date.now();
+  const today = businessDate(now);
+  const fresh = buildDemoData({
+    products: DEFAULT_PRODUCTS,
+    settings: DEFAULT_SETTINGS,
+    mainBranch: DEFAULT_BRANCH,
+  });
+  const closedToday = fresh.orders.filter(
+    (o) => o.status === 'closed' && businessDate(o.closedAt ?? o.openedAt) === today,
+  );
+  check(
+    'today has settled sales, whatever hour the demo was built',
+    closedToday.length > 0,
+    `${closedToday.length} closed today`,
+  );
+  check(
+    'every branch trades today',
+    new Set(closedToday.map((o) => o.branchId)).size === fresh.branches.length,
+  );
+
+  // A sale that has not happened yet is not demo data, it is a bug.
+  const stamps = (o) =>
+    [
+      o.openedAt,
+      o.closedAt,
+      o.voidedAt,
+      ...o.lines.map((l) => l.servedAt),
+      ...o.tenders.map((t) => t.takenAt),
+    ].filter((t) => t !== null && t !== undefined);
+  const ahead = fresh.orders.filter((o) => stamps(o).some((t) => t > now));
+  check('nothing is dated into the future', ahead.length === 0,
+    `${ahead.length} order(s) ahead of the clock`);
+}
+
 const opts = {
   products: DEFAULT_PRODUCTS,
   settings: DEFAULT_SETTINGS,
