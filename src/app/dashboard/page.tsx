@@ -4,9 +4,20 @@ import { useMemo, useState } from 'react';
 
 import { cn } from '@/components/ui/cn';
 import { businessDate, peso } from '@/lib/format';
-import { cents } from '@/lib/money';
+import { cents, scale } from '@/lib/money';
 import { TENDER_LABELS, TENDER_METHODS, type TenderMethod } from '@/lib/types';
 import { usePos } from '@/store/usePos';
+
+/**
+ * Technology fee. Accrues on every settled sale and is invoiced once a year,
+ * so the headline below is the calendar year to date rather than whatever
+ * range the buttons are on.
+ *
+ * Charged on net sales — what the business actually took, after senior, PWD
+ * and custom discounts — not on the menu-price total, so it never bills on
+ * money the carinderia never received.
+ */
+const TECH_FEE_RATE = 0.03;
 
 type Range = 'today' | '7d' | '30d' | 'all';
 
@@ -109,6 +120,20 @@ export default function DashboardPage() {
       };
     });
 
+    // Fee bases. Both span every branch on this install: it is one licence
+    // and one yearly invoice, not a per-branch charge, so scoping these to
+    // the branch on screen would under-report what is owed.
+    const feeRangeBase = closedInRange.reduce((sum, o) => sum + o.netCents, 0);
+    const year = today.slice(0, 4);
+    const feeYearBase = orders.reduce(
+      (sum, o) =>
+        o.status === 'closed' &&
+        businessDate(o.closedAt ?? o.openedAt).slice(0, 4) === year
+          ? sum + o.netCents
+          : sum,
+      0,
+    );
+
     // An empty range and an empty till look identical on screen, and one of
     // them means "nothing sold yet this morning" while the other means
     // something is wrong. Counting what is on the device tells them apart.
@@ -119,6 +144,9 @@ export default function DashboardPage() {
     return {
       onDevice,
       byBranch,
+      year,
+      feeRangeBase,
+      feeYearBase,
       count: scoped.length,
       net,
       discount,
@@ -132,6 +160,7 @@ export default function DashboardPage() {
     };
   }, [orders, products, range, branchId, branches]);
 
+  const rangeLabel = RANGES.find((r) => r.key === range)?.label ?? '';
   const maxRevenue = stats.top[0]?.revenue ?? 1;
   const maxBranchNet = Math.max(1, ...stats.byBranch.map((b) => b.net));
 
@@ -286,6 +315,47 @@ export default function DashboardPage() {
                 ))}
               </ul>
             )}
+          </section>
+
+          {/* Technology fee. Third child of a two-column grid, so it sits
+              under the tender card rather than beside it. */}
+          <section className="rounded-lg border border-line bg-surface p-3.5">
+            <h3 className="mb-3 text-[11px] font-bold tracking-wide text-ink-2 uppercase">
+              Technology fee
+            </h3>
+
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="text-[12.5px] font-semibold text-ink-2">
+                {stats.year} to date
+              </span>
+              <span className="tnum text-[22px] leading-none font-extrabold text-accent">
+                {peso(
+                  scale(cents(stats.feeYearBase), TECH_FEE_RATE),
+                  settings.currency,
+                )}
+              </span>
+            </div>
+            <p className="mt-1.5 text-[11px] leading-relaxed text-ink-3">
+              {(TECH_FEE_RATE * 100).toFixed(0)}% of{' '}
+              {peso(cents(stats.feeYearBase), settings.currency)} in net sales, across
+              every branch on this device.
+            </p>
+
+            <div className="mt-3 flex items-baseline justify-between gap-3 border-t border-line pt-2.5">
+              <span className="text-[12.5px] text-ink-2">{rangeLabel}</span>
+              <span className="tnum text-[13px] font-bold">
+                {peso(
+                  scale(cents(stats.feeRangeBase), TECH_FEE_RATE),
+                  settings.currency,
+                )}
+              </span>
+            </div>
+
+            <p className="mt-3 border-t border-line pt-2 text-[11px] leading-relaxed text-ink-3">
+              Billed once a year. This is what keeps the POS maintained — security
+              fixes, changes to BIR rules, and new features — so the till you are
+              running stays supported instead of frozen on the day it shipped.
+            </p>
           </section>
         </div>
       </div>
