@@ -451,7 +451,10 @@ export function Checkout({ order, open, onClose, onPaid }: CheckoutProps) {
             </p>
           )}
 
-          {totalChange > 0 && (
+          {/* Hidden while the tender is over-recorded: the change was worked out
+              against the previous total, and a cashier reading it would hand
+              back the wrong money. The block above says what to do instead. */}
+          {totalChange > 0 && !overRecorded && (
             <p className="rounded-md bg-good/10 px-2.5 py-2 text-[13px] font-bold text-good">
               Change due {peso(totalChange, settings.currency)}
             </p>
