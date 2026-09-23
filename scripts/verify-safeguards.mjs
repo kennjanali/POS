@@ -481,6 +481,71 @@ console.log('\n— Automatic backup: fires by itself, never twice —');
     'saves: ' + saves);
 }
 
+console.log('');
+console.log('— Demo data: never two branches on one BIR code —');
+{
+  setTraining(true);
+  // The owner adds a branch first. The demo set ships BR002/00001 and
+  // BR003/00002, so this one collides on id with the first and on branch code
+  // with the second — the two ways a demo load used to corrupt the numbering.
+  usePos.setState((s) => ({
+    branches: [
+      s.branches[0],
+      {
+        id: 'BR002',
+        name: 'Mall Branch',
+        address: '',
+        branchCode: '00002',
+        color: '#2563eb',
+        active: true,
+      },
+    ],
+  }));
+
+  const written = S().loadDemoData({ days: 2, ordersPerDay: 3 });
+  const branches = S().branches;
+  const codes = branches.map((b) => b.branchCode);
+
+  check(
+    'branch codes stay unique after a demo load',
+    new Set(codes).size === codes.length,
+    `codes: ${codes.join(', ')}`,
+  );
+  check(
+    "the owner's own branch is untouched",
+    branches.find((b) => b.id === 'BR002')?.name === 'Mall Branch',
+  );
+
+  const known = new Set(branches.map((b) => b.id));
+  check(
+    'every demo order belongs to a branch that exists',
+    S().orders.every((o) => known.has(o.branchId)),
+  );
+
+  // The real failure: two sales, two branches, one invoice number.
+  const seen = new Map();
+  let clashes = 0;
+  for (const o of S().orders) {
+    if (seen.has(o.invoiceNo) && seen.get(o.invoiceNo) !== o.branchId) clashes += 1;
+    seen.set(o.invoiceNo, o.branchId);
+  }
+  check('no invoice number is issued twice', clashes === 0, `clashes: ${clashes}`);
+
+  // And the next number the till hands out must not land inside a range
+  // another branch already used.
+  const before = new Set(S().orders.map((o) => o.invoiceNo));
+  S().setActiveBranch('BR002');
+  const id = S().openOrder('Collision probe', 'dine-in');
+  const fresh = S().order(id).invoiceNo;
+  check(
+    'the next invoice number is one nobody has used',
+    !before.has(fresh),
+    `issued ${fresh}`,
+  );
+  check('the demo load reported what it actually wrote', written === S().orders.length - 1,
+    `reported ${written}`);
+}
+
 rmSync(dir, { recursive: true, force: true });
 console.log(
   failures === 0

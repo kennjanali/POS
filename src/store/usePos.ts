@@ -934,30 +934,53 @@ export const usePos = create<PosState>()(
 
         // Branches the owner made themselves are left alone; the demo ones are
         // added beside them. Stock is merged for the same reason.
+        //
+        // A demo branch is only added if both its id and its BIR branch code
+        // are still free. The code is what prefixes an invoice number, so two
+        // branches sharing one issue the same invoice number twice — the very
+        // thing the Add branch form refuses. A demo branch that cannot be
+        // added takes its orders and stock with it rather than leaving them
+        // attached to the owner's branch of the same id.
         const byId = new Map(state.branches.map((b) => [b.id, b]));
+        const usedCodes = new Set(state.branches.map((b) => b.branchCode));
         for (const branch of demo.branches) {
-          if (!byId.has(branch.id)) byId.set(branch.id, branch);
+          if (byId.has(branch.id) || usedCodes.has(branch.branchCode)) continue;
+          byId.set(branch.id, branch);
+          usedCodes.add(branch.branchCode);
         }
+
+        const kept = new Set(
+          demo.branches.filter((b) => byId.get(b.id) === b).map((b) => b.id),
+        );
+        kept.add(mainBranch.id);
+        const orders = demo.orders.filter((o) => kept.has(o.branchId));
+        const stockMoves = demo.stockMoves.filter((m) => kept.has(m.branchId));
+        const stock = Object.fromEntries(
+          Object.entries(demo.stock).filter(([id]) => kept.has(id)),
+        );
+        const invoiceSeq = Object.fromEntries(
+          Object.entries(demo.invoiceSeq).filter(([id]) => kept.has(id)),
+        );
 
         set((s) => ({
           ...s,
           branches: [...byId.values()],
-          orders: demo.orders,
-          stock: { ...s.stock, ...demo.stock },
-          stockMoves: demo.stockMoves,
-          invoiceSeq: demo.invoiceSeq,
+          orders,
+          stock: { ...s.stock, ...stock },
+          stockMoves,
+          invoiceSeq,
           activeBranchId: mainBranch.id,
           activeOrderId: null,
           audit: log(
             s.audit,
             'demo.load',
-            `Loaded demo data — ${demo.orders.length} orders across ` +
-              `${demo.branches.length} branches`,
+            `Loaded demo data — ${orders.length} orders across ` +
+              `${kept.size} branches`,
             'warn',
             mainBranch.id,
           ),
         }));
-        return demo.orders.length;
+        return orders.length;
       },
 
       // ── monthly archive ───────────────────────────────────────────
