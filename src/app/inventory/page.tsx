@@ -63,12 +63,23 @@ export default function InventoryPage() {
     const name = draft.name.trim();
     if (!name) return;
 
+    // A negative price turns a menu item into a discount anyone can stack onto
+    // a bill until it reaches zero. The order then closes with no tender and
+    // reads as a normal completed sale rather than a void, so nothing in the
+    // day's review points at it.
+    const priceCents = parsePesos(draft.price);
+    const costCents = parsePesos(draft.cost);
+    if (priceCents < 0 || costCents < 0) {
+      toast('Price and cost cannot be negative', 'danger');
+      return;
+    }
+
     const product: Product = {
       id: draft.id ?? uuidv7(),
       name,
       unit: draft.unit.trim() || 'pc',
-      priceCents: parsePesos(draft.price),
-      costCents: parsePesos(draft.cost),
+      priceCents,
+      costCents,
       vatExempt: false,
       active: true,
     };
