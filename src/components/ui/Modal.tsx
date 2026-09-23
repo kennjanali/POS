@@ -25,15 +25,27 @@ export function Modal({
 }: ModalProps) {
   const panelRef = useRef<HTMLDivElement>(null);
 
+  // Every caller passes an inline arrow — `onClose={() => setDraft(null)}` —
+  // so onClose is a different function on each render of the parent. Listing
+  // it as an effect dependency re-ran the effect on every keystroke, and the
+  // focus() call below then pulled focus out of the field being typed into:
+  // one character landed, the ring jumped to the panel, and the next keypress
+  // went nowhere. Held in a ref so the effect depends on `open` alone.
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  });
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') onCloseRef.current();
     };
     document.addEventListener('keydown', onKey);
+    // Once, as the dialog opens — not on every render of whatever is inside it.
     panelRef.current?.focus();
     return () => document.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 
