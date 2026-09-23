@@ -26,8 +26,11 @@ Three roles:
 | **Dashboard voided count** | Ignored the date range; "Today" showed every void ever. Now filtered. |
 | **Gross profit** | Used the product's *current* cost, so re-pricing the menu rewrote past margins. Cost is now frozen on the line at the moment of sale. |
 | **Restore** | Accepted almost any file. Now validates version and shape before replacing anything, and logs the restore. |
+| **Negative menu price** | Only the item name was validated. A price of −₱50 made a menu item that *subtracted* from a bill; stacking it brought any sale to ₱0.00, which then closed with no tender and filed as a normal completed sale — not a void, so nothing in the day's review pointed at it. Gross profit went negative. Price and cost are now refused below zero, on both create and edit. |
+| **Demo data could give two branches one BIR code** | `loadDemoData` merged demo branches by id only. On an install that already had its own branch, the demo set added a second branch carrying a branch code already in use — the exact thing the Add branch form refuses, because the code prefixes the invoice number. Two sales then took the same invoice number. Demo branches are now added only when both id and code are free, and a branch that cannot be added takes its orders and stock with it. |
+| **Change due after a late discount** | Applying a discount after cash was taken left the green "Change due" line showing the amount worked out against the *old* total, beside the red block saying the tender was over. Completion was already blocked, but a cashier reading the green line handed back the wrong money. It is hidden while the tender is over-recorded. |
 
-All covered by `npm run verify:safeguards` — 86 checks, part of `npm run check`.
+All covered by `npm run verify:safeguards` — 92 checks, part of `npm run check`.
 
 ### Getting in
 
@@ -78,9 +81,9 @@ Measured file sizes — about 1.67 KB per sale:
 **1. Needs internet to load the page.** No service worker. All the data is on
 the device, but the app itself is fetched over the network, so a refresh with
 no signal shows a blank page. Most POS needs internet anyway — recorded as a
-choice, not a defect. Roughly 20 lines to change if you ever want it. The
-topbar's "sales sync when the connection returns" message is wrong either way
-and should go.
+choice, not a defect. Roughly 20 lines to change if you ever want it.
+(The topbar wording was corrected earlier: the offline badge now says the sale
+is saved on the device and warns against reloading. Nothing claims to sync.)
 
 **~~2. Saving gets slower as the month fills.~~ FIXED.** Sales no longer sit
 in the settings blob. They have their own IndexedDB stores, written one record
@@ -116,10 +119,16 @@ device-only app; worth knowing if staff handle the tablet unsupervised.
 **5. One tab at a time.** Two tabs each hold their own copy and overwrite each
 other silently. Nothing enforces this yet.
 
-**6. Dependencies.** `npm audit` reports 1 critical + 3 high, all in Next's
-build tooling. Not reachable in the deployed app (static export, no server, no
-image optimization), but the Windows RCE affects `next dev` on your machine.
-Currently on 15.5.23; a 15.5.26 backport exists — worth testing.
+**~~6. Dependencies — the critical one.~~ FIXED.** Bumped to Next 15.5.26
+(inside the existing `^15.5.23` range, so it is a lockfile move, not a
+migration). The critical Windows RCE that affected `next dev` on your machine
+is gone. Build and all 227 checks pass on it.
+
+Three **high** advisories remain, in `postcss` and `sharp` underneath Next's
+build tooling. npm cannot clear them without `--force`, which moves to Next 16
+— a major upgrade, not a patch. They are not reachable in the deployed app:
+static export, no server, no image optimization. Recommend staying put and
+re-checking when Next 16 is worth the migration on its own merits.
 
 **7. Receipt is missing BIR-accredited POS fields** — no MIN, POS serial, or
 PTU number. Confirm the required set with your accredited supplier.
@@ -142,6 +151,6 @@ PTU number. Confirm the required set with your accredited supplier.
 
 ## Suggested order
 
-1. Next 15.5.26 bump (dev-machine risk only).
-2. Drop the misleading "sync" wording from the topbar.
-3. Service worker, only if you want the app to open without signal.
+1. Confirm the BIR receipt fields (MIN, POS serial, PTU) with your accredited
+   supplier — item 7. It is the only open item that can stop you trading.
+2. Service worker, only if you want the app to open without signal.
