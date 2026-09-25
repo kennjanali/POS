@@ -1,5 +1,7 @@
 export interface Env {
   DB: D1Database;
+  /** Encrypted nightly backups. The server cannot read them. */
+  BACKUPS: R2Bucket;
   /** Ed25519 private key as a JWK (JSON). A secret — never in wrangler.jsonc. */
   LICENSE_PRIVATE_KEY: string;
   /** Cloudflare Access, e.g. `kennjanali.cloudflareaccess.com`. Empty = admin locked. */

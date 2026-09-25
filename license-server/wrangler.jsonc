@@ -15,6 +15,9 @@
     }
   ],
 
+  // Encrypted nightly backups (ciphertext only — the server cannot read them).
+  "r2_buckets": [{ "binding": "BACKUPS", "bucket_name": "pos034-backups" }],
+
   // Cloudflare Access protects /admin. Until both are set the dashboard stays
   // locked. The signing key is a secret: `wrangler secret put LICENSE_PRIVATE_KEY`.
   "vars": {

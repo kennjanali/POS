@@ -22,7 +22,15 @@ interface LicenseRow {
 const api = new Hono<{ Bindings: Env }>();
 
 // The app runs at https://localhost inside the Android WebView.
-api.use('*', cors({ origin: '*', allowMethods: ['POST'], allowHeaders: ['content-type'] }));
+api.use(
+  '*',
+  cors({
+    origin: '*',
+    allowMethods: ['GET', 'POST'],
+    allowHeaders: ['content-type', 'x-license', 'x-license-key', 'x-salt'],
+    exposeHeaders: ['x-salt'],
+  }),
+);
 
 const isId = (v: unknown): v is string => typeof v === 'string' && v.length >= 8 && v.length <= 64;
 const isDevice = (v: unknown): v is string => typeof v === 'string' && /^[0-9a-f]{64}$/.test(v);
@@ -173,5 +181,82 @@ async function recordCloses(db: D1Database, installId: string, licenseId: string
     anchored = true;
   }
 }
+
+// ── Encrypted backups ────────────────────────────────────────────────────
+// Stored as `<licenseId>/<YYYY-MM-DD>.bin`: one per day, a re-upload the same
+// day replaces it. The salt rides along so the owner's recovery code alone
+// can decrypt it on a new tablet.
+
+const MAX_BACKUP_BYTES = 50 * 1024 * 1024;
+const KEEP_DAILY = 30;
+
+api.post('/backup', async (c) => {
+  const license = await readLicense(c.req.header('x-license'), c.env.LICENSE_PRIVATE_KEY);
+  if (!license) return c.json({ error: 'Not a license this server issued.' }, 401);
+  const salt = c.req.header('x-salt') ?? '';
+  if (!/^[A-Za-z0-9+/=]{16,64}$/.test(salt)) return c.json({ error: 'Missing salt.' }, 400);
+
+  const body = await c.req.arrayBuffer();
+  if (body.byteLength === 0 || body.byteLength > MAX_BACKUP_BYTES) return c.json({ error: 'Backup too large or empty.' }, 413);
+
+  const day = new Date(Date.now() + 8 * 3600_000).toISOString().slice(0, 10); // Asia/Manila
+  await c.env.BACKUPS.put(`${license.licenseId}/${day}.bin`, body, {
+    customMetadata: { salt, installId: license.installId },
+  });
+  await prune(c.env.BACKUPS, license.licenseId);
+  return c.json({ ok: true, name: `${day}.bin` });
+});
+
+/** Keep the last 30 days, and the first backup of every month for good. */
+async function prune(bucket: R2Bucket, licenseId: string) {
+  const listed = await bucket.list({ prefix: `${licenseId}/` });
+  const names = listed.objects.map((o) => o.key).sort().reverse(); // newest first
+  const firstOfMonth = new Set<string>();
+  const seenMonth = new Set<string>();
+  for (const name of [...names].reverse()) {
+    const month = name.slice(licenseId.length + 1, licenseId.length + 8);
+    if (!seenMonth.has(month)) {
+      seenMonth.add(month);
+      firstOfMonth.add(name);
+    }
+  }
+  const drop = names.slice(KEEP_DAILY).filter((name) => !firstOfMonth.has(name));
+  if (drop.length > 0) await bucket.delete(drop);
+}
+
+/** The license key is the proof: only the owner has it, and the files are unreadable without the recovery code. */
+async function licenseByKey(db: D1Database, key: string | undefined) {
+  return db
+    .prepare("SELECT id FROM licenses WHERE key = ? AND status = 'active'")
+    .bind(normalizeKey(key))
+    .first<{ id: string }>();
+}
+
+api.get('/backups', async (c) => {
+  const license = await licenseByKey(c.env.DB, c.req.header('x-license-key'));
+  if (!license) return c.json({ error: 'That license key is not recognised.' }, 404);
+  const listed = await c.env.BACKUPS.list({ prefix: `${license.id}/` });
+  const backups = listed.objects
+    .map((o) => ({ name: o.key.slice(license.id.length + 1), size: o.size, uploaded: o.uploaded.getTime() }))
+    .sort((a, b) => b.name.localeCompare(a.name));
+  return c.json({ backups });
+});
+
+api.get('/backups/:name', async (c) => {
+  const license = await licenseByKey(c.env.DB, c.req.header('x-license-key'));
+  if (!license) return c.json({ error: 'That license key is not recognised.' }, 404);
+  const name = c.req.param('name');
+  if (!/^\d{4}-\d{2}-\d{2}\.bin$/.test(name)) return c.json({ error: 'No such backup.' }, 404);
+  const object = await c.env.BACKUPS.get(`${license.id}/${name}`);
+  if (!object) return c.json({ error: 'No such backup.' }, 404);
+  return new Response(object.body, {
+    headers: {
+      'content-type': 'application/octet-stream',
+      'x-salt': object.customMetadata?.salt ?? '',
+      'access-control-expose-headers': 'x-salt',
+      'access-control-allow-origin': '*',
+    },
+  });
+});
 
 export { api };

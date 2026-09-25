@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react';
 
 import { toast } from '@/components/ui/Toast';
 import { backupFileName, endOfDayDue, saveBackup } from '@/lib/backup';
+import { sealBackup, uploadBackup } from '@/lib/cloudBackup';
 import { SAVE_LOCATION } from '@/lib/files';
 import { usePos } from '@/store/usePos';
 
@@ -41,19 +42,21 @@ export function AutoBackup() {
         if (endOfDayDue(state.closes.at(-1)?.closedAt ?? null, state.unclosedSales())) {
           await state.closeDay();
         }
-        if (!endOfDayDue(state.lastBackupAt, state.unbackedUp())) return;
-        if (await saveBackup(usePos.getState().exportSnapshot())) {
-          state.recordBackup();
-          toast(`Saved ${backupFileName()} to ${SAVE_LOCATION}`, 'success');
-        } else {
-          // A blocked download or a refused permission. Saying so is the whole
-          // point — a backup that silently never happened is the failure this
-          // feature exists to prevent.
-          toast(
-            'Could not save the daily backup automatically. Open Settings and save it.',
-            'danger',
-          );
+        if (endOfDayDue(state.lastBackupAt, state.unbackedUp())) {
+          if (await saveBackup(usePos.getState().exportSnapshot())) {
+            state.recordBackup();
+            toast(`Saved ${backupFileName()} to ${SAVE_LOCATION}`, 'success');
+          } else {
+            // A blocked download or a refused permission. Saying so is the whole
+            // point — a backup that silently never happened is the failure this
+            // feature exists to prevent.
+            toast(
+              'Could not save the daily backup automatically. Open Settings and save it.',
+              'danger',
+            );
+          }
         }
+        await uploadIfDue();
       } finally {
         running.current = false;
       }
@@ -65,4 +68,22 @@ export function AutoBackup() {
   }, [hydrated]);
 
   return null;
+}
+
+/**
+ * The encrypted copy off the tablet, for licensed installs. Its own schedule
+ * so a missed night (offline, server down) is caught up on the next tick
+ * rather than waiting a day. Failures stay quiet here: the heartbeat reports
+ * the last successful upload, and the dashboard shows a stale one.
+ */
+async function uploadIfDue() {
+  const s = usePos.getState();
+  if (!s.license || !s.licensed || !s.backupKey || !navigator.onLine) return;
+  if (!endOfDayDue(s.lastCloudBackupAt, s.salesSince(s.lastCloudBackupAt))) return;
+  try {
+    await uploadBackup(await sealBackup(s.exportSnapshot(), s.backupKey), s.license, s.backupKey.salt);
+    s.recordCloudBackup();
+  } catch {
+    /* retried on the next tick while it is still due */
+  }
 }

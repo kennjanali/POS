@@ -5,6 +5,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 
 import { APP_VERSION, LICENSE_SERVER_URL, PRODUCT_NAME } from '@/lib/brand';
 import { buildClose, inWindow, signClose } from '@/lib/closes';
+import { createBackupKey, type BackupKey } from '@/lib/cloudBackup';
 import { buildDemoData } from '@/lib/demo';
 import { deviceFingerprint } from '@/lib/device';
 import { verifyLicense, type License } from '@/lib/license';
@@ -82,6 +83,11 @@ interface PosState {
   closes: DailyClose[];
   /** The last close number the license server confirmed receiving. */
   closesAckedThrough: number;
+  /** Encrypts the cloud backup. Derived from the recovery code while it was on
+   *  screen. Stays on this tablet: never in a snapshot or a backup file. */
+  backupKey: BackupKey | null;
+  /** When the last encrypted backup reached the license server. */
+  lastCloudBackupAt: number | null;
   audit: AuditEntry[];
   settings: Settings;
   /** branchId -> last issued invoice number */
@@ -172,6 +178,8 @@ interface PosState {
   resetPinWithRecoveryCode: (code: string, userId: string, pin: string) => Promise<UserResult>;
   /** For when the written copy is lost. The old code stops working. */
   replaceRecoveryCode: (code: string) => Promise<void>;
+  /** A new tablet set up from a decrypted cloud backup instead of the wizard. */
+  setupFromBackup: (snapshot: DataSnapshot, recoveryCode: string) => Promise<UserResult>;
 
   // ── license ─────────────────────────────────────────────────────────
   /** Verify the stored license for this install and tablet. Offline. */
@@ -211,6 +219,9 @@ interface PosState {
   unbackedUp: () => number;
   /** Called once a backup file has actually been handed to the browser. */
   recordBackup: () => void;
+  recordCloudBackup: () => void;
+  /** Sales settled or opened after `since` (all of them when null). */
+  salesSince: (since: number | null) => number;
   /** Sales settled or voided since the last close — what the next close would cover. */
   unclosedSales: () => number;
   /** Close everything since the last close. Null when there is nothing to close. */
@@ -384,6 +395,8 @@ export const usePos = create<PosState>()(
       stockMoves: [],
       closes: [],
       closesAckedThrough: 0,
+      backupKey: null,
+      lastCloudBackupAt: null,
       audit: [],
       settings: DEFAULT_SETTINGS,
       invoiceSeq: {},
@@ -914,9 +927,10 @@ export const usePos = create<PosState>()(
           return { ok: false, error: `The PIN has to be ${PIN_LENGTH} digits.` };
         }
 
-        const [pin, recovery] = await Promise.all([
+        const [pin, recovery, backupKey] = await Promise.all([
           hashPin(input.pin),
           hashRecoveryCode(input.recoveryCode),
+          createBackupKey(input.recoveryCode),
         ]);
         const owner: User = {
           id: uuidv7(),
@@ -949,6 +963,7 @@ export const usePos = create<PosState>()(
             stock: { [branch.id]: initialStock(products) },
             users: [owner],
             recovery,
+            backupKey,
             installId: uuidv7(),
             audit: log(
               state.audit,
@@ -992,10 +1007,12 @@ export const usePos = create<PosState>()(
       },
 
       replaceRecoveryCode: async (code) => {
-        const recovery = await hashRecoveryCode(code);
+        // Backups from now on need the new code; older ones still open with the old one.
+        const [recovery, backupKey] = await Promise.all([hashRecoveryCode(code), createBackupKey(code)]);
         set((s) => ({
           ...s,
           recovery,
+          backupKey,
           audit: log(
             s.audit,
             'recovery.replace',
@@ -1004,6 +1021,21 @@ export const usePos = create<PosState>()(
             s.activeBranchId,
           ),
         }));
+      },
+
+      setupFromBackup: async (snapshot, recoveryCode) => {
+        if (get().users.length > 0) return { ok: false, error: 'This device is already set up.' };
+        const restored = get().importSnapshot(snapshot);
+        if (!restored.ok) return restored;
+        const backupKey = await createBackupKey(recoveryCode);
+        set((s) => ({
+          ...s,
+          // A new tablet is a new install; the license is activated again.
+          installId: uuidv7(),
+          backupKey,
+          audit: log(s.audit, 'install.restore', 'Set up this tablet from a cloud backup', 'warn', s.activeBranchId),
+        }));
+        return { ok: true };
       },
 
       // ── license ───────────────────────────────────────────────────
@@ -1338,12 +1370,16 @@ export const usePos = create<PosState>()(
         return true;
       },
 
-      unbackedUp: () => {
-        const { orders, lastBackupAt } = get();
+      unbackedUp: () => get().salesSince(get().lastBackupAt),
+
+      salesSince: (since) => {
+        const { orders } = get();
         // Never backed up: everything on the device is at risk.
-        if (lastBackupAt === null) return orders.length;
-        return orders.filter((o) => (o.closedAt ?? o.openedAt) > lastBackupAt).length;
+        if (since === null) return orders.length;
+        return orders.filter((o) => (o.closedAt ?? o.openedAt) > since).length;
       },
+
+      recordCloudBackup: () => set({ lastCloudBackupAt: Date.now() }),
 
       recordBackup: () =>
         set((state) => ({
@@ -1422,6 +1458,8 @@ export const usePos = create<PosState>()(
         installId: state.installId,
         license: state.license,
         closesAckedThrough: state.closesAckedThrough,
+        backupKey: state.backupKey,
+        lastCloudBackupAt: state.lastCloudBackupAt,
         activeBranchId: state.activeBranchId,
         lastBackupAt: state.lastBackupAt,
       }),

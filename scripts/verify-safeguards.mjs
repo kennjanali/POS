@@ -34,7 +34,7 @@ function emit(name, file) {
   writeFileSync(join(dir, `${name}.js`), js);
 }
 
-for (const n of ['brand', 'money', 'tax', 'format', 'id', 'seed', 'demo', 'crypto', 'idb', 'storage', 'printer', 'receipt', 'device', 'license', 'permissions', 'types', 'archive', 'files', 'backup', 'closes'])
+for (const n of ['brand', 'money', 'tax', 'format', 'id', 'seed', 'demo', 'crypto', 'idb', 'storage', 'printer', 'receipt', 'device', 'license', 'permissions', 'types', 'archive', 'files', 'backup', 'closes', 'cloudBackup'])
   emit(n, `src/lib/${n}.ts`);
 for (const n of ['useAuth', 'usePos']) emit(n, `src/store/${n}.ts`);
 
@@ -424,6 +424,26 @@ console.log('\n— Daily close: every sale counted once, the chain shows tamperi
   check('the close slip fits 58 mm paper', Math.max(...slip.map((l) => l.length)) <= 32);
 }
 
+console.log('\n— Cloud backup: sealed on the tablet, opened only with the recovery code —');
+{
+  const { createBackupKey, sealBackup, openBackup } = await load('cloudBackup');
+  check('setup created a backup key', S().backupKey !== null && typeof S().backupKey.salt === 'string');
+  check('the backup key never goes into a backup', !JSON.stringify(S().exportSnapshot()).includes(S().backupKey.key));
+
+  const code = generateRecoveryCode();
+  const key = await createBackupKey(code);
+  const snapshot = S().exportSnapshot();
+  const sealed = await sealBackup(snapshot, key);
+  check('the sealed file is not readable', !new TextDecoder().decode(sealed).includes(snapshot.settings.businessName));
+  const opened = await openBackup(sealed, code.toLowerCase().replace(/-/g, ' '), key.salt);
+  check('the recovery code opens it, however it is typed', opened?.orders.length === snapshot.orders.length);
+  check('a wrong code gets nothing', (await openBackup(sealed, generateRecoveryCode(), key.salt)) === null);
+  const damaged = sealed.slice();
+  damaged[damaged.length - 1] ^= 1;
+  check('a damaged file gets nothing', (await openBackup(damaged, code, key.salt)) === null);
+
+}
+
 console.log('\n— Thermal receipt: never wider than the paper —');
 {
   const { renderReceipt } = await load('receipt');
@@ -609,7 +629,9 @@ console.log('\n— Recovery code: the way back in without a shipped PIN —');
   check('the reset is named in the log', S().audit[0]?.kind === 'user.recover');
 
   const replacement = generateRecoveryCode();
+  const keyBefore = S().backupKey;
   await S().replaceRecoveryCode(replacement);
+  check('a new recovery code brings a new backup key', S().backupKey.key !== keyBefore.key);
   check('a replaced code stops working', (await S().recoveryCodeMatches(RECOVERY)) === false);
   check('the new one works', (await S().recoveryCodeMatches(replacement)) === true);
   check('a backup carries the recovery hash', S().exportSnapshot().recovery === S().recovery);

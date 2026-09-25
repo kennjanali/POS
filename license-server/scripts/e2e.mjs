@@ -103,6 +103,27 @@ check('restored closes are not billed twice', afterMonth === '₱200.02', `this 
 check('the chain carries on across tablets', (after.match(/does not chain/g) ?? []).length === 1);
 check('the new tablet is acknowledged through close 4', resent.ackThrough === 4, JSON.stringify(resent));
 
+// ── Encrypted backups ────────────────────────────────────────────────────
+const blob = crypto.getRandomValues(new Uint8Array(4096));
+const salt = Buffer.from(crypto.getRandomValues(new Uint8Array(16))).toString('base64');
+const uploaded = await fetch(`${BASE}/api/backup`, {
+  method: 'POST',
+  headers: { 'content-type': 'application/octet-stream', 'x-license': moved.license, 'x-salt': salt },
+  body: blob,
+});
+check('a licensed tablet uploads its sealed backup', uploaded.ok, await uploaded.clone().text());
+const noLicense = await fetch(`${BASE}/api/backup`, { method: 'POST', headers: { 'x-salt': salt }, body: blob });
+check('an upload without a license is refused', noLicense.status === 401);
+
+const listed = await (await fetch(`${BASE}/api/backups`, { headers: { 'x-license-key': key } })).json();
+check('the owner lists backups with the license key', listed.backups?.length === 1, JSON.stringify(listed));
+const back = await fetch(`${BASE}/api/backups/${listed.backups[0].name}`, { headers: { 'x-license-key': key } });
+const backBytes = new Uint8Array(await back.arrayBuffer());
+check('the download is byte-for-byte what was uploaded', Buffer.compare(Buffer.from(backBytes), Buffer.from(blob)) === 0);
+check('it comes with its salt', back.headers.get('x-salt') === salt);
+const stranger = await fetch(`${BASE}/api/backups`, { headers: { 'x-license-key': 'AAAA-AAAA-AAAA-AAAA' } });
+check('a wrong license key sees nothing', stranger.status === 404);
+
 // ── A live install's first close follows unreported training closes ──────
 const trainingKey = decodeURIComponent(new URL((await fetch(`${BASE}/admin/licenses`, {
   method: 'POST', body: new URLSearchParams({ business_name: `Anchor ${Date.now()}`, updates_until: '2027-12-31' }), redirect: 'manual',

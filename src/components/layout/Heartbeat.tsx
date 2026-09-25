@@ -34,7 +34,8 @@ export function Heartbeat() {
             license: s.license,
             appVersion: APP_VERSION,
             ...(await deviceInfo()),
-            lastBackupAt: s.lastBackupAt,
+            // The off-tablet copy is the one that matters when a tablet is lost.
+            lastBackupAt: s.lastCloudBackupAt,
             errorCount: s.persistError ? 1 : 0,
             // Training sales are never billed: no closes until the install is live.
             closes: s.settings.trainingMode ? [] : s.closes.filter((c) => c.no > s.closesAckedThrough),
