@@ -514,7 +514,9 @@ Restore (do by hand); the Vitest port, proposed for Phase 5.
 - [x] Vendor dashboard "My Customers" + heartbeat (§7a); fees by month, payments, release/revoke/extend
 - [x] Fee rules: training closes never billed; closes deduplicated by id across replacement tablets; first reported close anchors the chain
 - Verified: app checks (license forgery, daily close chain, seal/open) and 23 server checks against a local Worker (activation, second-tablet refusal, heartbeat, forged licence, doctored close flagged, no double billing after a tablet swap, backup round trip).
-- [ ] Deploy (free plan only): create the D1 database and KV namespace, set the signing-key and dashboard-password secrets, then test end to end on the emulator
+- [x] Deployed 2026-09-25 on Cloudflare's free plan (no card): https://pos034-license.kennkennali.workers.dev — D1 database, KV backups, signing key and dashboard password as Worker secrets (password copy in `~/.pos034/admin-password.txt`)
+- Verified live on the emulator: create license → activate → go live → sell → daily close → cloud backup → heartbeat shows tablet, close and 2% fee on the dashboard → app wiped → restored from the cloud with license key + recovery code → old tablet released → re-activated. Test data then deleted from production.
+- Found and fixed live: end-of-day jobs ran after the day's first sale instead of at 23:59 (the daily backup had done this since v7).
 - **Verify:** tampered license rejected; license from tablet A rejected on tablet B; factory-reset tablet → re-activate + restore works; server-side the backup is unreadable ciphertext; wrong recovery code can't decrypt.
 
 ### ~~Phase 4 — BIR features~~ — dropped 2026-09-25
