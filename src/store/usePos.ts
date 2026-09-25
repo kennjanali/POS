@@ -4,7 +4,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 
 import { APP_VERSION, PRODUCT_NAME } from '@/lib/brand';
-import { buildClose, signClose } from '@/lib/closes';
+import { buildClose, inWindow, signClose } from '@/lib/closes';
 import { buildDemoData } from '@/lib/demo';
 import {
   hashPin,
@@ -1290,10 +1290,11 @@ export const usePos = create<PosState>()(
       unclosedSales: () => {
         const { orders, closes } = get();
         const since = closes.at(-1)?.closedAt ?? 0;
+        const now = Date.now() + 1;
         return orders.filter(
           (o) =>
-            (o.status === 'closed' && (o.closedAt ?? 0) > since) ||
-            (o.status === 'voided' && (o.voidedAt ?? 0) > since && (o.closedAt ?? Infinity) <= since),
+            (o.status === 'closed' && inWindow(o.closedAt, since, now)) ||
+            (o.status === 'voided' && inWindow(o.voidedAt, since, now) && (o.closedAt ?? Infinity) < since),
         ).length;
       },
 

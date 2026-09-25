@@ -335,14 +335,18 @@ console.log('\n— Migration: a backup from the KRAMGEN v7 build still restores 
 
 console.log('\n— Daily close: every sale counted once, the chain shows tampering —');
 {
-  const { brokenLink } = await load('closes');
+  const { brokenLink, buildClose } = await load('closes');
   setTraining(true);
+  // A close excludes its own millisecond; a person never sells and closes
+  // inside one, so the test waits like the till would.
+  const tick = () => new Promise((r) => setTimeout(r, 3));
   const pay = (id, due) => {
     S().addTender(id, { method: 'cash', amountCents: due, tenderedCents: due, changeCents: 0, refNo: null });
     S().closeOrder(id);
   };
 
   // Whatever earlier sections left unclosed goes into a first close.
+  await tick();
   await S().closeDay();
   check('nothing new means no close', (await S().closeDay()) === null);
 
@@ -350,6 +354,7 @@ console.log('\n— Daily close: every sale counted once, the chain shows tamperi
   pay(a.id, a.due);
   const b = ringUp(product, 2);
   pay(b.id, b.due);
+  await tick();
   const first = await S().closeDay();
   check('a close covers the sales since the last one', first.orders === 2, `orders ${first.orders}`);
   check('its net is those sales', first.netCents === a.due + b.due, `net ${first.netCents}`);
@@ -359,6 +364,7 @@ console.log('\n— Daily close: every sale counted once, the chain shows tamperi
   const c = ringUp(product, 3);
   pay(c.id, c.due);
   S().voidOrder(a.id, 'customer complaint');
+  await tick();
   const second = await S().closeDay();
   check('an earlier sale voided later is deducted here', second.voidedEarlierCents === a.due);
   check('net is new sales less that void', second.netCents === c.due - a.due, `net ${second.netCents}`);
@@ -368,6 +374,13 @@ console.log('\n— Daily close: every sale counted once, the chain shows tamperi
 
   const chain = S().closes;
   check('the chain is intact', (await brokenLink(chain)) === null);
+
+  // The edge that used to lose a sale: settled in the very millisecond of a close.
+  const T = 1_900_000_000_000;
+  const edge = { ...S().order(c.id), id: 'edge', closedAt: T, status: 'closed' };
+  const atT = buildClose({ id: 'x1', orders: [edge], previous: { ...second, closedAt: T - 1000 }, now: T, actor: null });
+  const afterT = buildClose({ id: 'x2', orders: [edge], previous: { ...second, closedAt: T }, now: T + 1000, actor: null });
+  check('a sale in the same millisecond as a close waits for the next one', atT.orders === 0 && afterT.orders === 1);
   const edited = chain.map((x) => (x.id === first.id ? { ...x, netCents: x.netCents - 100 } : x));
   check('editing an old close breaks the chain', (await brokenLink(edited)) === first.no);
   const dropped = chain.filter((x) => x.id !== first.id);

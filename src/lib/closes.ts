@@ -20,7 +20,16 @@ type Unsigned = Omit<DailyClose, 'hash'>;
  * Everything since the previous close. Windows follow the clock, not the
  * calendar: a sale settled after a close falls into the next one, whatever
  * its date.
+ *
+ * A window is [previous close, now): it includes its start and excludes its
+ * end, so every timestamp belongs to exactly one close. With "after the last
+ * close" alone, a sale settled in the very millisecond of a close fell
+ * between two windows and was never counted.
  */
+export function inWindow(ts: number | null, since: number, now: number): boolean {
+  return ts !== null && ts >= since && ts < now;
+}
+
 export function buildClose(input: {
   id: string;
   orders: Order[];
@@ -29,13 +38,13 @@ export function buildClose(input: {
   actor: string | null;
 }): Unsigned {
   const since = input.previous?.closedAt ?? 0;
-  const inWindow = (ts: number | null) => ts !== null && ts > since && ts <= input.now;
+  const here = (ts: number | null) => inWindow(ts, since, input.now);
 
-  const settled = input.orders.filter((o) => o.status === 'closed' && inWindow(o.closedAt));
+  const settled = input.orders.filter((o) => o.status === 'closed' && here(o.closedAt));
   // A sale counted in an earlier close and voided since: the earlier close
   // stands, and this one carries the correction.
   const voidedEarlier = input.orders.filter(
-    (o) => o.status === 'voided' && inWindow(o.voidedAt) && o.closedAt !== null && o.closedAt <= since,
+    (o) => o.status === 'voided' && here(o.voidedAt) && o.closedAt !== null && o.closedAt < since,
   );
 
   const sum = (rows: Order[], pick: (o: Order) => number) =>
