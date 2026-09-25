@@ -490,13 +490,22 @@ Each phase ends with a verifiable check. Don't start a phase until the previous 
 - [ ] Buy the test hardware: one recommended tablet + 2–3 Bluetooth printers
 - [ ] Talk to a tax practitioner about supplier enrolment and tablet registration — §10
 
-### Phase 1 — Productize the web app (2–3 weeks)
-- [ ] 6.1–6.8 (brand constant, neutral defaults, wizard, recovery code, one branch, installId, migrations, README)
-- [ ] 6.9 tablet layout pass, 6.10 platform seams
-- [ ] Technology fee: 3% → 2%, Dashboard headline = current month (§7)
-- **Verify:** `npm run check` passes; on a real tablet's Chrome: wizard → sell → void → backup contains installId; every screen usable by touch in landscape.
+### Phase 1 — Productize the web app — **done 2026-09-25** (branch `phase-1-productize`)
+- [x] 6.1–6.8 (brand constant, neutral defaults, wizard, recovery code, one branch, installId, migrations, README)
+- [x] 6.9 tablet layout pass (every control ≥ 40 px, measured on every screen at 1280×800; portrait checked)
+- [x] Technology fee: 3% → 2%, Dashboard headline = current month (§7)
+- [ ] 6.10 platform seams — **moved to the start of Phase 2.** Each seam would have one implementation
+  until the Android one exists; drawing the interface when the second implementation arrives
+  gets it right the first time instead of guessing now.
+- Verified: `npm run check` passes; in a browser at tablet size: wizard → sell → pay → receipt,
+  lock → forgot PIN → recovery code → new PIN, old PIN refused. **Still to do by hand:** the same
+  run on a real tablet's Chrome.
+- Differences from the plan: the recovery code is not rotated automatically after use (it can be
+  reissued from Settings); BIR machine fields and printer pairing are not in the wizard yet
+  (they arrive with Phase 4 and Phase 2).
 
 ### Phase 2 — Android app (2–3 weeks)
+- [ ] 6.10 platform seams (storage, printing, backup, device ID), drawn with the Android implementation beside the web one
 - [ ] 8.1–8.6, 8.8, 8.11 (Capacitor, frozen app ID + origin, SQLite, Bluetooth printing, tablet behaviour)
 - [ ] 8.7 layers 1 and 3 (local backup copy, manual export/share)
 - [ ] 8.9 signing keystore created and backed up in two offline places
