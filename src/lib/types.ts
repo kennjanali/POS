@@ -1,5 +1,6 @@
 import type { PinCredential } from './crypto';
 import type { Centavos } from './money';
+import type { ReceiptPrinter } from './printer';
 import type { DiscountKind, TaxProfile } from './tax';
 
 export type OrderStatus = 'open' | 'closed' | 'voided';
@@ -190,6 +191,8 @@ export interface Settings extends TaxProfile {
    * Flip this off for a registered deployment and the seed/reset paths lock.
    */
   trainingMode: boolean;
+  /** The paired Bluetooth printer (Android app only). Absent until chosen. */
+  printer?: ReceiptPrinter | null;
 }
 
 export interface DataSnapshot {

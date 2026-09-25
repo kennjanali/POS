@@ -5,6 +5,7 @@ import { Download, FlaskConical, Info, Upload } from 'lucide-react';
 
 import { BranchManager } from '@/components/settings/BranchManager';
 import { MonthlyArchive } from '@/components/settings/MonthlyArchive';
+import { PrinterSettings } from '@/components/settings/PrinterSettings';
 import { RecoveryCode } from '@/components/settings/RecoveryCode';
 import { UserManager } from '@/components/settings/UserManager';
 import { Button } from '@/components/ui/Button';
@@ -206,6 +207,11 @@ export default function SettingsPage() {
         {/* ── Users ────────────────────────────────────────────── */}
         <Section title="Users" className="lg:col-span-2">
           <UserManager />
+        </Section>
+
+        {/* ── Receipt printer ──────────────────────────────────── */}
+        <Section title="Receipt printer">
+          <PrinterSettings />
         </Section>
 
         {/* ── Recovery code ────────────────────────────────────── */}

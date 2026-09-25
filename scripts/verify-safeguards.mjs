@@ -34,7 +34,7 @@ function emit(name, file) {
   writeFileSync(join(dir, `${name}.js`), js);
 }
 
-for (const n of ['brand', 'money', 'tax', 'format', 'id', 'seed', 'demo', 'crypto', 'idb', 'storage', 'permissions', 'types', 'archive', 'backup'])
+for (const n of ['brand', 'money', 'tax', 'format', 'id', 'seed', 'demo', 'crypto', 'idb', 'storage', 'printer', 'receipt', 'permissions', 'types', 'archive', 'backup'])
   emit(n, `src/lib/${n}.ts`);
 for (const n of ['useAuth', 'usePos']) emit(n, `src/store/${n}.ts`);
 
@@ -333,6 +333,35 @@ console.log('\n— Migration: a backup from the KRAMGEN v7 build still restores 
   check('the closed sale keeps its frozen total', S().order(id)?.netCents === due);
   check('the install keeps its recovery code', S().recovery === keptRecovery);
   check('and its identity', S().installId === keptInstall);
+}
+
+console.log('\n— Thermal receipt: never wider than the paper —');
+{
+  const { renderReceipt } = await load('receipt');
+  const { escpos, toPrintable, COLUMNS } = await load('printer');
+
+  setTraining(true);
+  const long = { ...product, id: 'long-name', name: 'Extra Special Chicken Inasal Family Platter with Java Rice' };
+  S().upsertProduct(long);
+  S().adjustStock(long.id, 5, 'restock');
+  const { id, due } = ringUp(long, 3);
+  S().addTender(id, { method: 'gcash', amountCents: due, tenderedCents: null, changeCents: null, refNo: '1234567890123' });
+  S().closeOrder(id);
+  const order = S().order(id);
+
+  for (const width of [COLUMNS[58], COLUMNS[80]]) {
+    const lines = renderReceipt(order, S().settings, width).split('\n');
+    const widest = Math.max(...lines.map((l) => l.length));
+    check(`no line runs past ${width} columns`, widest <= width, `widest ${widest}`);
+  }
+  check('the total is on the receipt',
+    renderReceipt(order, S().settings, 32).includes((due / 100).toFixed(2)));
+
+  check('accents and the peso sign fold to plain ASCII', toPrintable('Niño ₱5 — ok') === 'Nino P5 ? ok',
+    JSON.stringify(toPrintable('Niño ₱5 — ok')));
+  const bytes = escpos('Hi');
+  check('bytes start with a printer reset', bytes[0] === 0x1b && bytes[1] === 0x40);
+  check('and end with a cut', bytes.at(-3) === 0x1d && bytes.at(-2) === 0x56);
 }
 
 console.log('\n— Monthly archive: nothing leaves without a verified file —');
