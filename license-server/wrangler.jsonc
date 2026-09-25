@@ -9,8 +9,8 @@
     {
       "binding": "DB",
       "database_name": "pos034-license",
-      // Filled in after `wrangler d1 create pos034-license`.
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      // Created with `wrangler d1 create pos034-license`.
+      "database_id": "bf8e1b80-529f-4c95-875b-ee7c53cf89d5",
       "migrations_dir": "migrations"
     }
   ],
@@ -20,8 +20,8 @@
   "kv_namespaces": [
     {
       "binding": "BACKUPS",
-      // Filled in after `wrangler kv namespace create pos034-backups`.
-      "id": "00000000000000000000000000000000"
+      // Created with `wrangler kv namespace create pos034-backups`.
+      "id": "d39e41683f0d4796b074defc5991144f"
     }
   ],
 
