@@ -16,10 +16,18 @@
   ],
 
   // Encrypted nightly backups (ciphertext only — the server cannot read them).
-  "r2_buckets": [{ "binding": "BACKUPS", "bucket_name": "pos034-backups" }],
+  // Workers KV: on the free plan, no card needed.
+  "kv_namespaces": [
+    {
+      "binding": "BACKUPS",
+      // Filled in after `wrangler kv namespace create pos034-backups`.
+      "id": "00000000000000000000000000000000"
+    }
+  ],
 
-  // Cloudflare Access protects /admin. Until both are set the dashboard stays
-  // locked. The signing key is a secret: `wrangler secret put LICENSE_PRIVATE_KEY`.
+  // /admin: Cloudflare Access when both of these are set, otherwise the
+  // ADMIN_PASSWORD secret; with neither, the dashboard stays locked.
+  // Secrets: `wrangler secret put LICENSE_PRIVATE_KEY` and `ADMIN_PASSWORD`.
   "vars": {
     "ACCESS_TEAM_DOMAIN": "",
     "ACCESS_AUD": ""

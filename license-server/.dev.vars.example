@@ -1,2 +1,3 @@
 LICENSE_PRIVATE_KEY='{...private JWK from ~/.pos034/license-signing-key.json...}'
-DEV_ADMIN=true
+# 20+ characters. Or set DEV_ADMIN=true to skip the login locally.
+ADMIN_PASSWORD=...

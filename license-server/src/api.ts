@@ -183,12 +183,23 @@ async function recordCloses(db: D1Database, installId: string, licenseId: string
 }
 
 // ── Encrypted backups ────────────────────────────────────────────────────
-// Stored as `<licenseId>/<YYYY-MM-DD>.bin`: one per day, a re-upload the same
-// day replaces it. The salt rides along so the owner's recovery code alone
-// can decrypt it on a new tablet.
+// Workers KV, keyed `<licenseId>/<YYYY-MM-DD>`: one per day, a re-upload the
+// same day replaces it. The salt rides along as metadata so the owner's
+// recovery code alone can decrypt it on a new tablet.
+//
+// Sized for KV's free plan (1 GB, no card): keep the last 3 days plus the
+// first backup of every month. Backups are gzipped before encryption, so a
+// year of a busy carinderia is a few MB.
 
-const MAX_BACKUP_BYTES = 50 * 1024 * 1024;
-const KEEP_DAILY = 30;
+const MAX_BACKUP_BYTES = 25 * 1024 * 1024; // KV's value limit
+const KEEP_DAILY = 3;
+
+interface BackupMeta {
+  salt: string;
+  installId: string;
+  size: number;
+  uploaded: number;
+}
 
 api.post('/backup', async (c) => {
   const license = await readLicense(c.req.header('x-license'), c.env.LICENSE_PRIVATE_KEY);
@@ -200,28 +211,30 @@ api.post('/backup', async (c) => {
   if (body.byteLength === 0 || body.byteLength > MAX_BACKUP_BYTES) return c.json({ error: 'Backup too large or empty.' }, 413);
 
   const day = new Date(Date.now() + 8 * 3600_000).toISOString().slice(0, 10); // Asia/Manila
-  await c.env.BACKUPS.put(`${license.licenseId}/${day}.bin`, body, {
-    customMetadata: { salt, installId: license.installId },
-  });
+  const metadata: BackupMeta = { salt, installId: license.installId, size: body.byteLength, uploaded: Date.now() };
+  await c.env.BACKUPS.put(`${license.licenseId}/${day}`, body, { metadata });
   await prune(c.env.BACKUPS, license.licenseId);
   return c.json({ ok: true, name: `${day}.bin` });
 });
 
-/** Keep the last 30 days, and the first backup of every month for good. */
-async function prune(bucket: R2Bucket, licenseId: string) {
-  const listed = await bucket.list({ prefix: `${licenseId}/` });
-  const names = listed.objects.map((o) => o.key).sort().reverse(); // newest first
-  const firstOfMonth = new Set<string>();
-  const seenMonth = new Set<string>();
-  for (const name of [...names].reverse()) {
-    const month = name.slice(licenseId.length + 1, licenseId.length + 8);
-    if (!seenMonth.has(month)) {
-      seenMonth.add(month);
-      firstOfMonth.add(name);
-    }
+async function listFor(kv: KVNamespace, licenseId: string) {
+  const listed = await kv.list<BackupMeta>({ prefix: `${licenseId}/` });
+  return listed.keys
+    .map((k) => ({ key: k.name, day: k.name.slice(licenseId.length + 1), meta: k.metadata }))
+    .sort((a, b) => b.day.localeCompare(a.day)); // newest first
+}
+
+/** Keep the last few days, and the first backup of every month for good. */
+async function prune(kv: KVNamespace, licenseId: string) {
+  const backups = await listFor(kv, licenseId);
+  const firstOfMonth = new Map<string, string>();
+  for (const b of [...backups].reverse()) {
+    if (!firstOfMonth.has(b.day.slice(0, 7))) firstOfMonth.set(b.day.slice(0, 7), b.key);
   }
-  const drop = names.slice(KEEP_DAILY).filter((name) => !firstOfMonth.has(name));
-  if (drop.length > 0) await bucket.delete(drop);
+  const keep = new Set(firstOfMonth.values());
+  for (const b of backups.slice(KEEP_DAILY)) {
+    if (!keep.has(b.key)) await kv.delete(b.key);
+  }
 }
 
 /** The license key is the proof: only the owner has it, and the files are unreadable without the recovery code. */
@@ -235,24 +248,25 @@ async function licenseByKey(db: D1Database, key: string | undefined) {
 api.get('/backups', async (c) => {
   const license = await licenseByKey(c.env.DB, c.req.header('x-license-key'));
   if (!license) return c.json({ error: 'That license key is not recognised.' }, 404);
-  const listed = await c.env.BACKUPS.list({ prefix: `${license.id}/` });
-  const backups = listed.objects
-    .map((o) => ({ name: o.key.slice(license.id.length + 1), size: o.size, uploaded: o.uploaded.getTime() }))
-    .sort((a, b) => b.name.localeCompare(a.name));
+  const backups = (await listFor(c.env.BACKUPS, license.id)).map((b) => ({
+    name: `${b.day}.bin`,
+    size: b.meta?.size ?? 0,
+    uploaded: b.meta?.uploaded ?? 0,
+  }));
   return c.json({ backups });
 });
 
 api.get('/backups/:name', async (c) => {
   const license = await licenseByKey(c.env.DB, c.req.header('x-license-key'));
   if (!license) return c.json({ error: 'That license key is not recognised.' }, 404);
-  const name = c.req.param('name');
-  if (!/^\d{4}-\d{2}-\d{2}\.bin$/.test(name)) return c.json({ error: 'No such backup.' }, 404);
-  const object = await c.env.BACKUPS.get(`${license.id}/${name}`);
-  if (!object) return c.json({ error: 'No such backup.' }, 404);
-  return new Response(object.body, {
+  const day = c.req.param('name').match(/^(\d{4}-\d{2}-\d{2})\.bin$/)?.[1];
+  if (!day) return c.json({ error: 'No such backup.' }, 404);
+  const { value, metadata } = await c.env.BACKUPS.getWithMetadata<BackupMeta>(`${license.id}/${day}`, 'arrayBuffer');
+  if (!value) return c.json({ error: 'No such backup.' }, 404);
+  return new Response(value, {
     headers: {
       'content-type': 'application/octet-stream',
-      'x-salt': object.customMetadata?.salt ?? '',
+      'x-salt': metadata?.salt ?? '',
       'access-control-expose-headers': 'x-salt',
       'access-control-allow-origin': '*',
     },

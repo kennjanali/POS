@@ -295,7 +295,7 @@ JSON payload + Ed25519 signature, e.g.:
 ### Server (build, don't buy — you already have Cloudflare)
 - One Worker + one D1 database: tables `licenses`, `activations`, `events`.
 - Endpoints: `POST /activate`, `POST /deactivate` (tablet transfer), `GET /update-check`
-  (returns latest version only if `updatesUntil` covers it), admin page behind Cloudflare Access.
+  (returns latest version only if `updatesUntil` covers it), admin page behind a password (or Cloudflare Access).
 - Few hundred lines. Keygen.sh / Cryptolens do the same for a monthly fee.
 
 ### Don't
@@ -312,7 +312,7 @@ JSON payload + Ed25519 signature, e.g.:
 |---|---|---|
 | Lives in | Each customer's POS@034 tablet | The licensing Worker's admin web app |
 | Sees | That one store's sales, staff, menu | Every install: license, version, health, fee totals |
-| Signs in with | 6-digit PIN on the tablet | Your own login behind Cloudflare Access (email OTP / Google) |
+| Signs in with | 6-digit PIN on the tablet | Your dashboard password (or Cloudflare Access) |
 | Can see sales detail | Yes, their own | **No** — one daily total for the fee, nothing else |
 
 The vendor dashboard is part of the licensing server (§7), not the POS app.
@@ -362,12 +362,12 @@ totals, invoices + payments (GCash/bank ref no.), gap warnings, support notes.
   so the totals can be checked for gaps. **Never sent in readable form:** line items, receipts,
   menu, staff names, PIN hashes, SC/PWD IDs. The heartbeat has **no off switch** because it
   carries billing data — the EULA states exactly what it sends and why.
-- Treat daily revenue as business-confidential: HTTPS only, admin behind Cloudflare Access.
+- Treat daily revenue as business-confidential: HTTPS only, admin behind a password or Access.
 
 ### Build notes
 - Same Worker + D1 as licensing; tables `heartbeats`, `daily_net`, `invoices`, `payments`,
-  `notes`. UI: small React + Tailwind admin served by the Worker, behind Cloudflare Access.
-- Endpoints: `POST /heartbeat`, `POST /backup` (encrypted blob → R2), `GET /admin/customers`,
+  `notes`. UI: server-rendered admin served by the Worker, behind a password or Access.
+- Endpoints: `POST /heartbeat`, `POST /backup` (encrypted blob → Workers KV), `GET /admin/customers`,
   `GET /admin/customers/:id`, admin actions.
 - Build it in Phase 3 alongside licensing — KRAMGEN is the first row.
 
@@ -509,19 +509,19 @@ Restore (do by hand); the Vitest port, proposed for Phase 5.
 
 ### Phase 3 — Licensing, cloud backup, vendor dashboard — **built and tested locally 2026-09-25** (branch `phase-3-licensing`)
 - [x] Worker + D1 (`license-server/`); Ed25519 keypair (private key in `~/.pos034/`, becomes a Worker secret); online activation; training mode gated on license. QR offline activation deferred until a customer needs it
-- [x] 8.7 layer 2: encrypted cloud backup to R2 + restore-on-new-tablet flow in the setup wizard
+- [x] 8.7 layer 2: encrypted cloud backup to Workers KV (free, no card) + restore-on-new-tablet flow in the setup wizard
 - [x] Daily close (§10): windows follow the clock `[previous close, now)`, voids of closed days carried forward, hash-chained; auto at 23:59 / next launch, manual + printable on the Dashboard
 - [x] Vendor dashboard "My Customers" + heartbeat (§7a); fees by month, payments, release/revoke/extend
 - [x] Fee rules: training closes never billed; closes deduplicated by id across replacement tablets; first reported close anchors the chain
 - Verified: app checks (license forgery, daily close chain, seal/open) and 23 server checks against a local Worker (activation, second-tablet refusal, heartbeat, forged licence, doctored close flagged, no double billing after a tablet swap, backup round trip).
-- [ ] Deploy: enable R2, create the D1 database, set the signing-key secret, turn on Cloudflare Access for `/admin`, then test end to end on the emulator
+- [ ] Deploy (free plan only): create the D1 database and KV namespace, set the signing-key and dashboard-password secrets, then test end to end on the emulator
 - **Verify:** tampered license rejected; license from tablet A rejected on tablet B; factory-reset tablet → re-activate + restore works; server-side the backup is unreadable ciphertext; wrong recovery code can't decrypt.
 
 ### ~~Phase 4 — BIR features~~ — dropped 2026-09-25
 POS@034 is a sales tracker, not a BIR machine (§10). The daily close moved to Phase 3.
 
 ### Phase 5 — Release pipeline (1 week)
-- [ ] GitHub Actions → signed APK + web bundle → R2; self-hosted live updates via the Worker; beta channel on KRAMGEN
+- [ ] GitHub Actions → signed APK + web bundle → free hosting (KV or GitHub Releases; R2 needs a card); self-hosted live updates via the Worker; beta channel on KRAMGEN
 - [ ] 8.10 Android developer verification registered
 - **Verify:** tag a release → KRAMGEN's tablet takes the web update at close, with a backup first; a deliberately broken bundle rolls back by itself.
 

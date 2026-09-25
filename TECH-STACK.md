@@ -38,8 +38,8 @@ dashboard.
                │ HTTPS, when online: activate · heartbeat (daily net) · encrypted backup · updates
 ┌──────────────▼──────────── Cloudflare (your account) ────────────────────┐
 │  License Worker (Hono) + D1  → licenses, activations, heartbeats, fees    │
-│  Vendor dashboard "My Customers" (behind Cloudflare Access)               │
-│  R2                           → APKs, web bundles, encrypted backups      │
+│  Vendor dashboard "My Customers" (password, or Cloudflare Access)         │
+│  Workers KV                   → encrypted backups (free plan, no card)    │
 │  Static sites                 → landing page (Astro) · web demo           │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
@@ -74,8 +74,8 @@ dashboard.
 | Device / app info | `@capacitor/device` (`ANDROID_ID`), `@capacitor/app` | **Add** | License binding, heartbeat, pause/resume lock |
 | Files / sharing | `@capacitor/filesystem`, `@capacitor/share` | **Done** (Phase 2) | Backups and archives go to public Documents/POS034 (survives uninstall); Settings backup opens the share sheet |
 | Tablet behaviour | `@capacitor-community/keep-awake`, `@capacitor/app` | **Done** (Phase 2) | Screen on while signed in, back button never exits, auto-lock after 5 min away. No orientation lock or immersive mode: both orientations work, and the status bar shows time and battery |
-| Live updates | **`@capgo/capacitor-updater`**, self-hosted | **Add** | Web-layer updates from R2 via the Worker; auto-rollback on a bad bundle |
-| APK updates | Download from R2 + Android installer intent (`REQUEST_INSTALL_PACKAGES`) | **Add** | Only when native parts change |
+| Live updates | **`@capgo/capacitor-updater`**, self-hosted | **Add** | Web-layer updates via the Worker (hosting: KV or GitHub Releases — both free; R2 needs a card); auto-rollback on a bad bundle |
+| APK updates | Download (KV or GitHub Releases) + Android installer intent (`REQUEST_INSTALL_PACKAGES`) | **Add** | Only when native parts change |
 | Min Android | **10+** | Decided | Small test matrix |
 | Build JDK | **Eclipse Temurin 21** (`JAVA_HOME`) | **Done** (Phase 2) | Android Studio bundles JDK 25, which Gradle 8.14 cannot run |
 | Signing | Android keystore `~/.pos034/pos034-release.jks` + `keystore.properties` (outside the repo) | **Done** (Phase 2) | **Back up both files in two offline places**: losing them = no updates ever again. SHA-256 `09b8f720…61f10b` |
@@ -89,9 +89,9 @@ dashboard.
 | Runtime | **Cloudflare Workers** | **Add** | Account already exists (`wrangler.jsonc`) |
 | Router | **Hono** | **Add** | Small, typed, made for Workers |
 | Database | **Cloudflare D1** (SQLite) | **Add** | `licenses`, `activations`, `heartbeats`, `daily_net`, `invoices`, `payments`, `notes`, `backups` (metadata only) |
-| Object storage | **Cloudflare R2** | **Add** | APKs, web bundles, encrypted backups (30 days + month-ends per install) |
+| Backup storage | **Workers KV** | **Done** (Phase 3) | Free plan, no card: 1 GB, 25 MB per value, 1,000 writes/day. Keeps the last 3 days + first of each month per license. R2 (10 GB free, card required) when fees justify it |
 | Signing | Ed25519 private key in Worker secrets | **Add** | Never leaves Cloudflare |
-| Admin auth | **Cloudflare Access** (email OTP / Google) | **Add** | Only you can open the dashboard |
+| Admin auth | **Password** (`ADMIN_PASSWORD` secret, HTTP Basic over HTTPS), or **Cloudflare Access** when configured | **Done** (Phase 3) | Fails closed: locked with neither. Access (Zero Trust) may ask for a card at signup |
 | Dashboard UI | React + Tailwind (or Hono JSX), served by the Worker | **Add** | "My Customers", WPMU DEV–style (plan §7a) |
 | Payments | Manual GCash / bank transfer, marked paid by hand | Decided | PayMongo / Xendit later |
 
@@ -143,7 +143,7 @@ dashboard.
 /                      POS@034 web app (Next.js static export) — src/, scripts/ as today
 /android/              Capacitor-generated Android project (committed)
 /capacitor.config.ts   app ID, webDir, frozen scheme/hostname
-/license-server/       Cloudflare Worker: Hono + D1 + R2 + vendor dashboard
+/license-server/       Cloudflare Worker: Hono + D1 + KV + vendor dashboard
 /site/                 Astro landing page
 /.github/workflows/    CI: check, build signed APK + web bundle, publish
 REWORK-PLAN.md         why + phases
@@ -159,3 +159,4 @@ TECH-STACK.md          this file
 | 2026-09-25 | First version: Tauri 2 desktop (Windows), SQLite target, Cloudflare Workers + Hono + D1 licensing, Astro landing page, manual GCash/bank payments |
 | 2026-09-25 | **Target switched to Android tablet + Bluetooth printer.** Tauri 2 → Capacitor 8; Rust dropped; SQLite via `@capacitor-community/sqlite` from the first Android build (no IndexedDB migration); Bluetooth ESC/POS printing made required; encrypted cloud backup to R2 added; self-hosted live updates; APK signing + Android developer verification replace Windows code signing; platform seams added so the web demo and the app share every screen |
 | 2026-09-25 | Phase 2 build: own Bluetooth Classic printer plugin instead of `capacitor-thermal-printer` (Capacitor 7-only); seams live in `src/lib` (`storage`, `printer`, `files`); JDK 21 for builds; no orientation lock |
+| 2026-09-25 | Free plan only: cloud backups on Workers KV instead of R2 (R2 needs a card); dashboard login by password, Cloudflare Access optional |

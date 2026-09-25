@@ -4,6 +4,11 @@ import { createHash, createPublicKey, verify } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 
 const BASE = process.argv[2] ?? 'http://localhost:8787';
+// The dashboard password: ADMIN_PASSWORD, or the one in .dev.vars for a local run.
+const password = process.env.ADMIN_PASSWORD ??
+  readFileSync(new URL('../.dev.vars', import.meta.url), 'utf8').match(/^ADMIN_PASSWORD=(.*)$/m)?.[1]?.trim();
+const basic = (pw) => ({ authorization: `Basic ${Buffer.from(`admin:${pw}`).toString('base64')}` });
+const adminFetch = (path, init = {}) => fetch(BASE + path, { ...init, headers: { ...init.headers, ...basic(password) } });
 let failures = 0;
 const check = (name, ok, detail = '') => {
   if (!ok) failures++;
@@ -12,9 +17,14 @@ const check = (name, ok, detail = '') => {
 const post = (path, body) =>
   fetch(BASE + path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
 
+// ── The dashboard is not open to anyone ──────────────────────────────────
+check('the dashboard refuses a visitor with no password', (await fetch(`${BASE}/admin`)).status === 401);
+check('and one with the wrong password', (await fetch(`${BASE}/admin`, { headers: basic('wrong-password-123456789') })).status === 401);
+check('and lets the admin in', (await adminFetch('/admin')).status === 200);
+
 // ── Create a license through the dashboard form ──────────────────────────
 const business = `E2E Carinderia ${Date.now()}`;
-const created = await fetch(`${BASE}/admin/licenses`, {
+const created = await adminFetch('/admin/licenses', {
   method: 'POST',
   body: new URLSearchParams({ business_name: business, city: 'Bacolod', updates_until: '2027-12-31' }),
   redirect: 'manual',
@@ -79,9 +89,9 @@ const fake = await post('/api/heartbeat', { license: `${payload}.${Buffer.from('
 check('a heartbeat with a forged license is refused', fake.status === 401);
 
 // ── Dashboard ────────────────────────────────────────────────────────────
-const list = await (await fetch(`${BASE}/admin`)).text();
+const list = await (await adminFetch('/admin')).text();
 check('the customer is on the dashboard', list.includes(business));
-const detail = await (await fetch(`${BASE}/admin/licenses/${fields.licenseId}`)).text();
+const detail = await (await adminFetch(`/admin/licenses/${fields.licenseId}`)).text();
 // The fee counts every close as reported, the flagged one included (edited to
 // claim ₱1.00): 2% of ₱5,000 + ₱3,000 + ₱1 = ₱160.02. The flag is for you to
 // chase; the server does not guess what the real figure was.
@@ -90,14 +100,14 @@ check('the fee is 2% of reported net', thisMonth === '₱160.02', `this month: $
 check('the edited close is flagged', (detail.match(/does not chain/g) ?? []).length === 1);
 
 // ── Replacement tablet: release, re-activate, restored closes resent ─────
-await fetch(`${BASE}/admin/licenses/${fields.licenseId}/release`, { method: 'POST', redirect: 'manual' });
+await adminFetch(`/admin/licenses/${fields.licenseId}/release`, { method: 'POST', redirect: 'manual' });
 const newInstall = crypto.randomUUID();
 const newDevice = createHash('sha256').update('replacement-tablet').digest('hex');
 const moved = await (await post('/api/activate', { key, installId: newInstall, device: newDevice })).json();
 check('after release, the new tablet activates', typeof moved.license === 'string', JSON.stringify(moved));
 const c4 = makeClose(4, 200_000, c2); // continues the chain from the restored closes
 const resent = await (await post('/api/heartbeat', { license: moved.license, closes: [c1, c2, c4] })).json();
-const after = await (await fetch(`${BASE}/admin/licenses/${fields.licenseId}`)).text();
+const after = await (await adminFetch(`/admin/licenses/${fields.licenseId}`)).text();
 const afterMonth = after.match(/(₱[0-9,.]+) this month/)?.[1];
 check('restored closes are not billed twice', afterMonth === '₱200.02', `this month: ${afterMonth} (was ₱160.02, plus 2% of ₱2,000)`);
 check('the chain carries on across tablets', (after.match(/does not chain/g) ?? []).length === 1);
@@ -125,7 +135,7 @@ const stranger = await fetch(`${BASE}/api/backups`, { headers: { 'x-license-key'
 check('a wrong license key sees nothing', stranger.status === 404);
 
 // ── A live install's first close follows unreported training closes ──────
-const trainingKey = decodeURIComponent(new URL((await fetch(`${BASE}/admin/licenses`, {
+const trainingKey = decodeURIComponent(new URL((await adminFetch('/admin/licenses', {
   method: 'POST', body: new URLSearchParams({ business_name: `Anchor ${Date.now()}`, updates_until: '2027-12-31' }), redirect: 'manual',
 })).headers.get('location'), BASE).searchParams.get('created'));
 const liveDevice = createHash('sha256').update('anchor-tablet').digest('hex');
@@ -135,7 +145,7 @@ const t2 = makeClose(2, 50_000, t1); // training closes: never sent
 const firstLive = makeClose(3, 120_000, t2);
 await post('/api/heartbeat', { license: live.license, closes: [firstLive] });
 const anchorId = JSON.parse(Buffer.from(live.license.split('.')[0], 'base64url').toString()).licenseId;
-const anchorPage = await (await fetch(`${BASE}/admin/licenses/${anchorId}`)).text();
+const anchorPage = await (await adminFetch(`/admin/licenses/${anchorId}`)).text();
 check('the first live close anchors the chain', !anchorPage.includes('does not chain') && anchorPage.includes('₱1,200.00'));
 
 console.log(failures ? `\n${failures} check(s) FAILED.` : '\nAll license-server checks passed.');
