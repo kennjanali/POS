@@ -75,11 +75,9 @@ const setupInput = {
   business: {
     businessName: 'Test Carinderia',
     address: 'Somewhere',
-    tin: '',
     vatRegistered: false,
     pricesIncludeVat: true,
   },
-  branchCode: '00000',
   sampleMenu: true,
   ownerName: 'Owner',
   pin: OWNER_PIN,
@@ -354,8 +352,9 @@ console.log('\n— Thermal receipt: never wider than the paper —');
     const widest = Math.max(...lines.map((l) => l.length));
     check(`no line runs past ${width} columns`, widest <= width, `widest ${widest}`);
   }
-  check('the total is on the receipt',
-    renderReceipt(order, S().settings, 32).includes((due / 100).toFixed(2)));
+  const slip = renderReceipt(order, S().settings, 32);
+  check('the total is on the slip', slip.includes((due / 100).toFixed(2)));
+  check('the slip says it is not an official receipt', slip.includes('NOT AN OFFICIAL'));
 
   check('accents and the peso sign fold to plain ASCII', toPrintable('Niño ₱5 — ok') === 'Nino P5 ? ok',
     JSON.stringify(toPrintable('Niño ₱5 — ok')));

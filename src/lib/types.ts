@@ -58,7 +58,7 @@ export interface Branch {
   id: string;
   name: string;
   address: string;
-  /** BIR branch code, printed on the invoice header. */
+  /** Prefixes this branch's order numbers, so two branches never share one. */
   branchCode: string;
   color: string;
   active: boolean;
@@ -107,7 +107,7 @@ export interface Tender {
 
 export interface Order {
   id: string;
-  /** Gapless per-branch sequential number. BIR requires this. */
+  /** The order number: gapless and sequential per branch. Named from the v7 data model. */
   invoiceNo: string;
   branchId: string;
   label: string;
@@ -181,13 +181,12 @@ export interface AuditEntry {
 export interface Settings extends TaxProfile {
   businessName: string;
   address: string;
-  tin: string;
   currency: string;
   receiptFooter: string;
   showStock: boolean;
   lowStockAt: number;
   /**
-   * Once a POS is BIR-registered it may not be switched into training mode.
+   * Once an install goes live it may not be switched back into training mode.
    * Flip this off for a registered deployment and the seed/reset paths lock.
    */
   trainingMode: boolean;

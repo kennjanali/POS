@@ -153,7 +153,7 @@ export default function OrdersPage() {
         <input
           type="search"
           aria-label="Search orders"
-          placeholder="Invoice or label"
+          placeholder="Order no. or label"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           className="h-10 min-w-[160px] flex-1 rounded-md border border-line bg-raised px-3 text-[13px]"
@@ -185,7 +185,7 @@ export default function OrdersPage() {
           <table className="w-full border-collapse text-[12.5px]">
             <thead>
               <tr className="border-b border-line text-left text-[10.5px] tracking-wide text-ink-3 uppercase">
-                <th className="py-2 pr-3 font-bold">Invoice</th>
+                <th className="py-2 pr-3 font-bold">Order no.</th>
                 <th className="py-2 pr-3 font-bold">Order</th>
                 {branches.length > 1 && (
                   <th className="py-2 pr-3 font-bold">Branch</th>
@@ -254,7 +254,7 @@ export default function OrdersPage() {
                     {order.status === 'closed' && (
                       <button
                         type="button"
-                        aria-label={`Receipt for ${order.invoiceNo}`}
+                        aria-label={`Order slip for ${order.invoiceNo}`}
                         onClick={() => setReceiptFor(order.id)}
                         className="grid size-10 place-items-center rounded text-ink-3 hover:bg-raised hover:text-ink"
                       >

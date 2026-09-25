@@ -55,9 +55,8 @@ export type UserResult = { ok: true } | { ok: false; error: string };
 export interface SetupInput {
   business: Pick<
     Settings,
-    'businessName' | 'address' | 'tin' | 'vatRegistered' | 'pricesIncludeVat'
+    'businessName' | 'address' | 'vatRegistered' | 'pricesIncludeVat'
   >;
-  branchCode: string;
   sampleMenu: boolean;
   ownerName: string;
   pin: string;
@@ -906,7 +905,6 @@ export const usePos = create<PosState>()(
           const branch: Branch = {
             ...(state.branches[0] ?? DEFAULT_BRANCH),
             address,
-            branchCode: input.branchCode.trim() || DEFAULT_BRANCH.branchCode,
           };
           return {
             ...state,
@@ -915,7 +913,6 @@ export const usePos = create<PosState>()(
               ...input.business,
               businessName,
               address,
-              tin: input.business.tin.trim(),
             },
             branches: [branch],
             activeBranchId: branch.id,

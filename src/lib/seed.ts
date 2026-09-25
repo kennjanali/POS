@@ -28,7 +28,6 @@ export const DEFAULT_SETTINGS: Settings = {
   // Filled in by the setup wizard. Every install is a different business.
   businessName: '',
   address: '',
-  tin: '',
   currency: '\u20b1',
   receiptFooter: 'Salamat! Come again',
   showStock: true,

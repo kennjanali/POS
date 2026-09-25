@@ -111,13 +111,6 @@ export default function SettingsPage() {
             onChange={(e) => update({ address: e.target.value })}
           />
           <Field
-            label="TIN"
-            placeholder="000-000-000-00000"
-            hint="Printed on the receipt header."
-            value={settings.tin}
-            onChange={(e) => update({ tin: e.target.value })}
-          />
-          <Field
             label="Receipt footer"
             value={settings.receiptFooter}
             onChange={(e) => update({ receiptFooter: e.target.value })}
@@ -346,7 +339,7 @@ export default function SettingsPage() {
           so the Dashboard has something to show straight away.
         </p>
         <p className="mt-2 text-[12.5px] leading-relaxed text-ink-2">
-          <strong>Every order, stock movement and invoice number already on this
+          <strong>Every order, stock movement and order number already on this
           device is replaced.</strong>{' '}
           Menu items and settings are kept, and branches you added yourself stay.
         </p>
@@ -372,8 +365,8 @@ export default function SettingsPage() {
         }
       >
         <p className="text-[12.5px] leading-relaxed text-ink-2">
-          Receipts stop being marked <strong>NOT A VALID RECEIPT</strong> and start
-          counting as real sales.
+          Order slips stop being marked <strong>TRAINING MODE</strong> and every sale
+          starts counting for real.
         </p>
         <p className="mt-2 text-[12.5px] leading-relaxed text-ink-2">
           <strong>This is permanent.</strong> Training mode cannot be turned back

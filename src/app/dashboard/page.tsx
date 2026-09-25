@@ -354,7 +354,7 @@ export default function DashboardPage() {
 
             <p className="mt-3 border-t border-line pt-2 text-[11px] leading-relaxed text-ink-3">
               Billed monthly. This is what keeps the POS maintained — security
-              fixes, changes to BIR rules, and new features — so the till you are
+              fixes, changes to discount rules, and new features — so the till you are
               running stays supported instead of frozen on the day it shipped.
             </p>
           </section>

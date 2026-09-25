@@ -22,10 +22,10 @@ export function renderReceipt(order: Order, settings: Settings, width: number = 
 
   out.push(centre(settings.businessName.toUpperCase()));
   if (settings.address) out.push(centre(settings.address));
-  if (settings.tin) out.push(centre(`TIN ${settings.tin}`));
+  out.push(centre('ORDER SLIP'));
   out.push(rule);
 
-  out.push(row('Invoice', order.invoiceNo));
+  out.push(row('Order no.', order.invoiceNo));
   out.push(row('Order', order.label));
   out.push(row('Date', fmtDate(order.closedAt ?? order.openedAt)));
   out.push(row('Time', fmtTime(order.closedAt ?? order.openedAt)));
@@ -80,11 +80,12 @@ export function renderReceipt(order: Order, settings: Settings, width: number = 
 
   out.push(rule);
   if (settings.receiptFooter) out.push(centre(settings.receiptFooter));
-  if (settings.trainingMode) {
-    out.push('');
-    out.push(centre('*** TRAINING MODE ***'));
-    out.push(centre('NOT A VALID RECEIPT'));
-  }
+  // POS@034 tracks sales; it is not a BIR-registered machine, so what it
+  // prints is never a receipt. The owner issues their own invoices.
+  out.push('');
+  out.push(centre('THIS IS NOT AN OFFICIAL'));
+  out.push(centre('RECEIPT OR INVOICE'));
+  if (settings.trainingMode) out.push(centre('*** TRAINING MODE ***'));
 
   return out.join('\n');
 }

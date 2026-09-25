@@ -8,7 +8,6 @@ import { Button } from '@/components/ui/Button';
 import { Field, Toggle } from '@/components/ui/Field';
 import { toast } from '@/components/ui/Toast';
 import { generateRecoveryCode, PIN_LENGTH } from '@/lib/crypto';
-import { DEFAULT_BRANCH } from '@/lib/seed';
 import { usePos, type SetupInput } from '@/store/usePos';
 import { useAuth } from '@/store/useAuth';
 
@@ -33,11 +32,9 @@ export function FirstRunSetup() {
   const [business, setBusiness] = useState<SetupInput['business']>({
     businessName: '',
     address: '',
-    tin: '',
     vatRegistered: false,
     pricesIncludeVat: true,
   });
-  const [branchCode, setBranchCode] = useState(DEFAULT_BRANCH.branchCode);
   const [sampleMenu, setSampleMenu] = useState(true);
   const [ownerName, setOwnerName] = useState('');
   const [pin, setPin] = useState('');
@@ -70,7 +67,6 @@ export function FirstRunSetup() {
     setBusy(true);
     const result = await setupInstall({
       business,
-      branchCode,
       sampleMenu,
       ownerName,
       pin,
@@ -114,20 +110,6 @@ export function FirstRunSetup() {
                 label="Address"
                 value={business.address}
                 onChange={(e) => edit({ address: e.target.value })}
-              />
-              <Field
-                label="TIN"
-                placeholder="000-000-000-00000"
-                inputMode="numeric"
-                value={business.tin}
-                onChange={(e) => edit({ tin: e.target.value })}
-              />
-              <Field
-                label="BIR branch code"
-                hint="Head office is 00000. It prefixes every invoice number."
-                inputMode="numeric"
-                value={branchCode}
-                onChange={(e) => setBranchCode(e.target.value)}
               />
               <Toggle
                 label="VAT registered"

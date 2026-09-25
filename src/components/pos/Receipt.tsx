@@ -60,7 +60,7 @@ export function ReceiptModal({ orderId, onClose }: ReceiptModalProps) {
     <Modal
       open
       onClose={onClose}
-      title={`Receipt — ${order.invoiceNo}`}
+      title={`Order slip — ${order.invoiceNo}`}
       width="sm"
       footer={
         <div className="flex gap-2">

@@ -30,7 +30,7 @@ function nextBranchId(branches: Branch[]): string {
   return `BR${Date.now()}`;
 }
 
-/** Next free BIR branch code. Head office is 00000, branches count up. */
+/** Next free branch code. The main branch is 00000, others count up. */
 function nextBranchCode(branches: Branch[]): string {
   const used = new Set(branches.map((b) => b.branchCode));
   for (let n = 0; n < 100000; n++) {
@@ -121,8 +121,8 @@ export function BranchManager() {
   return (
     <>
       <p className="text-[12px] leading-relaxed text-ink-2">
-        Each branch keeps its own stock and its own gapless invoice sequence, prefixed
-        with its BIR branch code. Closing a branch hides it from the till without
+        Each branch keeps its own stock and its own gapless order numbers, prefixed
+        with its branch code. Closing a branch hides it from the till without
         touching its sales history.
       </p>
 
@@ -248,8 +248,8 @@ export function BranchManager() {
               onChange={(e) => setDraft({ ...draft, address: e.target.value })}
             />
             <Field
-              label="BIR branch code"
-              hint="Prefixes every invoice number from this branch. 00000 is head office."
+              label="Branch code"
+              hint="Prefixes every order number from this branch. 00000 is the main branch."
               value={draft.branchCode}
               onChange={(e) => setDraft({ ...draft, branchCode: e.target.value })}
             />
