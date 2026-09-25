@@ -1,14 +1,37 @@
 apply plugin: 'com.android.application'
 
+// One version for the web app, the backups and the APK: package.json's.
+// versionCode must rise with every release; 1.2.3 becomes 10203.
+def appVersion = new groovy.json.JsonSlurper().parse(file('../../package.json')).version
+def (major, minor, patch) = appVersion.tokenize('.').collect { it.toInteger() }
+
+// The release signing key lives outside the repo and must never be lost:
+// every update has to be signed with it, or installed tablets refuse it.
+def keystoreProperties = new Properties()
+def keystorePropertiesFile = file("${System.getProperty('user.home')}/.pos034/keystore.properties")
+if (keystorePropertiesFile.exists()) {
+    keystorePropertiesFile.withInputStream { keystoreProperties.load(it) }
+}
+
 android {
     namespace = "dev.kennjanali.pos034"
     compileSdk = rootProject.ext.compileSdkVersion
+    signingConfigs {
+        release {
+            if (keystorePropertiesFile.exists()) {
+                storeFile file(keystoreProperties['storeFile'])
+                storePassword keystoreProperties['storePassword']
+                keyAlias keystoreProperties['keyAlias']
+                keyPassword keystoreProperties['keyPassword']
+            }
+        }
+    }
     defaultConfig {
         applicationId "dev.kennjanali.pos034"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode major * 10000 + minor * 100 + patch
+        versionName appVersion
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -18,6 +41,7 @@ android {
     }
     buildTypes {
         release {
+            signingConfig keystorePropertiesFile.exists() ? signingConfigs.release : null
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
