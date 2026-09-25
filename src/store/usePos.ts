@@ -221,10 +221,12 @@ interface PosState {
   recordBackup: () => void;
   /** Seal and upload a backup now. Licensed tablets only; needs internet. */
   uploadCloudBackup: () => Promise<UserResult>;
-  /** Sales settled or opened after `since` (all of them when null). */
-  salesSince: (since: number | null) => number;
+  /** When the oldest sale settled or opened after `since` happened (any, when null). */
+  oldestSaleSince: (since: number | null) => number | null;
   /** Sales settled or voided since the last close — what the next close would cover. */
   unclosedSales: () => number;
+  /** When the oldest of those happened, or null when there are none. */
+  oldestUnclosed: () => number | null;
   /** Close everything since the last close. Null when there is nothing to close. */
   closeDay: () => Promise<DailyClose | null>;
   /** The server has closes through `no`; only later ones are sent again. */
@@ -377,6 +379,21 @@ function describeBadSnapshot(snapshot: DataSnapshot): string | null {
     return 'That backup is damaged — the stock record is unreadable.';
   }
   return null;
+}
+
+/** When each sale the next close would cover happened: settled, or (for a
+ *  sale from an earlier close) voided. */
+function unclosedTimes({ orders, closes }: Pick<PosState, 'orders' | 'closes'>): number[] {
+  const since = closes.at(-1)?.closedAt ?? 0;
+  const now = Date.now() + 1;
+  const times: number[] = [];
+  for (const o of orders) {
+    if (o.status === 'closed' && inWindow(o.closedAt, since, now)) times.push(o.closedAt as number);
+    else if (o.status === 'voided' && inWindow(o.voidedAt, since, now) && (o.closedAt ?? Infinity) < since) {
+      times.push(o.voidedAt as number);
+    }
+  }
+  return times;
 }
 
 function initialStock(products: Product[]): Record<string, number> {
@@ -1371,13 +1388,18 @@ export const usePos = create<PosState>()(
         return true;
       },
 
-      unbackedUp: () => get().salesSince(get().lastBackupAt),
-
-      salesSince: (since) => {
-        const { orders } = get();
+      unbackedUp: () => {
+        const { orders, lastBackupAt } = get();
         // Never backed up: everything on the device is at risk.
-        if (since === null) return orders.length;
-        return orders.filter((o) => (o.closedAt ?? o.openedAt) > since).length;
+        if (lastBackupAt === null) return orders.length;
+        return orders.filter((o) => (o.closedAt ?? o.openedAt) > lastBackupAt).length;
+      },
+
+      oldestSaleSince: (since) => {
+        const times = get()
+          .orders.map((o) => o.closedAt ?? o.openedAt)
+          .filter((t) => since === null || t > since);
+        return times.length > 0 ? Math.min(...times) : null;
       },
 
       uploadCloudBackup: async () => {
@@ -1408,15 +1430,11 @@ export const usePos = create<PosState>()(
           ),
         })),
 
-      unclosedSales: () => {
-        const { orders, closes } = get();
-        const since = closes.at(-1)?.closedAt ?? 0;
-        const now = Date.now() + 1;
-        return orders.filter(
-          (o) =>
-            (o.status === 'closed' && inWindow(o.closedAt, since, now)) ||
-            (o.status === 'voided' && inWindow(o.voidedAt, since, now) && (o.closedAt ?? Infinity) < since),
-        ).length;
+      unclosedSales: () => unclosedTimes(get()).length,
+
+      oldestUnclosed: () => {
+        const times = unclosedTimes(get());
+        return times.length > 0 ? Math.min(...times) : null;
       },
 
       closeDay: async () => {

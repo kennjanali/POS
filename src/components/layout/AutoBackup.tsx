@@ -38,10 +38,10 @@ export function AutoBackup() {
       running.current = true;
       try {
         // The day's close first, so the backup carries it.
-        if (endOfDayDue(state.closes.at(-1)?.closedAt ?? null, state.unclosedSales())) {
+        if (endOfDayDue(state.oldestUnclosed())) {
           await state.closeDay();
         }
-        if (endOfDayDue(state.lastBackupAt, state.unbackedUp())) {
+        if (endOfDayDue(usePos.getState().oldestSaleSince(state.lastBackupAt))) {
           if (await saveBackup(usePos.getState().exportSnapshot())) {
             state.recordBackup();
             toast(`Saved ${backupFileName()} to ${SAVE_LOCATION}`, 'success');
@@ -78,6 +78,6 @@ export function AutoBackup() {
 async function uploadIfDue() {
   const s = usePos.getState();
   if (!s.licensed || !s.backupKey || !navigator.onLine) return;
-  if (!endOfDayDue(s.lastCloudBackupAt, s.salesSince(s.lastCloudBackupAt))) return;
+  if (!endOfDayDue(s.oldestSaleSince(s.lastCloudBackupAt))) return;
   await s.uploadCloudBackup();
 }

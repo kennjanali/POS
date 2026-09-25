@@ -419,6 +419,13 @@ console.log('\n— Daily close: every sale counted once, the chain shows tamperi
   check('dropping a close breaks the chain', (await brokenLink(dropped)) !== null);
   check('closes travel in backups', S().exportSnapshot().closes.length === chain.length);
 
+  // A new install must not close its first day right after its first sale.
+  const at = (d, h, m) => new Date(2026, 8, d, h, m).getTime();
+  check('a new install does not close minutes after its first sale', endOfDayDue(at(25, 12, 0), at(25, 12, 1)) === false);
+  check('it closes that night at 23:59', endOfDayDue(at(25, 12, 0), at(25, 23, 59)) === true);
+  check('or the next morning if the tablet was off', endOfDayDue(at(25, 12, 0), at(26, 8, 0)) === true);
+  check('closed last night, first sale today: not closed at noon', endOfDayDue(at(26, 11, 0), at(26, 12, 0)) === false);
+
   const { renderClose } = await load('receipt');
   const slip = renderClose(second, S().settings, 32).split('\n');
   check('the close slip fits 58 mm paper', Math.max(...slip.map((l) => l.length)) <= 32);
@@ -638,58 +645,44 @@ console.log('\n— Recovery code: the way back in without a shipped PIN —');
 }
 
 
-console.log('\n— Automatic backup: fires by itself, never twice —');
+console.log('\n— Automatic backup: fires by itself, at the right time —');
 {
   const at = (y, m, d, hh, mm) => new Date(y, m - 1, d, hh, mm, 0, 0).getTime();
-  const NOON     = at(2026, 9, 23, 12, 0);
-  const CLOSING  = at(2026, 9, 23, 23, 59);
-  const LATE     = at(2026, 9, 23, 23, 30);
-  const NEXT_AM  = at(2026, 9, 24, 8, 30);
-  const YESTERDAY= at(2026, 9, 22, 23, 59);
 
   check('cutoff is 23:59', CUTOFF_MINUTES === 23 * 60 + 59, String(CUTOFF_MINUTES));
+  check('nothing waiting: never runs, even at 23:59', endOfDayDue(null, at(2026, 9, 23, 23, 59)) === false);
+  check('today\'s sales wait for 23:59', endOfDayDue(at(2026, 9, 23, 10, 0), at(2026, 9, 23, 12, 0)) === false);
+  check('23:30 is still too early', endOfDayDue(at(2026, 9, 23, 10, 0), at(2026, 9, 23, 23, 30)) === false);
+  check('at 23:59 it runs', endOfDayDue(at(2026, 9, 23, 10, 0), at(2026, 9, 23, 23, 59)) === true);
+  check('a sale from a night that ended without it: runs at once', endOfDayDue(at(2026, 9, 22, 20, 0), at(2026, 9, 23, 8, 30)) === true);
 
-  check('mid-day with today already saved: no',
-    endOfDayDue(NOON - 3600000, 5, NOON) === false);
-  check('mid-day, never saved, sales waiting: YES (catch-up)',
-    endOfDayDue(null, 5, NOON) === true);
-  check('mid-day, last saved yesterday, sales waiting: YES (catch-up)',
-    endOfDayDue(YESTERDAY, 5, NOON) === true);
+  // A minute-by-minute day, as the interval runs it. `pending` is the
+  // oldest sale not yet covered; running covers everything so far.
+  const simulate = (start, minutes, saleTimes, coveredUntil = start) => {
+    const runs = [];
+    let covered = coveredUntil;
+    for (let m = 0; m < minutes; m += 1) {
+      const now = start + m * 60000;
+      const pending = saleTimes.filter((t) => t > covered && t <= now);
+      if (endOfDayDue(pending.length ? Math.min(...pending) : null, now)) {
+        runs.push(new Date(now));
+        covered = now;
+      }
+    }
+    return { runs, uncovered: saleTimes.filter((t) => t > covered) };
+  };
 
-  check('23:30 with today already saved: no',
-    endOfDayDue(at(2026, 9, 23, 9, 0), 5, LATE) === false);
-  check('23:59 with today not saved: YES (closing)',
-    endOfDayDue(YESTERDAY, 5, CLOSING) === true);
-  check('23:59 but today already saved: no',
-    endOfDayDue(at(2026, 9, 23, 9, 0), 5, CLOSING) === false);
+  const day = simulate(at(2026, 9, 23, 0, 0), 24 * 60, [at(2026, 9, 23, 10, 0), at(2026, 9, 23, 18, 0)]);
+  check('a day with morning and evening sales runs exactly once', day.runs.length === 1, `runs: ${day.runs.length}`);
+  check('and that run is at 23:59', day.runs[0]?.getHours() === 23 && day.runs[0]?.getMinutes() === 59);
+  check('so the evening sale is covered the same night', day.uncovered.length === 0);
 
-  check('no unsaved sales: never fires, even at 23:59',
-    endOfDayDue(YESTERDAY, 0, CLOSING) === false);
-  check('no unsaved sales and never backed up: still no',
-    endOfDayDue(null, 0, NOON) === false);
+  // Last covered the night before; one sale at 21:00, then the tablet was off.
+  const off = simulate(at(2026, 9, 24, 8, 0), 60, [at(2026, 9, 23, 21, 0)], at(2026, 9, 22, 23, 59));
+  check('tablet off at 23:59: covered first thing next morning', off.runs.length === 1 && off.runs[0].getHours() === 8);
 
-  check('next morning after an unsaved night: YES',
-    endOfDayDue(YESTERDAY, 3, NEXT_AM) === true);
-
-  // The loop the interval would run: once it saves, it must go quiet.
-  let last = YESTERDAY;
-  let saves = 0;
-  for (let m = 0; m < 24 * 60; m += 1) {
-    const now = at(2026, 9, 23, 0, 0) + m * 60000;
-    if (endOfDayDue(last, 4, now)) { saves += 1; last = now; }
-  }
-  check('over a whole day of minute ticks it saves exactly once', saves === 1,
-    'saves: ' + saves);
-
-  // Two quiet days then a sale: one file, not a backlog of them.
-  last = at(2026, 9, 20, 23, 59);
-  saves = 0;
-  for (let m = 0; m < 3 * 24 * 60; m += 1) {
-    const now = at(2026, 9, 21, 0, 0) + m * 60000;
-    if (endOfDayDue(last, 4, now)) { saves += 1; last = now; }
-  }
-  check('three days running produces three files, one per day', saves === 3,
-    'saves: ' + saves);
+  const three = simulate(at(2026, 9, 21, 0, 0), 3 * 24 * 60, [at(2026, 9, 21, 12, 0), at(2026, 9, 22, 12, 0), at(2026, 9, 23, 12, 0)]);
+  check('three trading days: three runs, one per night', three.runs.length === 3, `runs: ${three.runs.length}`);
 }
 
 console.log('');

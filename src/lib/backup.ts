@@ -42,28 +42,21 @@ export const CUTOFF_MINUTES = 23 * 60 + 59;
 
 /**
  * Is an end-of-day job — the daily close, then the backup — due right now?
+ * `oldestPendingAt` is when the oldest thing not yet covered happened (null
+ * when nothing is waiting).
  *
- * Two moments, because a till is not reliably awake at midnight:
+ *   closing   — it is 23:59 and something is waiting;
+ *   catch-up  — something waiting is from an earlier day, so that night
+ *               ended without it (the tablet was off or asleep).
  *
- *   closing   — the clock has reached 23:59 and it has not run today;
- *   catch-up  — the app is being used on a later day than it last ran, so
- *               yesterday ended without it and this is the first chance.
- *
- * Both require something new since it last ran (`pending`), so an idle day
- * produces nothing and a quiet morning never triggers it twice.
+ * Keyed on *when* the pending work happened, not on how much there is: with
+ * a count, the first sale of a new day looked like a missed night and ran the
+ * job mid-morning, and the 23:59 run then skipped as "already done today",
+ * leaving the rest of the day uncovered.
  */
-export function endOfDayDue(
-  lastRanAt: number | null,
-  pending: number,
-  now: number = Date.now(),
-): boolean {
-  if (pending <= 0) return false;
-  if (!backupIsDue(lastRanAt, now)) return false;
-
+export function endOfDayDue(oldestPendingAt: number | null, now: number = Date.now()): boolean {
+  if (oldestPendingAt === null) return false;
   const clock = new Date(now);
-  const minutes = clock.getHours() * 60 + clock.getMinutes();
-  if (minutes >= CUTOFF_MINUTES) return true;
-
-  // Earlier in the day: only if a previous day ended without it.
-  return lastRanAt === null || businessDate(lastRanAt) < businessDate(now);
+  if (clock.getHours() * 60 + clock.getMinutes() >= CUTOFF_MINUTES) return true;
+  return businessDate(oldestPendingAt) < businessDate(now);
 }
