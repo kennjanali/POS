@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 
+import { DailyCloses } from '@/components/dashboard/DailyCloses';
 import { cn } from '@/components/ui/cn';
 import { monthLabel } from '@/lib/archive';
 import { businessDate, peso } from '@/lib/format';
@@ -358,6 +359,8 @@ export default function DashboardPage() {
               running stays supported instead of frozen on the day it shipped.
             </p>
           </section>
+
+          <DailyCloses />
         </div>
       </div>
     </div>

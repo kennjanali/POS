@@ -3,7 +3,7 @@
 import { useEffect, useRef } from 'react';
 
 import { toast } from '@/components/ui/Toast';
-import { autoBackupDue, backupFileName, saveBackup } from '@/lib/backup';
+import { backupFileName, endOfDayDue, saveBackup } from '@/lib/backup';
 import { SAVE_LOCATION } from '@/lib/files';
 import { usePos } from '@/store/usePos';
 
@@ -11,7 +11,8 @@ import { usePos } from '@/store/usePos';
 const TICK_MS = 60_000;
 
 /**
- * Saves the day's backup by itself, and renders nothing.
+ * Takes the day's close and saves the day's backup by itself, and renders
+ * nothing.
  *
  * Polling the clock rather than sleeping until 23:59: a tablet that suspends
  * overnight never fires a long timer, and the wake-up would be silently
@@ -33,11 +34,15 @@ export function AutoBackup() {
     const attempt = async () => {
       if (running.current) return;
       const state = usePos.getState();
-      if (!autoBackupDue(state.lastBackupAt, state.unbackedUp())) return;
 
       running.current = true;
       try {
-        if (await saveBackup(state.exportSnapshot())) {
+        // The day's close first, so the backup carries it.
+        if (endOfDayDue(state.closes.at(-1)?.closedAt ?? null, state.unclosedSales())) {
+          await state.closeDay();
+        }
+        if (!endOfDayDue(state.lastBackupAt, state.unbackedUp())) return;
+        if (await saveBackup(usePos.getState().exportSnapshot())) {
           state.recordBackup();
           toast(`Saved ${backupFileName()} to ${SAVE_LOCATION}`, 'success');
         } else {

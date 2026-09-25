@@ -18,12 +18,13 @@ import { Capacitor } from '@capacitor/core';
  * Everything else the app persists is small and changes rarely, so rewriting
  * it wholesale costs nothing. Sales are neither: a year of trading is ~24 MB,
  * and zustand's persist middleware re-serialises whatever it is given after
- * every state change. These row stores hold one record per sale or stock
- * move, written individually, so a tap costs the same after a week or a year.
+ * every state change. These row stores hold one record per sale, stock
+ * move or daily close, written individually, so a tap costs the same after a week or a year.
  */
 export const ROWS = {
   orders: 'orders',
   stockMoves: 'stockMoves',
+  closes: 'closes',
 } as const;
 
 export type RowStore = (typeof ROWS)[keyof typeof ROWS];

@@ -1,23 +1,52 @@
 import { amount, fmtDate, fmtTime } from './format';
 import { COLUMNS } from './printer';
-import { TENDER_LABELS, type Order, type Settings } from './types';
+import { TENDER_LABELS, TENDER_METHODS, type DailyClose, type Order, type Settings } from './types';
 
 /**
- * Plain fixed-width text: the screen shows it and the thermal printer prints
- * it as is. `width` is the printer's characters per line. A line never runs
- * past it — a thermal printer would wrap it mid-word.
+ * Slips are plain fixed-width text: the screen shows it and the thermal
+ * printer prints it as is. `width` is the printer's characters per line. A
+ * line never runs past it — a thermal printer would wrap it mid-word.
  */
+function layout(width: number) {
+  return {
+    row: (left: string, right = ''): string => {
+      const room = Math.max(1, width - right.length - 1);
+      const text = left.length > room ? left.slice(0, room) : left;
+      return text + ' '.repeat(Math.max(1, width - text.length - right.length)) + right;
+    },
+    centre: (text: string): string => {
+      const line = text.slice(0, width);
+      return ' '.repeat(Math.floor((width - line.length) / 2)) + line;
+    },
+    rule: '-'.repeat(width),
+  };
+}
+
+/** The owner's end-of-day count, printed from the Dashboard. */
+export function renderClose(close: DailyClose, settings: Settings, width: number = COLUMNS[58]): string {
+  const { row, centre, rule } = layout(width);
+  const out = [
+    centre(settings.businessName.toUpperCase()),
+    centre(`DAILY CLOSE #${close.no}`),
+    rule,
+    row('Date', fmtDate(close.closedAt)),
+    row('Closed at', fmtTime(close.closedAt)),
+    row('Sales', String(close.orders)),
+    rule,
+    row('Gross', amount(close.grossCents)),
+    row('Discounts', `-${amount(close.discountCents)}`),
+  ];
+  if (close.voidedEarlierCents > 0) out.push(row('Voids, earlier days', `-${amount(close.voidedEarlierCents)}`));
+  out.push(row('NET', amount(close.netCents)), rule);
+  for (const method of TENDER_METHODS) {
+    if (close.tenders[method] > 0) out.push(row(TENDER_LABELS[method], amount(close.tenders[method])));
+  }
+  out.push(rule, row('Running total', amount(close.runningNetCents)), row('Check', close.hash.slice(0, 12)));
+  return out.join('\n');
+}
+
 export function renderReceipt(order: Order, settings: Settings, width: number = COLUMNS[58]): string {
-  const row = (left: string, right = ''): string => {
-    const room = Math.max(1, width - right.length - 1);
-    const text = left.length > room ? left.slice(0, room) : left;
-    return text + ' '.repeat(Math.max(1, width - text.length - right.length)) + right;
-  };
-  const centre = (text: string): string => {
-    const line = text.slice(0, width);
-    return ' '.repeat(Math.floor((width - line.length) / 2)) + line;
-  };
-  const rule = '-'.repeat(width);
+  const { row, centre, rule } = layout(width);
   const out: string[] = [];
 
   out.push(centre(settings.businessName.toUpperCase()));

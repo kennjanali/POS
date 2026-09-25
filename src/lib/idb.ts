@@ -11,8 +11,8 @@ import { ROWS, type RowStore, type StorageBackend } from './storage';
 
 /** Frozen: renaming this hides every sale already on a customer's device. */
 const DB_NAME = 'pos034';
-/** v2 added the per-row `orders` and `stockMoves` stores. */
-const DB_VERSION = 2;
+/** v2 added the `orders` and `stockMoves` row stores; v3 added `closes`. */
+const DB_VERSION = 3;
 const STORE = 'kv';
 
 let dbPromise: Promise<IDBDatabase> | null = null;

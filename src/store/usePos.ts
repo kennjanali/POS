@@ -4,6 +4,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 
 import { APP_VERSION, PRODUCT_NAME } from '@/lib/brand';
+import { buildClose, signClose } from '@/lib/closes';
 import { buildDemoData } from '@/lib/demo';
 import {
   hashPin,
@@ -34,6 +35,7 @@ import { actorId } from './useAuth';
 import type {
   AuditEntry,
   Branch,
+  DailyClose,
   Order,
   OrderLine,
   OrderType,
@@ -74,6 +76,8 @@ interface PosState {
   /** branchId -> productId -> on hand */
   stock: Record<string, Record<string, number>>;
   stockMoves: StockMove[];
+  /** Daily closes, oldest first. Written once, never changed. */
+  closes: DailyClose[];
   audit: AuditEntry[];
   settings: Settings;
   /** branchId -> last issued invoice number */
@@ -192,6 +196,10 @@ interface PosState {
   unbackedUp: () => number;
   /** Called once a backup file has actually been handed to the browser. */
   recordBackup: () => void;
+  /** Sales settled or voided since the last close — what the next close would cover. */
+  unclosedSales: () => number;
+  /** Close everything since the last close. Null when there is nothing to close. */
+  closeDay: () => Promise<DailyClose | null>;
   clearPersistError: () => void;
 }
 
@@ -357,6 +365,7 @@ export const usePos = create<PosState>()(
       orders: [],
       stock: { [DEFAULT_BRANCH.id]: {} },
       stockMoves: [],
+      closes: [],
       audit: [],
       settings: DEFAULT_SETTINGS,
       invoiceSeq: {},
@@ -1087,6 +1096,8 @@ export const usePos = create<PosState>()(
           orders,
           stock: { ...s.stock, ...stock },
           stockMoves,
+          // Closes describe the sales being replaced; they go with them.
+          closes: [],
           invoiceSeq,
           activeBranchId: mainBranch.id,
           activeOrderId: null,
@@ -1171,6 +1182,7 @@ export const usePos = create<PosState>()(
           orders: s.orders,
           stock: s.stock,
           stockMoves: s.stockMoves,
+          closes: s.closes,
           audit: s.audit,
           settings: s.settings,
           invoiceSeq: s.invoiceSeq,
@@ -1201,6 +1213,8 @@ export const usePos = create<PosState>()(
             orders: snapshot.orders ?? [],
             stock: snapshot.stock ?? {},
             stockMoves: snapshot.stockMoves ?? [],
+            // Closes describe the restored sales, not the ones they replace.
+            closes: snapshot.closes ?? [],
             audit: log(
               snapshot.audit ?? [],
               'data.import',
@@ -1230,6 +1244,7 @@ export const usePos = create<PosState>()(
           ...state,
           orders: [],
           stockMoves: [],
+          closes: [],
           activeOrderId: null,
           // The menu is the owner's and stays; only its stock starts over.
           stock: { [state.activeBranchId]: initialStock(state.products) },
@@ -1271,6 +1286,40 @@ export const usePos = create<PosState>()(
             state.activeBranchId,
           ),
         })),
+
+      unclosedSales: () => {
+        const { orders, closes } = get();
+        const since = closes.at(-1)?.closedAt ?? 0;
+        return orders.filter(
+          (o) =>
+            (o.status === 'closed' && (o.closedAt ?? 0) > since) ||
+            (o.status === 'voided' && (o.voidedAt ?? 0) > since && (o.closedAt ?? Infinity) <= since),
+        ).length;
+      },
+
+      closeDay: async () => {
+        if (get().unclosedSales() === 0) return null;
+        const previous = get().closes.at(-1) ?? null;
+        const close = await signClose(
+          buildClose({ id: uuidv7(), orders: get().orders, previous, now: Date.now(), actor: actorId() }),
+        );
+        // Hashing is async. If another close landed meanwhile, this one would
+        // fork the chain — drop it; the other already covers these sales.
+        if ((get().closes.at(-1) ?? null) !== previous) return null;
+        set((s) => ({
+          ...s,
+          closes: [...s.closes, close],
+          audit: log(
+            s.audit,
+            'day.close',
+            `Daily close #${close.no} — ${close.orders} sale${close.orders === 1 ? '' : 's'}, ` +
+              `net ${(close.netCents / 100).toFixed(2)}`,
+            'success',
+            s.activeBranchId,
+          ),
+        }));
+        return close;
+      },
 
       clearPersistError: () => set({ persistError: null }),
     }),
@@ -1338,6 +1387,7 @@ onPersistWrite((error) => {
 /** What each row store already holds, so a change can be spotted by identity. */
 const writtenOrders = new Map<string, Order>();
 const writtenMoves = new Map<string, StockMove>();
+const writtenCloses = new Map<string, DailyClose>();
 
 /**
  * Rows whose object identity changed since the last write. Every mutation in
@@ -1371,6 +1421,7 @@ function diffRows<T extends { id: string }>(
 
 let lastOrders: Order[] | null = null;
 let lastMoves: StockMove[] | null = null;
+let lastCloses: DailyClose[] | null = null;
 
 usePos.subscribe((state) => {
   if (!state.hydrated) return;
@@ -1385,6 +1436,11 @@ usePos.subscribe((state) => {
     const { changed, removed } = diffRows(state.stockMoves, writtenMoves);
     void writeRows(ROWS.stockMoves, changed, removed);
   }
+  if (state.closes !== lastCloses) {
+    lastCloses = state.closes;
+    const { changed, removed } = diffRows(state.closes, writtenCloses);
+    void writeRows(ROWS.closes, changed, removed);
+  }
 });
 
 /**
@@ -1395,9 +1451,10 @@ usePos.subscribe((state) => {
  */
 async function loadRows(rehydrated: PosState | undefined): Promise<void> {
   try {
-    const [rows, moves] = await Promise.all([
+    const [rows, moves, closes] = await Promise.all([
       readRows<Order>(ROWS.orders),
       readRows<StockMove>(ROWS.stockMoves),
+      readRows<DailyClose>(ROWS.closes),
     ]);
 
     const legacy = rehydrated as unknown as
@@ -1410,8 +1467,10 @@ async function loadRows(rehydrated: PosState | undefined): Promise<void> {
     for (const move of stockMoves) writtenMoves.set(move.id, move);
     lastOrders = orders;
     lastMoves = stockMoves;
+    for (const close of closes) writtenCloses.set(close.id, close);
+    lastCloses = closes;
 
-    usePos.setState({ orders, stockMoves, hydrated: true });
+    usePos.setState({ orders, stockMoves, closes, hydrated: true });
 
     // Migrating from the blob: put the rows where they now belong.
     if (rows.length === 0 && orders.length > 0) {

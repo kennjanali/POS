@@ -34,7 +34,7 @@ function emit(name, file) {
   writeFileSync(join(dir, `${name}.js`), js);
 }
 
-for (const n of ['brand', 'money', 'tax', 'format', 'id', 'seed', 'demo', 'crypto', 'idb', 'storage', 'printer', 'receipt', 'permissions', 'types', 'archive', 'files', 'backup'])
+for (const n of ['brand', 'money', 'tax', 'format', 'id', 'seed', 'demo', 'crypto', 'idb', 'storage', 'printer', 'receipt', 'permissions', 'types', 'archive', 'files', 'backup', 'closes'])
   emit(n, `src/lib/${n}.ts`);
 for (const n of ['useAuth', 'usePos']) emit(n, `src/store/${n}.ts`);
 
@@ -43,7 +43,7 @@ const { usePos, orderGross } = await load('usePos');
 const { computeBill } = await load('tax');
 const { SAMPLE_MENU, DEFAULT_BRANCH } = await load('seed');
 const { monthOf, orderMonth } = await load('archive');
-const { backupIsDue, backupFileName, autoBackupDue, CUTOFF_MINUTES } = await load('backup');
+const { backupIsDue, backupFileName, endOfDayDue, CUTOFF_MINUTES } = await load('backup');
 const { verifyPin, generateRecoveryCode } = await load('crypto');
 
 let failures = 0;
@@ -333,6 +333,52 @@ console.log('\n— Migration: a backup from the KRAMGEN v7 build still restores 
   check('and its identity', S().installId === keptInstall);
 }
 
+console.log('\n— Daily close: every sale counted once, the chain shows tampering —');
+{
+  const { brokenLink } = await load('closes');
+  setTraining(true);
+  const pay = (id, due) => {
+    S().addTender(id, { method: 'cash', amountCents: due, tenderedCents: due, changeCents: 0, refNo: null });
+    S().closeOrder(id);
+  };
+
+  // Whatever earlier sections left unclosed goes into a first close.
+  await S().closeDay();
+  check('nothing new means no close', (await S().closeDay()) === null);
+
+  const a = ringUp(product, 1);
+  pay(a.id, a.due);
+  const b = ringUp(product, 2);
+  pay(b.id, b.due);
+  const first = await S().closeDay();
+  check('a close covers the sales since the last one', first.orders === 2, `orders ${first.orders}`);
+  check('its net is those sales', first.netCents === a.due + b.due, `net ${first.netCents}`);
+  check('tenders add up to the net', first.tenders.cash === first.netCents);
+
+  // Next window: one new sale, and one sale from the closed window voided.
+  const c = ringUp(product, 3);
+  pay(c.id, c.due);
+  S().voidOrder(a.id, 'customer complaint');
+  const second = await S().closeDay();
+  check('an earlier sale voided later is deducted here', second.voidedEarlierCents === a.due);
+  check('net is new sales less that void', second.netCents === c.due - a.due, `net ${second.netCents}`);
+  check('the running total carries across closes',
+    second.runningNetCents === first.runningNetCents + second.netCents);
+  check('the earlier close was not rewritten', S().closes.find((x) => x.id === first.id) === first);
+
+  const chain = S().closes;
+  check('the chain is intact', (await brokenLink(chain)) === null);
+  const edited = chain.map((x) => (x.id === first.id ? { ...x, netCents: x.netCents - 100 } : x));
+  check('editing an old close breaks the chain', (await brokenLink(edited)) === first.no);
+  const dropped = chain.filter((x) => x.id !== first.id);
+  check('dropping a close breaks the chain', (await brokenLink(dropped)) !== null);
+  check('closes travel in backups', S().exportSnapshot().closes.length === chain.length);
+
+  const { renderClose } = await load('receipt');
+  const slip = renderClose(second, S().settings, 32).split('\n');
+  check('the close slip fits 58 mm paper', Math.max(...slip.map((l) => l.length)) <= 32);
+}
+
 console.log('\n— Thermal receipt: never wider than the paper —');
 {
   const { renderReceipt } = await load('receipt');
@@ -537,33 +583,33 @@ console.log('\n— Automatic backup: fires by itself, never twice —');
   check('cutoff is 23:59', CUTOFF_MINUTES === 23 * 60 + 59, String(CUTOFF_MINUTES));
 
   check('mid-day with today already saved: no',
-    autoBackupDue(NOON - 3600000, 5, NOON) === false);
+    endOfDayDue(NOON - 3600000, 5, NOON) === false);
   check('mid-day, never saved, sales waiting: YES (catch-up)',
-    autoBackupDue(null, 5, NOON) === true);
+    endOfDayDue(null, 5, NOON) === true);
   check('mid-day, last saved yesterday, sales waiting: YES (catch-up)',
-    autoBackupDue(YESTERDAY, 5, NOON) === true);
+    endOfDayDue(YESTERDAY, 5, NOON) === true);
 
   check('23:30 with today already saved: no',
-    autoBackupDue(at(2026, 9, 23, 9, 0), 5, LATE) === false);
+    endOfDayDue(at(2026, 9, 23, 9, 0), 5, LATE) === false);
   check('23:59 with today not saved: YES (closing)',
-    autoBackupDue(YESTERDAY, 5, CLOSING) === true);
+    endOfDayDue(YESTERDAY, 5, CLOSING) === true);
   check('23:59 but today already saved: no',
-    autoBackupDue(at(2026, 9, 23, 9, 0), 5, CLOSING) === false);
+    endOfDayDue(at(2026, 9, 23, 9, 0), 5, CLOSING) === false);
 
   check('no unsaved sales: never fires, even at 23:59',
-    autoBackupDue(YESTERDAY, 0, CLOSING) === false);
+    endOfDayDue(YESTERDAY, 0, CLOSING) === false);
   check('no unsaved sales and never backed up: still no',
-    autoBackupDue(null, 0, NOON) === false);
+    endOfDayDue(null, 0, NOON) === false);
 
   check('next morning after an unsaved night: YES',
-    autoBackupDue(YESTERDAY, 3, NEXT_AM) === true);
+    endOfDayDue(YESTERDAY, 3, NEXT_AM) === true);
 
   // The loop the interval would run: once it saves, it must go quiet.
   let last = YESTERDAY;
   let saves = 0;
   for (let m = 0; m < 24 * 60; m += 1) {
     const now = at(2026, 9, 23, 0, 0) + m * 60000;
-    if (autoBackupDue(last, 4, now)) { saves += 1; last = now; }
+    if (endOfDayDue(last, 4, now)) { saves += 1; last = now; }
   }
   check('over a whole day of minute ticks it saves exactly once', saves === 1,
     'saves: ' + saves);
@@ -573,7 +619,7 @@ console.log('\n— Automatic backup: fires by itself, never twice —');
   saves = 0;
   for (let m = 0; m < 3 * 24 * 60; m += 1) {
     const now = at(2026, 9, 21, 0, 0) + m * 60000;
-    if (autoBackupDue(last, 4, now)) { saves += 1; last = now; }
+    if (endOfDayDue(last, 4, now)) { saves += 1; last = now; }
   }
   check('three days running produces three files, one per day', saves === 3,
     'saves: ' + saves);

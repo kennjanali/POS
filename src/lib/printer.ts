@@ -41,6 +41,30 @@ export async function printText(printer: ReceiptPrinter, text: string): Promise<
 }
 
 /**
+ * Print a slip wherever this device prints: the paired Bluetooth printer in
+ * the Android app, the browser's print dialog on the web. Rejects with a
+ * message fit for a toast.
+ */
+export async function printSlip(text: string, printer: ReceiptPrinter | null): Promise<void> {
+  if (canPrintBluetooth()) {
+    if (!printer) throw new Error('Choose a receipt printer in Settings first.');
+    await printText(printer, text);
+    return;
+  }
+  const win = window.open('', '_blank', 'width=380,height=640');
+  if (!win) throw new Error('The browser blocked the print window.');
+  win.document.write(
+    '<html><head><title>Print</title><style>' +
+      'body{font:12px/1.65 ui-monospace,Menlo,monospace;padding:16px;white-space:pre}' +
+      '</style></head><body></body></html>',
+  );
+  win.document.body.textContent = text;
+  win.document.close();
+  win.focus();
+  win.print();
+}
+
+/**
  * Cheap thermal printers have no dependable code page for ñ or ₱, and print
  * garbage for them. Fold to plain ASCII: accents dropped, ₱ as P, anything
  * else unprintable as ?.

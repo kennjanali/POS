@@ -41,29 +41,29 @@ export function backupIsDue(lastBackupAt: number | null, now: number = Date.now(
 export const CUTOFF_MINUTES = 23 * 60 + 59;
 
 /**
- * Should the day's backup run right now, unattended?
+ * Is an end-of-day job — the daily close, then the backup — due right now?
  *
  * Two moments, because a till is not reliably awake at midnight:
  *
- *   closing   — the clock has reached 23:59 and today has not been saved;
- *   catch-up  — the app is being used on a later day than the last backup,
- *               so yesterday closed without one and this is the first chance.
+ *   closing   — the clock has reached 23:59 and it has not run today;
+ *   catch-up  — the app is being used on a later day than it last ran, so
+ *               yesterday ended without it and this is the first chance.
  *
- * Both require sales that are not in a backup yet, so an idle day never
- * produces a file and a quiet morning never triggers one twice.
+ * Both require something new since it last ran (`pending`), so an idle day
+ * produces nothing and a quiet morning never triggers it twice.
  */
-export function autoBackupDue(
-  lastBackupAt: number | null,
-  unsavedSales: number,
+export function endOfDayDue(
+  lastRanAt: number | null,
+  pending: number,
   now: number = Date.now(),
 ): boolean {
-  if (unsavedSales <= 0) return false;
-  if (!backupIsDue(lastBackupAt, now)) return false;
+  if (pending <= 0) return false;
+  if (!backupIsDue(lastRanAt, now)) return false;
 
   const clock = new Date(now);
   const minutes = clock.getHours() * 60 + clock.getMinutes();
   if (minutes >= CUTOFF_MINUTES) return true;
 
-  // Earlier in the day: only if a previous day was never saved.
-  return lastBackupAt === null || businessDate(lastBackupAt) < businessDate(now);
+  // Earlier in the day: only if a previous day ended without it.
+  return lastRanAt === null || businessDate(lastRanAt) < businessDate(now);
 }

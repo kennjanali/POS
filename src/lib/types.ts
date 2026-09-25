@@ -194,6 +194,35 @@ export interface Settings extends TaxProfile {
   printer?: ReceiptPrinter | null;
 }
 
+/**
+ * One end-of-day close. Covers every sale settled since the previous close,
+ * so no sale is ever counted twice or missed. Chained by hash to the one
+ * before: editing or dropping an old close breaks every hash after it.
+ * Never changed once written.
+ */
+export interface DailyClose {
+  id: string;
+  /** 1, 2, 3… in order. */
+  no: number;
+  /** Business date the close was taken on, YYYY-MM-DD. */
+  date: string;
+  closedAt: number;
+  closedBy: string | null;
+  /** Sales settled in this window. */
+  orders: number;
+  grossCents: Centavos;
+  discountCents: Centavos;
+  /** Sales from earlier closes voided in this window, as a positive amount. */
+  voidedEarlierCents: Centavos;
+  /** Net of the window: new sales less voids of earlier ones. */
+  netCents: Centavos;
+  tenders: Record<TenderMethod, Centavos>;
+  /** Net across every close so far. */
+  runningNetCents: Centavos;
+  prevHash: string;
+  hash: string;
+}
+
 export interface DataSnapshot {
   version: 7;
   exportedAt: string;
@@ -211,4 +240,6 @@ export interface DataSnapshot {
   invoiceSeq: Record<string, number>;
   /** Absent in backups made before recovery codes existed. */
   recovery?: PinCredential | null;
+  /** Absent in backups made before daily closes existed. */
+  closes?: DailyClose[];
 }
