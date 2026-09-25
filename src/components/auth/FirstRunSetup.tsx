@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { KeyRound, ShieldCheck, ShoppingCart } from 'lucide-react';
 
 import { PinPad } from './PinPad';
+import { RestoreBackup } from './RestoreBackup';
 import { Button } from '@/components/ui/Button';
 import { Field, Toggle } from '@/components/ui/Field';
 import { toast } from '@/components/ui/Toast';
@@ -42,6 +43,7 @@ export function FirstRunSetup() {
   const [writtenDown, setWrittenDown] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [restoring, setRestoring] = useState(false);
 
   const edit = (patch: Partial<SetupInput['business']>) =>
     setBusiness((current) => ({ ...current, ...patch }));
@@ -93,11 +95,13 @@ export function FirstRunSetup() {
           POS<span className="text-accent">@034</span>
         </p>
         <p className="mt-1.5 text-[11px] tracking-[2px] text-ink-3 uppercase">
-          Setup · step {STEP_NO[step]} of 4
+          {restoring ? 'Restore a backup' : `Setup · step ${STEP_NO[step]} of 4`}
         </p>
 
         <div className="mt-7 w-full rounded-xl bg-surface px-6 py-7">
-          {step === 'business' && (
+          {restoring && <RestoreBackup onCancel={() => setRestoring(false)} />}
+
+          {!restoring && step === 'business' && (
             <div className="flex flex-col gap-4">
               <Field
                 label="Business name"
@@ -138,6 +142,13 @@ export function FirstRunSetup() {
               >
                 Next
               </Button>
+              <button
+                type="button"
+                onClick={() => setRestoring(true)}
+                className="min-h-10 self-center px-3 text-[12px] font-semibold text-ink-3 hover:text-accent"
+              >
+                Replacing a lost or broken tablet? Restore a backup
+              </button>
             </div>
           )}
 
