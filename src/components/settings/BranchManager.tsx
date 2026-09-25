@@ -46,6 +46,7 @@ export function BranchManager() {
   const activeBranchId = usePos((s) => s.activeBranchId);
   const setActiveBranch = usePos((s) => s.setActiveBranch);
   const upsertBranch = usePos((s) => s.upsertBranch);
+  const trainingMode = usePos((s) => s.settings.trainingMode);
 
   const [draft, setDraft] = useState<Draft | null>(null);
 
@@ -205,10 +206,18 @@ export function BranchManager() {
         })}
       </ul>
 
-      <Button variant="secondary" fullWidth onClick={startAdd}>
-        <Plus size={14} aria-hidden />
-        Add branch
-      </Button>
+      {/* One install is one branch: a second branch is a second tablet with
+          its own books. Practice installs may still add one. */}
+      {trainingMode ? (
+        <Button variant="secondary" fullWidth onClick={startAdd}>
+          <Plus size={14} aria-hidden />
+          Add branch
+        </Button>
+      ) : (
+        <p className="text-[11.5px] leading-relaxed text-ink-3">
+          Each branch runs on its own device with its own license.
+        </p>
+      )}
 
       <Modal
         open={draft !== null}
