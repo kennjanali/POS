@@ -40,7 +40,8 @@ dashboard.
 │  License Worker (Hono) + D1  → licenses, activations, heartbeats, fees    │
 │  Vendor dashboard "My Customers" (password, or Cloudflare Access)         │
 │  Workers KV                   → encrypted backups (free plan, no card)    │
-│  Static sites                 → landing page (Astro) · web demo           │
+│  Same Worker                  → website: landing, sign-up, APK download   │
+│  Static site                  → web demo                                  │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -99,7 +100,9 @@ dashboard.
 
 | Piece | Choice | Status | Notes |
 |---|---|---|---|
-| Landing page | **Astro** (static) + Tailwind on Cloudflare | **Add** | Mobile-first; copy in plan §14 |
+| Website | **Hono JSX in the license Worker** (was Astro) | **Done** | Landing page, register, log in, account page with license key, fee due and APK download. One deploy, one database; no build step |
+| Customer login | Own: PBKDF2 passwords, hashed session token in D1, HttpOnly cookie, CSRF origin check, lockout after 10 tries | **Done** | No auth service (Clerk, Supabase Auth) to sign up for. No email: you approve sign-ups and send reset links yourself |
+| APK download | **Workers KV** (`RELEASES`), logged-in and approved accounts only | **Done** | 25 MB per value; the APK is 18 MB. `npm run publish:apk` in `license-server/` |
 | Web demo | Current Next.js build on Cloudflare, training mode forced, watermarked, web platform seams | **Rework** | The existing public URL becomes the demo |
 
 ## 5. Quality and delivery
@@ -144,7 +147,6 @@ dashboard.
 /android/              Capacitor-generated Android project (committed)
 /capacitor.config.ts   app ID, webDir, frozen scheme/hostname
 /license-server/       Cloudflare Worker: Hono + D1 + KV + vendor dashboard
-/site/                 Astro landing page
 /.github/workflows/    CI: check, build signed APK + web bundle, publish
 REWORK-PLAN.md         why + phases
 TECH-STACK.md          this file
@@ -160,3 +162,4 @@ TECH-STACK.md          this file
 | 2026-09-25 | **Target switched to Android tablet + Bluetooth printer.** Tauri 2 → Capacitor 8; Rust dropped; SQLite via `@capacitor-community/sqlite` from the first Android build (no IndexedDB migration); Bluetooth ESC/POS printing made required; encrypted cloud backup to R2 added; self-hosted live updates; APK signing + Android developer verification replace Windows code signing; platform seams added so the web demo and the app share every screen |
 | 2026-09-25 | Phase 2 build: own Bluetooth Classic printer plugin instead of `capacitor-thermal-printer` (Capacitor 7-only); seams live in `src/lib` (`storage`, `printer`, `files`); JDK 21 for builds; no orientation lock |
 | 2026-09-25 | Free plan only: cloud backups on Workers KV instead of R2 (R2 needs a card); dashboard login by password, Cloudflare Access optional |
+| 2026-09-25 | Website served by the license Worker instead of a separate Astro site; Worker renamed `pos034` (https://pos034.kennkennali.workers.dev); customer accounts + APK download from KV |

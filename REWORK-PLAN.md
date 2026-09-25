@@ -514,7 +514,7 @@ Restore (do by hand); the Vitest port, proposed for Phase 5.
 - [x] Vendor dashboard "My Customers" + heartbeat (§7a); fees by month, payments, release/revoke/extend
 - [x] Fee rules: training closes never billed; closes deduplicated by id across replacement tablets; first reported close anchors the chain
 - Verified: app checks (license forgery, daily close chain, seal/open) and 23 server checks against a local Worker (activation, second-tablet refusal, heartbeat, forged licence, doctored close flagged, no double billing after a tablet swap, backup round trip).
-- [x] Deployed 2026-09-25 on Cloudflare's free plan (no card): https://pos034-license.kennkennali.workers.dev — D1 database, KV backups, signing key and dashboard password as Worker secrets (password copy in `~/.pos034/admin-password.txt`)
+- [x] Deployed 2026-09-25 on Cloudflare's free plan (no card): https://pos034.kennkennali.workers.dev (renamed from `pos034-license` when the website moved in) — D1 database, KV backups, signing key and dashboard password as Worker secrets (password copy in `~/.pos034/admin-password.txt`)
 - Verified live on the emulator: create license → activate → go live → sell → daily close → cloud backup → heartbeat shows tablet, close and 2% fee on the dashboard → app wiped → restored from the cloud with license key + recovery code → old tablet released → re-activated. Test data then deleted from production.
 - Found and fixed live: end-of-day jobs ran after the day's first sale instead of at 23:59 (the daily backup had done this since v7).
 - **Verify:** tampered license rejected; license from tablet A rejected on tablet B; factory-reset tablet → re-activate + restore works; server-side the backup is unreadable ciphertext; wrong recovery code can't decrypt.
@@ -532,7 +532,9 @@ POS@034 is a sales tracker, not a BIR machine (§10). The daily close moved to P
 - **Verify:** someone other than you sets up a fresh tablet using only the checklist.
 
 ### Phase 7 — Go to market
-- [ ] Landing page (§14), web demo (training mode only, watermarked) on Cloudflare
+- [x] Website at https://pos034.kennkennali.workers.dev, served by the license Worker: landing page (§14), register → you approve on the dashboard (creates the license) → customer logs in for their key, fee due and the APK download; reset links made on the dashboard. 50 server checks pass live
+- [x] Web demo updated: https://pos.kennkennali.workers.dev
+- [ ] Real photos/screenshots, Messenger link, prices on the page
 - [ ] First 3 pilot customers at a discount, installed by you, weekly check-in for a month
 
 ### Later (only when customers ask and pay)
@@ -577,7 +579,7 @@ sensitive, burned before by internet outages and by POS vendors with monthly fee
 English (Taglish touches optional). **Only publish claims that are true on launch day.** Never
 say "BIR-ready" or "BIR-accredited": POS@034 is not a BIR machine (§10).
 
-Stack: Astro static page on Cloudflare (see TECH-STACK.md), reusing the POS colors (`#f0ede9`
+Stack: server-rendered by the license Worker (see TECH-STACK.md), reusing the POS colors (`#f0ede9`
 ground, `#080808` rail, `#ff5c1a` accent).
 
 ### Structure
