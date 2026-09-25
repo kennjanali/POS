@@ -34,7 +34,7 @@ function emit(name, file) {
   writeFileSync(join(dir, `${name}.js`), js);
 }
 
-for (const n of ['brand', 'money', 'tax', 'format', 'id', 'seed', 'demo', 'crypto', 'idb', 'storage', 'printer', 'receipt', 'permissions', 'types', 'archive', 'files', 'backup', 'closes'])
+for (const n of ['brand', 'money', 'tax', 'format', 'id', 'seed', 'demo', 'crypto', 'idb', 'storage', 'printer', 'receipt', 'device', 'license', 'permissions', 'types', 'archive', 'files', 'backup', 'closes'])
   emit(n, `src/lib/${n}.ts`);
 for (const n of ['useAuth', 'usePos']) emit(n, `src/store/${n}.ts`);
 
@@ -148,9 +148,41 @@ console.log('\n— B3: clearing sales data —');
   );
 }
 
+console.log('\n— License: checked offline, bound to this install and tablet —');
+{
+  const { verifyLicense } = await load('license');
+  const { generateKeyPairSync, sign } = await import('node:crypto');
+  // A throwaway key, so this never needs the real signing key.
+  const { publicKey, privateKey } = generateKeyPairSync('ed25519');
+  const pub = publicKey.export({ format: 'jwk' }).x;
+  const b64url = (buf) => Buffer.from(buf).toString('base64url');
+  const issue = (fields, key = privateKey) => {
+    const payload = b64url(JSON.stringify(fields));
+    return `${payload}.${b64url(sign(null, Buffer.from(payload), key))}`;
+  };
+  const here = { installId: S().installId, device: 'a'.repeat(64) };
+  const fields = { licenseId: 'LIC-TEST', businessName: 'Test', ...here, plan: 'standard', issuedAt: '2026-09-25', updatesUntil: '2027-09-25' };
+
+  check('a genuine license verifies', verifyLicense(issue(fields), here, pub)?.licenseId === 'LIC-TEST');
+  check('another install\'s license does not', verifyLicense(issue({ ...fields, installId: 'other' }), here, pub) === null);
+  check('another tablet\'s license does not', verifyLicense(issue({ ...fields, device: 'b'.repeat(64) }), here, pub) === null);
+  const [payload, signature] = issue(fields).split('.');
+  const edited = b64url(JSON.stringify({ ...fields, plan: 'unlimited' }));
+  check('an edited license does not', verifyLicense(`${edited}.${signature}`, here, pub) === null);
+  check('one signed by someone else does not', verifyLicense(issue(fields, generateKeyPairSync('ed25519').privateKey), here, pub) === null);
+  check('garbage does not, and nothing throws', verifyLicense('not-a-license', here, pub) === null && verifyLicense(null, here, pub) === null);
+  check('the web demo (no device) is never licensed', verifyLicense(`${payload}.${signature}`, { ...here, device: null }, pub) === null);
+
+  setTraining(true);
+  usePos.setState({ licensed: null });
+  S().updateSettings({ trainingMode: false });
+  check('without a license the till cannot go live', S().settings.trainingMode === true);
+}
+
 console.log('\n— B4: training mode is a one-way door —');
 {
   setTraining(true);
+  usePos.setState({ licensed: { licenseId: 'LIC-TEST' } });
   S().updateSettings({ trainingMode: false });
   check('can leave training mode', S().settings.trainingMode === false);
   check(

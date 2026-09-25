@@ -3,9 +3,11 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 
-import { APP_VERSION, PRODUCT_NAME } from '@/lib/brand';
+import { APP_VERSION, LICENSE_SERVER_URL, PRODUCT_NAME } from '@/lib/brand';
 import { buildClose, inWindow, signClose } from '@/lib/closes';
 import { buildDemoData } from '@/lib/demo';
+import { deviceFingerprint } from '@/lib/device';
+import { verifyLicense, type License } from '@/lib/license';
 import {
   hashPin,
   hashRecoveryCode,
@@ -87,6 +89,11 @@ interface PosState {
   /** This install's identity, generated once by the wizard. Licensing and
    *  every backup refer to it. A restore never overwrites it. */
   installId: string | null;
+  /** The signed license as issued by the server. Kept in backups. */
+  license: string | null;
+  /** `license`, verified for this install on this tablet. Not persisted:
+   *  worked out again on every launch, offline. */
+  licensed: License | null;
 
   activeBranchId: string;
   activeOrderId: string | null;
@@ -163,6 +170,12 @@ interface PosState {
   resetPinWithRecoveryCode: (code: string, userId: string, pin: string) => Promise<UserResult>;
   /** For when the written copy is lost. The old code stops working. */
   replaceRecoveryCode: (code: string) => Promise<void>;
+
+  // ── license ─────────────────────────────────────────────────────────
+  /** Verify the stored license for this install and tablet. Offline. */
+  checkLicense: () => Promise<void>;
+  /** Exchange a license key for a signed license. Needs internet once. */
+  activate: (key: string) => Promise<UserResult>;
 
   // ── admin ───────────────────────────────────────────────────────────
   setActiveBranch: (id: string) => void;
@@ -371,6 +384,8 @@ export const usePos = create<PosState>()(
       invoiceSeq: {},
       recovery: null,
       installId: null,
+      license: null,
+      licensed: null,
       activeBranchId: DEFAULT_BRANCH.id,
       activeOrderId: null,
       lastBackupAt: null,
@@ -986,6 +1001,43 @@ export const usePos = create<PosState>()(
         }));
       },
 
+      // ── license ───────────────────────────────────────────────────
+      checkLicense: async () => {
+        const device = await deviceFingerprint();
+        const { license, installId } = get();
+        set({ licensed: verifyLicense(license, { installId, device }) });
+      },
+
+      activate: async (key) => {
+        const device = await deviceFingerprint();
+        const { installId, settings } = get();
+        if (!device || !installId) {
+          return { ok: false, error: 'Licenses are activated in the Android app.' };
+        }
+        let reply: { license?: string; error?: string };
+        try {
+          const response = await fetch(`${LICENSE_SERVER_URL}/api/activate`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ key: key.trim(), installId, device, businessName: settings.businessName }),
+          });
+          reply = await response.json();
+        } catch {
+          return { ok: false, error: 'Could not reach the license server. Check the internet connection.' };
+        }
+        if (!reply.license) return { ok: false, error: reply.error ?? 'Activation failed.' };
+
+        const licensed = verifyLicense(reply.license, { installId, device });
+        if (!licensed) return { ok: false, error: 'The server sent a license that does not match this tablet.' };
+        set((s) => ({
+          ...s,
+          license: reply.license ?? null,
+          licensed,
+          audit: log(s.audit, 'license.activate', `Activated license ${licensed.licenseId}`, 'success', s.activeBranchId),
+        }));
+        return { ok: true };
+      },
+
       // ── admin ─────────────────────────────────────────────────────
       setActiveBranch: (id) =>
         set((state) => ({
@@ -1022,6 +1074,11 @@ export const usePos = create<PosState>()(
           // the Settings toggle handed it straight back.
           if (settings.trainingMode && !state.settings.trainingMode) {
             settings.trainingMode = false;
+          }
+          // Going live needs a license. Unlicensed, the till keeps working in
+          // training mode, where its slips say so.
+          if (!settings.trainingMode && state.settings.trainingMode && !state.licensed) {
+            settings.trainingMode = true;
           }
 
           if (state.settings.trainingMode && !settings.trainingMode) {
@@ -1187,6 +1244,7 @@ export const usePos = create<PosState>()(
           settings: s.settings,
           invoiceSeq: s.invoiceSeq,
           recovery: s.recovery,
+          license: s.license,
         };
       },
 
@@ -1228,9 +1286,13 @@ export const usePos = create<PosState>()(
             // Travels with the users it recovers. A backup made before
             // recovery codes existed leaves the current one in place.
             recovery: snapshot.recovery ?? state.recovery,
+            // Verified again below: on a replacement tablet it will not match,
+            // and the owner re-activates.
+            license: snapshot.license ?? state.license,
             activeOrderId: null,
           };
         });
+        void get().checkLicense();
         return { ok: true };
       },
 
@@ -1347,6 +1409,7 @@ export const usePos = create<PosState>()(
         invoiceSeq: state.invoiceSeq,
         recovery: state.recovery,
         installId: state.installId,
+        license: state.license,
         activeBranchId: state.activeBranchId,
         lastBackupAt: state.lastBackupAt,
       }),
@@ -1472,6 +1535,7 @@ async function loadRows(rehydrated: PosState | undefined): Promise<void> {
     lastCloses = closes;
 
     usePos.setState({ orders, stockMoves, closes, hydrated: true });
+    void usePos.getState().checkLicense();
 
     // Migrating from the blob: put the rows where they now belong.
     if (rows.length === 0 && orders.length > 0) {

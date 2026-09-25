@@ -4,6 +4,7 @@ import { useRef, useState } from 'react';
 import { Download, FlaskConical, Info, Upload } from 'lucide-react';
 
 import { BranchManager } from '@/components/settings/BranchManager';
+import { LicenseSettings } from '@/components/settings/LicenseSettings';
 import { MonthlyArchive } from '@/components/settings/MonthlyArchive';
 import { PrinterSettings } from '@/components/settings/PrinterSettings';
 import { RecoveryCode } from '@/components/settings/RecoveryCode';
@@ -23,6 +24,7 @@ import { usePos } from '@/store/usePos';
 export default function SettingsPage() {
   const settings = usePos((s) => s.settings);
   const update = usePos((s) => s.updateSettings);
+  const licensed = usePos((s) => s.licensed !== null);
   const exportSnapshot = usePos((s) => s.exportSnapshot);
   const importSnapshot = usePos((s) => s.importSnapshot);
   const resetAll = usePos((s) => s.resetAll);
@@ -117,6 +119,11 @@ export default function SettingsPage() {
           />
         </Section>
 
+        {/* ── License ──────────────────────────────────────────── */}
+        <Section title="License">
+          <LicenseSettings />
+        </Section>
+
         {/* ── Tax ──────────────────────────────────────────────── */}
         <Section title="Tax">
           <Toggle
@@ -188,12 +195,14 @@ export default function SettingsPage() {
           <Toggle
             label="Training mode"
             hint={
-              settings.trainingMode
-                ? 'Marks every receipt as not valid, and unlocks Load and Remove demo data. Turning this off is permanent — it cannot be switched back on.'
-                : 'This install is live. Training mode cannot be turned back on, so fabricated sales can never be written over the books.'
+              !settings.trainingMode
+                ? 'This install is live. Training mode cannot be turned back on, so fabricated sales can never be written over the books.'
+                : licensed
+                  ? 'Marks every slip as training, and unlocks Load and Remove demo data. Turning this off is permanent — it cannot be switched back on.'
+                  : 'Activate a license below to go live. Until then every slip is marked as training.'
             }
             checked={settings.trainingMode}
-            disabled={!settings.trainingMode}
+            disabled={!settings.trainingMode || !licensed}
             onChange={() => setConfirmGoLive(true)}
           />
         </Section>

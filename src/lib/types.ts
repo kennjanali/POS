@@ -242,4 +242,6 @@ export interface DataSnapshot {
   recovery?: PinCredential | null;
   /** Absent in backups made before daily closes existed. */
   closes?: DailyClose[];
+  /** The signed license. Absent in older backups. */
+  license?: string | null;
 }
