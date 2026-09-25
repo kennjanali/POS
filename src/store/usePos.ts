@@ -14,7 +14,7 @@ import {
   PIN_LENGTH,
   type PinCredential,
 } from '@/lib/crypto';
-import { ROWS, idbStorage, onPersistWrite, readRows, writeRows } from '@/lib/idb';
+import { ROWS, kvStorage, onPersistWrite, readRows, writeRows } from '@/lib/storage';
 import { uuidv7 } from '@/lib/id';
 import { businessDate } from '@/lib/format';
 import {
@@ -1285,11 +1285,11 @@ export const usePos = create<PosState>()(
       // whose version differs — an empty till after an app update.
       version: 7,
       migrate: (persisted) => persisted as PosState,
-      storage: createJSONStorage(() => idbStorage),
+      storage: createJSONStorage(() => kvStorage),
       // `orders` and `stockMoves` are deliberately absent: they go to their own
       // row stores, written one record at a time. Everything listed here is
       // small and rarely touched, so rewriting it wholesale is free.
-      // See the note at the top of lib/idb.ts.
+      // See the note on ROWS in lib/storage.ts.
       partialize: (state) => ({
         branches: state.branches,
         users: state.users,
