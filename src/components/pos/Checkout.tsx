@@ -283,7 +283,7 @@ export function Checkout({ order, open, onClose, onPaid }: CheckoutProps) {
                   aria-pressed={order.discountKind === kind}
                   onClick={() => setDiscount(order.id, { discountKind: kind })}
                   className={cn(
-                    'rounded-md border px-1 py-2 text-[12px] font-semibold transition-colors',
+                    'min-h-11 rounded-md border px-1 py-2 text-[12px] font-semibold transition-colors',
                     order.discountKind === kind
                       ? 'border-note bg-note text-white'
                       : 'border-line bg-raised text-ink-2 hover:bg-ground',
@@ -367,7 +367,7 @@ export function Checkout({ order, open, onClose, onPaid }: CheckoutProps) {
                   aria-pressed={method === m}
                   onClick={() => setMethod(m)}
                   className={cn(
-                    'rounded-md border px-1 py-2 text-[12px] font-semibold transition-colors',
+                    'min-h-11 rounded-md border px-1 py-2 text-[12px] font-semibold transition-colors',
                     method === m
                       ? 'border-accent bg-accent text-white'
                       : 'border-line bg-raised text-ink-2 hover:bg-ground',

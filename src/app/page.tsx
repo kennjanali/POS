@@ -83,7 +83,7 @@ export default function PosPage() {
                   type="button"
                   onClick={() => setActiveOrder(null)}
                   aria-label="Close order"
-                  className="rounded p-1.5 text-ink-3 transition-colors hover:bg-raised hover:text-ink"
+                  className="grid size-10 place-items-center rounded text-ink-3 transition-colors hover:bg-raised hover:text-ink"
                 >
                   <X size={16} aria-hidden />
                 </button>

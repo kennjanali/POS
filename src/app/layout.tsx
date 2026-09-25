@@ -12,6 +12,9 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1,
+  // The on-screen keyboard shrinks the page instead of covering it, so a
+  // dialog's field and its buttons stay above the keys on a tablet.
+  interactiveWidget: 'resizes-content',
   themeColor: '#080808',
 };
 

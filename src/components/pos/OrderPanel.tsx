@@ -87,7 +87,7 @@ export function OrderPanel({ order, onCheckout }: OrderPanelProps) {
                     type="button"
                     aria-label={`Reduce ${line.name}`}
                     onClick={() => changeQty(order.id, line.lineNo, -1)}
-                    className="grid size-6 place-items-center rounded border border-line bg-surface hover:border-accent"
+                    className="grid size-10 place-items-center rounded-md border border-line bg-surface hover:border-accent"
                   >
                     <Minus size={12} aria-hidden />
                   </button>
@@ -98,7 +98,7 @@ export function OrderPanel({ order, onCheckout }: OrderPanelProps) {
                     type="button"
                     aria-label={`Add ${line.name}`}
                     onClick={() => changeQty(order.id, line.lineNo, 1)}
-                    className="grid size-6 place-items-center rounded border border-line bg-surface hover:border-accent"
+                    className="grid size-10 place-items-center rounded-md border border-line bg-surface hover:border-accent"
                   >
                     <Plus size={12} aria-hidden />
                   </button>
@@ -141,7 +141,7 @@ export function OrderPanel({ order, onCheckout }: OrderPanelProps) {
                     type="button"
                     aria-label={`Void ${line.name}`}
                     onClick={() => setVoidTarget(line.lineNo)}
-                    className="shrink-0 rounded p-1 text-ink-3 transition-colors hover:bg-bad/10 hover:text-bad"
+                    className="grid size-10 shrink-0 place-items-center rounded text-ink-3 transition-colors hover:bg-bad/10 hover:text-bad"
                   >
                     <Ban size={13} aria-hidden />
                   </button>

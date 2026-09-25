@@ -48,8 +48,10 @@ export function LockScreen() {
   }
 
   return (
-    <div className="fixed inset-0 z-500 grid place-items-center bg-rail p-6">
-      <div className="flex w-full max-w-sm flex-col items-center">
+    // Scrolls rather than centering in a fixed box: with the keyboard open
+    // for the recovery code, the card can be taller than what is left.
+    <div className="fixed inset-0 z-500 overflow-y-auto bg-rail">
+      <div className="mx-auto flex min-h-full w-full max-w-sm flex-col items-center justify-center p-6">
         <span className="mb-3 grid size-10 place-items-center rounded-lg bg-accent">
           <ShoppingCart size={20} className="text-white" aria-hidden />
         </span>
@@ -79,7 +81,7 @@ export function LockScreen() {
               <button
                 type="button"
                 onClick={() => setRecovering(true)}
-                className="mt-5 text-[12px] font-semibold text-ink-3 hover:text-accent"
+                className="mt-3 min-h-10 px-3 text-[12px] font-semibold text-ink-3 hover:text-accent"
               >
                 Forgot PIN?
               </button>

@@ -41,7 +41,7 @@ export function MenuGrid({ orderId }: MenuGridProps) {
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search menu"
           aria-label="Search menu"
-          className="h-9 w-full rounded-md border border-line bg-raised pr-3 pl-8 text-[13px] placeholder:text-ink-3 focus:border-accent"
+          className="h-11 w-full rounded-md border border-line bg-raised pr-3 pl-9 text-[14px] placeholder:text-ink-3 focus:border-accent"
         />
       </div>
 

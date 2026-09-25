@@ -72,6 +72,21 @@ body {
   font-size: 14px;
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
+  /* No pull-to-refresh: a reload in the middle of service is never wanted. */
+  overscroll-behavior: none;
+}
+
+/* Tablet first. A tap fires at once (no double-tap-zoom wait), without the
+   grey flash, and a long press on a control never selects its label or opens
+   the browser's callout menu. Text in receipts and fields stays selectable. */
+button,
+a,
+[role='button'],
+[role='switch'] {
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
 }
 
 /* Visible focus everywhere. Never outline:none without a replacement. */

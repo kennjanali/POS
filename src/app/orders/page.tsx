@@ -89,7 +89,7 @@ export default function OrdersPage() {
               aria-pressed={filter === f.key}
               onClick={() => setFilter(f.key)}
               className={cn(
-                'rounded-md border px-2.5 py-1.5 text-[12px] font-semibold transition-colors',
+                'min-h-10 rounded-md border px-3 py-1.5 text-[12px] font-semibold transition-colors',
                 filter === f.key
                   ? 'border-accent bg-accent text-white'
                   : 'border-line bg-raised text-ink-2 hover:bg-ground',
@@ -109,7 +109,7 @@ export default function OrdersPage() {
               aria-pressed={branchFilter === null}
               onClick={() => setBranchFilter(null)}
               className={cn(
-                'rounded-md border px-2.5 py-1.5 text-[12px] font-semibold transition-colors',
+                'min-h-10 rounded-md border px-3 py-1.5 text-[12px] font-semibold transition-colors',
                 branchFilter === null
                   ? 'border-accent bg-accent text-white'
                   : 'border-line bg-raised text-ink-2 hover:bg-ground',
@@ -126,7 +126,7 @@ export default function OrdersPage() {
                   setBranchFilter(branchFilter === branch.id ? null : branch.id)
                 }
                 className={cn(
-                  'flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[12px] font-semibold transition-colors',
+                  'flex min-h-10 items-center gap-1.5 rounded-md border px-3 py-1.5 text-[12px] font-semibold transition-colors',
                   branchFilter === branch.id
                     ? 'border-accent bg-accent text-white'
                     : 'border-line bg-raised text-ink-2 hover:bg-ground',
@@ -148,7 +148,7 @@ export default function OrdersPage() {
           aria-label="Business date"
           value={date}
           onChange={(e) => setDate(e.target.value)}
-          className="h-8 rounded-md border border-line bg-raised px-2 text-[12px]"
+          className="h-10 rounded-md border border-line bg-raised px-2.5 text-[13px]"
         />
         <input
           type="search"
@@ -156,7 +156,7 @@ export default function OrdersPage() {
           placeholder="Invoice or label"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          className="h-8 min-w-[160px] flex-1 rounded-md border border-line bg-raised px-2.5 text-[12px]"
+          className="h-10 min-w-[160px] flex-1 rounded-md border border-line bg-raised px-3 text-[13px]"
         />
         {(date || query || filter !== 'all' || branchFilter) && (
           <Button
@@ -256,7 +256,7 @@ export default function OrdersPage() {
                         type="button"
                         aria-label={`Receipt for ${order.invoiceNo}`}
                         onClick={() => setReceiptFor(order.id)}
-                        className="rounded p-1 text-ink-3 hover:bg-raised hover:text-ink"
+                        className="grid size-10 place-items-center rounded text-ink-3 hover:bg-raised hover:text-ink"
                       >
                         <ReceiptIcon size={14} aria-hidden />
                       </button>
@@ -266,7 +266,7 @@ export default function OrdersPage() {
                         type="button"
                         aria-label={`Void ${order.invoiceNo}`}
                         onClick={() => setVoidTarget(order.id)}
-                        className="rounded p-1 text-ink-3 hover:bg-bad/10 hover:text-bad"
+                        className="grid size-10 place-items-center rounded text-ink-3 hover:bg-bad/10 hover:text-bad"
                       >
                         <Ban size={14} aria-hidden />
                       </button>

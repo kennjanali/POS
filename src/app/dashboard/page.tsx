@@ -175,7 +175,7 @@ export default function DashboardPage() {
             aria-pressed={range === r.key}
             onClick={() => setRange(r.key)}
             className={cn(
-              'rounded-md border px-2.5 py-1.5 text-[12px] font-semibold transition-colors',
+              'min-h-10 rounded-md border px-3 py-1.5 text-[12px] font-semibold transition-colors',
               range === r.key
                 ? 'border-accent bg-accent text-white'
                 : 'border-line bg-raised text-ink-2 hover:bg-ground',

@@ -68,7 +68,7 @@ export function Topbar() {
           aria-label="Branch"
           value={activeBranchId}
           onChange={(e) => setActiveBranch(e.target.value)}
-          className="h-7 rounded-md border border-line bg-raised px-2 text-[12px] font-semibold"
+          className="h-10 rounded-md border border-line bg-raised px-2.5 text-[13px] font-semibold"
         >
           {open.map((b) => (
             <option key={b.id} value={b.id}>
@@ -113,7 +113,7 @@ export function Topbar() {
             onClick={lock}
             title="Lock the till"
             aria-label="Lock the till"
-            className="flex items-center gap-1.5 rounded-md border border-line bg-raised px-2 py-1.5 text-[11.5px] font-semibold text-ink-2 transition-colors hover:border-accent hover:text-accent"
+            className="flex items-center gap-1.5 h-10 rounded-md border border-line bg-raised px-3 text-[11.5px] font-semibold text-ink-2 transition-colors hover:border-accent hover:text-accent"
           >
             <Lock size={13} aria-hidden />
             Lock

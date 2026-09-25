@@ -246,7 +246,7 @@ function BackLink({ onClick, disabled }: { onClick: () => void; disabled?: boole
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="mt-1 self-center text-[12px] font-semibold text-ink-3 hover:text-accent disabled:opacity-40"
+      className="min-h-10 self-center px-3 text-[12px] font-semibold text-ink-3 hover:text-accent disabled:opacity-40"
     >
       Back
     </button>

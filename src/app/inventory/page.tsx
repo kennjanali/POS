@@ -112,7 +112,7 @@ export default function InventoryPage() {
               aria-pressed={branch.id === branchId}
               onClick={() => setActiveBranch(branch.id)}
               className={cn(
-                'flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1 text-[12px] font-semibold transition-colors',
+                'flex min-h-10 shrink-0 items-center gap-1.5 rounded-md border px-3 py-1 text-[12px] font-semibold transition-colors',
                 branch.id === branchId
                   ? 'border-accent bg-accent/10 text-accent'
                   : 'border-line bg-raised text-ink-2 hover:bg-ground',
@@ -228,7 +228,7 @@ export default function InventoryPage() {
                               delta > 0 ? 'restock' : 'count',
                             )
                           }
-                          className="rounded border border-line bg-raised px-1.5 py-0.5 text-[11px] font-bold hover:border-accent"
+                          className="min-h-10 min-w-10 rounded border border-line bg-raised px-2 text-[12px] font-bold hover:border-accent"
                         >
                           {delta > 0 ? `+${delta}` : delta}
                         </button>

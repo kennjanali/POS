@@ -132,7 +132,7 @@ export function RecoverPin({ onDone }: { onDone: () => void }) {
       <button
         type="button"
         onClick={onDone}
-        className="mt-5 text-[12px] font-semibold text-ink-3 hover:text-accent"
+        className="mt-3 min-h-10 px-3 text-[12px] font-semibold text-ink-3 hover:text-accent"
       >
         Cancel
       </button>

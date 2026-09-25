@@ -83,7 +83,7 @@ export function UserManager() {
                       `${user.name} is now ${ROLE_LABELS[e.target.value as Role]}`,
                     )
                   }
-                  className="h-7 rounded-md border border-line bg-raised px-1.5 text-[12px] font-semibold"
+                  className="h-10 rounded-md border border-line bg-raised px-2 text-[13px] font-semibold"
                 >
                   {ROLES.map((role) => (
                     <option key={role} value={role}>
@@ -102,7 +102,7 @@ export function UserManager() {
                     )
                   }
                   className={cn(
-                    'rounded px-1.5 py-0.5 text-[10px] font-bold tracking-wide uppercase',
+                    'min-h-10 rounded-md px-3 text-[11px] font-bold tracking-wide uppercase',
                     user.active ? 'bg-good/15 text-good' : 'bg-ink-4/25 text-ink-3',
                   )}
                 >
@@ -118,7 +118,7 @@ export function UserManager() {
                 <button
                   type="button"
                   onClick={() => setPinTarget(user)}
-                  className="flex items-center gap-1.5 rounded p-1 text-ink-3 hover:bg-raised hover:text-ink"
+                  className="flex h-10 items-center gap-1.5 rounded px-2 text-ink-3 hover:bg-raised hover:text-ink"
                 >
                   <KeyRound size={13} aria-hidden />
                   Change

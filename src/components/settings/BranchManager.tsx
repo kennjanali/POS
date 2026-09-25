@@ -266,7 +266,7 @@ export function BranchManager() {
                     aria-pressed={draft.color === color}
                     onClick={() => setDraft({ ...draft, color })}
                     className={cn(
-                      'size-6 rounded-full border-2 transition-transform',
+                      'size-10 rounded-full border-2 transition-transform',
                       draft.color === color
                         ? 'scale-110 border-ink'
                         : 'border-transparent',

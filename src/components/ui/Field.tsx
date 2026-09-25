@@ -25,7 +25,7 @@ export function Field({ label, hint, error, suffix, className, ...props }: Field
           aria-describedby={describedBy}
           aria-invalid={error ? true : undefined}
           className={cn(
-            'h-9 w-full rounded-md border bg-raised px-2.5 text-[13px] text-ink',
+            'h-11 w-full rounded-md border bg-raised px-3 text-[13px] text-ink',
             'transition-colors placeholder:text-ink-3',
             error ? 'border-bad' : 'border-line focus:border-accent',
             className,
