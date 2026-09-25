@@ -117,44 +117,60 @@ api.post('/heartbeat', async (c) => {
 
   await recordCloses(c.env.DB, license.installId, license.licenseId, body.closes ?? [], now);
 
-  const last = await c.env.DB.prepare('SELECT MAX(no) AS no FROM closes WHERE install_id = ?')
-    .bind(license.installId)
+  const last = await c.env.DB.prepare('SELECT MAX(no) AS no FROM closes WHERE license_id = ?')
+    .bind(license.licenseId)
     .first<{ no: number | null }>();
   return c.json({ ackThrough: last?.no ?? 0 });
 });
 
 /**
- * Store each close once, never overwriting. `linked` records whether it
- * chains onto the close before it — hash recomputed here with the app's own
- * code, previous hash and running total matching. A doctored or missing day
- * shows up as an unlinked close on the dashboard.
+ * Store each close once, by its own id, never overwriting — a close restored
+ * onto a replacement tablet is already here and is skipped, so no day is
+ * billed twice.
+ *
+ * `linked` records whether it chains onto the close before it: hash
+ * recomputed with the app's own code, and a previous close of this license
+ * whose hash and running total it continues. Followed by hash rather than
+ * by tablet, so the chain carries on across a replacement. The first close
+ * ever received for a license anchors the chain (closes taken in training
+ * mode are never sent). A doctored or missing day shows as unlinked.
  */
 async function recordCloses(db: D1Database, installId: string, licenseId: string, closes: DailyClose[], now: number) {
-  let previous: { hash: string; running: number } | null = null;
+  const known = await db.prepare('SELECT COUNT(*) AS n FROM closes WHERE license_id = ?').bind(licenseId).first<{ n: number }>();
+  let anchored = (known?.n ?? 0) > 0;
+  const received = new Map<string, number>(); // hash -> running total, this batch
+
   for (const close of [...closes].sort((a, b) => a.no - b.no)) {
-    if (!Number.isInteger(close.no) || close.no < 1) continue;
-    previous ??= await db
-      .prepare('SELECT hash, running_net_cents AS running FROM closes WHERE install_id = ? AND no = ?')
-      .bind(installId, close.no - 1)
-      .first<{ hash: string; running: number }>();
+    if (typeof close.id !== 'string' || !Number.isInteger(close.no) || close.no < 1) continue;
+    const exists = await db.prepare('SELECT 1 FROM closes WHERE close_id = ?').bind(close.id).first();
+    if (exists) continue;
+
+    const previousRunning =
+      received.get(close.prevHash) ??
+      (
+        await db
+          .prepare('SELECT running_net_cents AS running FROM closes WHERE license_id = ? AND hash = ?')
+          .bind(licenseId, close.prevHash)
+          .first<{ running: number }>()
+      )?.running;
 
     const { hash, ...unsigned } = close;
     const genuine = (await signClose(unsigned)).hash === hash;
-    const chains = close.no === 1
-      ? close.prevHash === GENESIS && close.runningNetCents === close.netCents
-      : previous !== null &&
-        close.prevHash === previous.hash &&
-        close.runningNetCents === previous.running + close.netCents;
+    const chains =
+      (close.prevHash === GENESIS && close.no === 1 && close.runningNetCents === close.netCents) ||
+      (previousRunning !== undefined && close.runningNetCents === previousRunning + close.netCents) ||
+      !anchored;
 
     await db
       .prepare(
-        `INSERT OR IGNORE INTO closes (install_id, no, license_id, date, closed_at, orders, net_cents, running_net_cents, hash, linked, received_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO closes (close_id, install_id, no, license_id, date, closed_at, orders, net_cents, running_net_cents, hash, linked, received_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
-      .bind(installId, close.no, licenseId, close.date, close.closedAt, close.orders, close.netCents,
+      .bind(close.id, installId, close.no, licenseId, close.date, close.closedAt, close.orders, close.netCents,
         close.runningNetCents, hash, Number(genuine && chains), now)
       .run();
-    previous = { hash, running: close.runningNetCents };
+    received.set(hash, close.runningNetCents);
+    anchored = true;
   }
 }
 

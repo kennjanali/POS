@@ -80,6 +80,8 @@ interface PosState {
   stockMoves: StockMove[];
   /** Daily closes, oldest first. Written once, never changed. */
   closes: DailyClose[];
+  /** The last close number the license server confirmed receiving. */
+  closesAckedThrough: number;
   audit: AuditEntry[];
   settings: Settings;
   /** branchId -> last issued invoice number */
@@ -213,6 +215,8 @@ interface PosState {
   unclosedSales: () => number;
   /** Close everything since the last close. Null when there is nothing to close. */
   closeDay: () => Promise<DailyClose | null>;
+  /** The server has closes through `no`; only later ones are sent again. */
+  recordCloseAck: (no: number) => void;
   clearPersistError: () => void;
 }
 
@@ -379,6 +383,7 @@ export const usePos = create<PosState>()(
       stock: { [DEFAULT_BRANCH.id]: {} },
       stockMoves: [],
       closes: [],
+      closesAckedThrough: 0,
       audit: [],
       settings: DEFAULT_SETTINGS,
       invoiceSeq: {},
@@ -1085,6 +1090,8 @@ export const usePos = create<PosState>()(
             return {
               ...state,
               settings,
+              // Closes taken in training are never reported, so never billed.
+              closesAckedThrough: state.closes.at(-1)?.no ?? 0,
               audit: log(
                 state.audit,
                 'settings.golive',
@@ -1273,6 +1280,8 @@ export const usePos = create<PosState>()(
             stockMoves: snapshot.stockMoves ?? [],
             // Closes describe the restored sales, not the ones they replace.
             closes: snapshot.closes ?? [],
+            // Report them again; the server skips any it already has.
+            closesAckedThrough: 0,
             audit: log(
               snapshot.audit ?? [],
               'data.import',
@@ -1384,6 +1393,8 @@ export const usePos = create<PosState>()(
         return close;
       },
 
+      recordCloseAck: (no) => set((s) => (no > s.closesAckedThrough ? { closesAckedThrough: no } : s)),
+
       clearPersistError: () => set({ persistError: null }),
     }),
     {
@@ -1410,6 +1421,7 @@ export const usePos = create<PosState>()(
         recovery: state.recovery,
         installId: state.installId,
         license: state.license,
+        closesAckedThrough: state.closesAckedThrough,
         activeBranchId: state.activeBranchId,
         lastBackupAt: state.lastBackupAt,
       }),

@@ -36,9 +36,11 @@ CREATE TABLE heartbeats (
   seen_at        INTEGER NOT NULL
 );
 
--- Daily closes as reported by each install: the technology fee's base.
--- `linked` is 0 when a close does not chain onto the one before it.
+-- Daily closes as reported: the technology fee's base. Keyed by the close's
+-- own id, so a close restored onto a replacement tablet is never counted
+-- twice. `linked` is 0 when a close does not chain onto the one before it.
 CREATE TABLE closes (
+  close_id          TEXT PRIMARY KEY,
   install_id        TEXT NOT NULL,
   no                INTEGER NOT NULL,
   license_id        TEXT NOT NULL,
@@ -49,10 +51,10 @@ CREATE TABLE closes (
   running_net_cents INTEGER NOT NULL,
   hash              TEXT NOT NULL,
   linked            INTEGER NOT NULL,
-  received_at       INTEGER NOT NULL,
-  PRIMARY KEY (install_id, no)
+  received_at       INTEGER NOT NULL
 );
 CREATE INDEX closes_license_date ON closes(license_id, date);
+CREATE INDEX closes_license_hash ON closes(license_id, hash);
 
 -- Technology fee payments, entered by hand (GCash / bank transfer).
 CREATE TABLE payments (

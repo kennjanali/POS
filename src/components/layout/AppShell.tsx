@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import { AutoBackup } from './AutoBackup';
+import { Heartbeat } from './Heartbeat';
 import { TabletBehaviour } from './TabletBehaviour';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
@@ -151,6 +152,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           locked till still has to save the day. */}
       <AutoBackup />
       <TabletBehaviour />
+      <Heartbeat />
       {/* Outside the gate: the keypad and the first-run screen raise toasts too. */}
       <Toaster />
     </ShellProvider>

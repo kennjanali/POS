@@ -60,7 +60,7 @@ const signClose = (c) => ({
     c.voidedEarlierCents, c.netCents, TENDERS.map((t) => c.tenders[t]), c.runningNetCents, c.prevHash])),
 });
 const makeClose = (no, net, prev) => signClose({
-  id: `close-${no}`, no, date: `2026-09-${String(20 + no).padStart(2, '0')}`, closedAt: 1_790_000_000_000 + no * 86_400_000,
+  id: crypto.randomUUID(), no, date: `2026-09-${String(20 + no).padStart(2, '0')}`, closedAt: 1_790_000_000_000 + no * 86_400_000,
   closedBy: null, orders: 10, grossCents: net, discountCents: 0, voidedEarlierCents: 0, netCents: net,
   tenders: { cash: net, gcash: 0, maya: 0, card: 0, bank: 0, other: 0 },
   runningNetCents: (prev?.runningNetCents ?? 0) + net, prevHash: prev?.hash ?? 'genesis',
@@ -88,6 +88,34 @@ const detail = await (await fetch(`${BASE}/admin/licenses/${fields.licenseId}`))
 const thisMonth = detail.match(/(₱[0-9,.]+) this month/)?.[1];
 check('the fee is 2% of reported net', thisMonth === '₱160.02', `this month: ${thisMonth}`);
 check('the edited close is flagged', (detail.match(/does not chain/g) ?? []).length === 1);
+
+// ── Replacement tablet: release, re-activate, restored closes resent ─────
+await fetch(`${BASE}/admin/licenses/${fields.licenseId}/release`, { method: 'POST', redirect: 'manual' });
+const newInstall = crypto.randomUUID();
+const newDevice = createHash('sha256').update('replacement-tablet').digest('hex');
+const moved = await (await post('/api/activate', { key, installId: newInstall, device: newDevice })).json();
+check('after release, the new tablet activates', typeof moved.license === 'string', JSON.stringify(moved));
+const c4 = makeClose(4, 200_000, c2); // continues the chain from the restored closes
+const resent = await (await post('/api/heartbeat', { license: moved.license, closes: [c1, c2, c4] })).json();
+const after = await (await fetch(`${BASE}/admin/licenses/${fields.licenseId}`)).text();
+const afterMonth = after.match(/(₱[0-9,.]+) this month/)?.[1];
+check('restored closes are not billed twice', afterMonth === '₱200.02', `this month: ${afterMonth} (was ₱160.02, plus 2% of ₱2,000)`);
+check('the chain carries on across tablets', (after.match(/does not chain/g) ?? []).length === 1);
+check('the new tablet is acknowledged through close 4', resent.ackThrough === 4, JSON.stringify(resent));
+
+// ── A live install's first close follows unreported training closes ──────
+const trainingKey = decodeURIComponent(new URL((await fetch(`${BASE}/admin/licenses`, {
+  method: 'POST', body: new URLSearchParams({ business_name: `Anchor ${Date.now()}`, updates_until: '2027-12-31' }), redirect: 'manual',
+})).headers.get('location'), BASE).searchParams.get('created'));
+const liveDevice = createHash('sha256').update('anchor-tablet').digest('hex');
+const live = await (await post('/api/activate', { key: trainingKey, installId: crypto.randomUUID(), device: liveDevice })).json();
+const t1 = makeClose(1, 50_000);
+const t2 = makeClose(2, 50_000, t1); // training closes: never sent
+const firstLive = makeClose(3, 120_000, t2);
+await post('/api/heartbeat', { license: live.license, closes: [firstLive] });
+const anchorId = JSON.parse(Buffer.from(live.license.split('.')[0], 'base64url').toString()).licenseId;
+const anchorPage = await (await fetch(`${BASE}/admin/licenses/${anchorId}`)).text();
+check('the first live close anchors the chain', !anchorPage.includes('does not chain') && anchorPage.includes('₱1,200.00'));
 
 console.log(failures ? `\n${failures} check(s) FAILED.` : '\nAll license-server checks passed.');
 process.exit(failures ? 1 : 0);

@@ -11,6 +11,13 @@
 import { Capacitor } from '@capacitor/core';
 import { Device } from '@capacitor/device';
 
+/** Android version and tablet model, for the vendor dashboard. */
+export async function deviceInfo(): Promise<{ os: string; model: string } | null> {
+  if (!Capacitor.isNativePlatform()) return null;
+  const info = await Device.getInfo();
+  return { os: `Android ${info.osVersion}`, model: `${info.manufacturer} ${info.model}` };
+}
+
 let cached: Promise<string | null> | null = null;
 
 export function deviceFingerprint(): Promise<string | null> {
