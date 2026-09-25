@@ -5,7 +5,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 
 import { APP_VERSION, LICENSE_SERVER_URL, PRODUCT_NAME } from '@/lib/brand';
 import { buildClose, inWindow, signClose } from '@/lib/closes';
-import { createBackupKey, type BackupKey } from '@/lib/cloudBackup';
+import { createBackupKey, sealBackup, uploadBackup, type BackupKey } from '@/lib/cloudBackup';
 import { buildDemoData } from '@/lib/demo';
 import { deviceFingerprint } from '@/lib/device';
 import { verifyLicense, type License } from '@/lib/license';
@@ -219,7 +219,8 @@ interface PosState {
   unbackedUp: () => number;
   /** Called once a backup file has actually been handed to the browser. */
   recordBackup: () => void;
-  recordCloudBackup: () => void;
+  /** Seal and upload a backup now. Licensed tablets only; needs internet. */
+  uploadCloudBackup: () => Promise<UserResult>;
   /** Sales settled or opened after `since` (all of them when null). */
   salesSince: (since: number | null) => number;
   /** Sales settled or voided since the last close — what the next close would cover. */
@@ -1379,7 +1380,20 @@ export const usePos = create<PosState>()(
         return orders.filter((o) => (o.closedAt ?? o.openedAt) > since).length;
       },
 
-      recordCloudBackup: () => set({ lastCloudBackupAt: Date.now() }),
+      uploadCloudBackup: async () => {
+        const s = get();
+        if (!s.license || !s.licensed) return { ok: false, error: 'Activate a license to back up to the cloud.' };
+        if (!s.backupKey) {
+          return { ok: false, error: 'Issue a new recovery code in Settings to turn on cloud backup.' };
+        }
+        try {
+          await uploadBackup(await sealBackup(s.exportSnapshot(), s.backupKey), s.license, s.backupKey.salt);
+        } catch (error) {
+          return { ok: false, error: error instanceof Error ? error.message : 'Cloud backup failed.' };
+        }
+        set({ lastCloudBackupAt: Date.now() });
+        return { ok: true };
+      },
 
       recordBackup: () =>
         set((state) => ({

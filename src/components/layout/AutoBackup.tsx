@@ -4,7 +4,6 @@ import { useEffect, useRef } from 'react';
 
 import { toast } from '@/components/ui/Toast';
 import { backupFileName, endOfDayDue, saveBackup } from '@/lib/backup';
-import { sealBackup, uploadBackup } from '@/lib/cloudBackup';
 import { SAVE_LOCATION } from '@/lib/files';
 import { usePos } from '@/store/usePos';
 
@@ -78,12 +77,7 @@ export function AutoBackup() {
  */
 async function uploadIfDue() {
   const s = usePos.getState();
-  if (!s.license || !s.licensed || !s.backupKey || !navigator.onLine) return;
+  if (!s.licensed || !s.backupKey || !navigator.onLine) return;
   if (!endOfDayDue(s.lastCloudBackupAt, s.salesSince(s.lastCloudBackupAt))) return;
-  try {
-    await uploadBackup(await sealBackup(s.exportSnapshot(), s.backupKey), s.license, s.backupKey.salt);
-    s.recordCloudBackup();
-  } catch {
-    /* retried on the next tick while it is still due */
-  }
+  await s.uploadCloudBackup();
 }

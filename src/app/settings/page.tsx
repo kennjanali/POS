@@ -254,6 +254,7 @@ export default function SettingsPage() {
               Restore
             </Button>
           </div>
+          {licensed && <CloudBackupNow />}
           <input
             ref={fileRef}
             type="file"
@@ -441,5 +442,34 @@ function Section({
       </h2>
       <div className="flex flex-col gap-3">{children}</div>
     </section>
+  );
+}
+
+/** The nightly cloud copy, on demand — say, before a tablet goes in for repair. */
+function CloudBackupNow() {
+  const lastCloudBackupAt = usePos((s) => s.lastCloudBackupAt);
+  const upload = usePos((s) => s.uploadCloudBackup);
+  const [busy, setBusy] = useState(false);
+
+  async function run() {
+    setBusy(true);
+    const result = await upload();
+    setBusy(false);
+    if (result.ok) toast('Encrypted backup saved to the cloud.', 'success');
+    else toast(result.error, 'danger');
+  }
+
+  return (
+    <div className="flex flex-col gap-2 border-t border-line pt-3">
+      <p className="text-[12px] font-semibold">
+        {lastCloudBackupAt
+          ? `Last cloud backup: ${fmtDate(lastCloudBackupAt)}`
+          : 'Nothing backed up to the cloud yet. It happens by itself each night.'}
+      </p>
+      <Button variant="secondary" disabled={busy} onClick={() => void run()}>
+        <Upload size={14} aria-hidden />
+        {busy ? 'Backing up…' : 'Back up to the cloud now'}
+      </Button>
+    </div>
   );
 }
