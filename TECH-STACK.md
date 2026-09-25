@@ -27,7 +27,7 @@ dashboard.
 │  Android tablet — POS@034 app (Capacitor 8)                               │
 │   ├─ UI: React 19 + TypeScript + Tailwind 4 (Next.js static export)       │
 │   ├─ State: zustand (all mutations)                                       │
-│   ├─ Platform seams (src/platform/*): storage · printing · backup · device│
+│   ├─ Platform seams (src/lib): storage · printer · files                  │
 │   │    Android: SQLite · Bluetooth ESC/POS · encrypted backup · ANDROID_ID│
 │   │    Web demo: IndexedDB · browser print · file download                │
 │   └─ Live updater (self-hosted) for the web layer                         │
@@ -58,7 +58,7 @@ dashboard.
 | Icons / classes | **lucide-react**, **clsx** | Keep | In place | — |
 | Money / tax | `src/lib/money.ts`, `src/lib/tax.ts` | Keep, unchanged | Correct and tested | — |
 | Auth | Local 6-digit PIN, PBKDF2 via Web Crypto | Keep, **rework** | Right model per store; keypad already touch-first. Rework: first-run wizard replaces the shipped `000000`, add a recovery code | Online accounts / OAuth |
-| Platform seams | **`src/platform/*`**: storage, printing, backup, device ID, file export — one interface each, web + Android implementations | **Add** | Components never call Capacitor directly; the demo and the app share every screen | Sprinkling `Capacitor.isNativePlatform()` through components |
+| Platform seams | **`src/lib/storage.ts`** (SQLite / IndexedDB), **`printer.ts`** (Bluetooth / browser print), **`files.ts`** (Documents folder / download) — one interface each | **Done** (Phase 2) | The demo and the app share every screen. Device ID comes with licensing in Phase 3 | Sprinkling `Capacitor.isNativePlatform()` through components |
 | License verify | **`@noble/curves`** (Ed25519) | **Add** | Audited, tiny, no native code | Hand-rolled crypto |
 | Backup encryption | **Web Crypto**: PBKDF2 (recovery code) → AES-GCM | **Add** | Built in; you store ciphertext you can't read | — |
 
@@ -70,14 +70,15 @@ dashboard.
 | Application ID | `ph.<you>.pos034` | **Add** | **Frozen forever** |
 | Web origin | `androidScheme: "https"`, `hostname: "localhost"` (defaults) | **Add** | **Frozen forever**: decides where WebView storage lives; secure context for `crypto.subtle` |
 | Database | **`@capacitor-community/sqlite`** (v8), WAL | **Add** | Android storage implementation; SQLCipher encryption available if needed |
-| Printing | **`capacitor-thermal-printer`** (Bluetooth ESC/POS), fallback `@capacitor-community/bluetooth-le` + ESC/POS encoder | **Add** | Test against the exact printers you recommend; 58 mm and 80 mm layouts |
+| Printing | **Own Java plugin** `BluetoothPrinterPlugin` (Bluetooth Classic serial profile) + ESC/POS encoding in `printer.ts` | **Done** (Phase 2) | No maintained Capacitor 8 plugin speaks Bluetooth Classic, which cheap printers use (`capacitor-thermal-printer` is Capacitor 7-only). 58 mm (32 cols) and 80 mm (48 cols). Still to test on real printers |
 | Device / app info | `@capacitor/device` (`ANDROID_ID`), `@capacitor/app` | **Add** | License binding, heartbeat, pause/resume lock |
-| Files / sharing | `@capacitor/filesystem`, `@capacitor/share` | **Add** | Manual backup export to Drive / USB / email |
-| Tablet behaviour | `@capacitor/screen-orientation`, a keep-awake plugin, status bar / immersive | **Add** | Landscape, screen stays on while signed in |
+| Files / sharing | `@capacitor/filesystem`, `@capacitor/share` | **Done** (Phase 2) | Backups and archives go to public Documents/POS034 (survives uninstall); Settings backup opens the share sheet |
+| Tablet behaviour | `@capacitor-community/keep-awake`, `@capacitor/app` | **Done** (Phase 2) | Screen on while signed in, back button never exits, auto-lock after 5 min away. No orientation lock or immersive mode: both orientations work, and the status bar shows time and battery |
 | Live updates | **`@capgo/capacitor-updater`**, self-hosted | **Add** | Web-layer updates from R2 via the Worker; auto-rollback on a bad bundle |
 | APK updates | Download from R2 + Android installer intent (`REQUEST_INSTALL_PACKAGES`) | **Add** | Only when native parts change |
 | Min Android | **10+** | Decided | Small test matrix |
-| Signing | Android keystore (APK signing key) | **Add** | Mandatory, free. **Back up in two offline places**: losing it = no updates ever again |
+| Build JDK | **Eclipse Temurin 21** (`JAVA_HOME`) | **Done** (Phase 2) | Android Studio bundles JDK 25, which Gradle 8.14 cannot run |
+| Signing | Android keystore `~/.pos034/pos034-release.jks` + `keystore.properties` (outside the repo) | **Done** (Phase 2) | **Back up both files in two offline places**: losing them = no updates ever again. SHA-256 `09b8f720…61f10b` |
 | Developer verification | Android Developer Console (limited-distribution account) | **Add** before 2027 | Google's rule reaches all countries in 2027; unregistered sideloaded apps stop installing |
 | Distribution | APK installed by you | Decided | Play Store later, if ever |
 
@@ -140,7 +141,6 @@ dashboard.
 
 ```
 /                      POS@034 web app (Next.js static export) — src/, scripts/ as today
-/src/platform/         storage · printing · backup · device seams (web + android implementations)
 /android/              Capacitor-generated Android project (committed)
 /capacitor.config.ts   app ID, webDir, frozen scheme/hostname
 /license-server/       Cloudflare Worker: Hono + D1 + R2 + vendor dashboard
@@ -158,3 +158,4 @@ TECH-STACK.md          this file
 |---|---|
 | 2026-09-25 | First version: Tauri 2 desktop (Windows), SQLite target, Cloudflare Workers + Hono + D1 licensing, Astro landing page, manual GCash/bank payments |
 | 2026-09-25 | **Target switched to Android tablet + Bluetooth printer.** Tauri 2 → Capacitor 8; Rust dropped; SQLite via `@capacitor-community/sqlite` from the first Android build (no IndexedDB migration); Bluetooth ESC/POS printing made required; encrypted cloud backup to R2 added; self-hosted live updates; APK signing + Android developer verification replace Windows code signing; platform seams added so the web demo and the app share every screen |
+| 2026-09-25 | Phase 2 build: own Bluetooth Classic printer plugin instead of `capacitor-thermal-printer` (Capacitor 7-only); seams live in `src/lib` (`storage`, `printer`, `files`); JDK 21 for builds; no orientation lock |
