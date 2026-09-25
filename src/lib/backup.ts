@@ -10,6 +10,7 @@
  */
 
 import { PRODUCT_SLUG } from './brand';
+import { saveJsonFile } from './files';
 import { businessDate } from './format';
 import type { DataSnapshot } from './types';
 
@@ -18,19 +19,12 @@ export function backupFileName(at: number = Date.now()): string {
 }
 
 /**
- * Hand the file to the browser. Returns false if the browser refused, so the
- * caller never records a backup that did not actually happen.
+ * Save today's backup file. Resolves false if it did not land, so the caller
+ * never records a backup that did not actually happen.
  */
-export function downloadBackup(snapshot: DataSnapshot): boolean {
+export async function saveBackup(snapshot: DataSnapshot): Promise<boolean> {
   try {
-    const blob = new Blob([JSON.stringify(snapshot)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = backupFileName();
-    link.click();
-    // Revoking in the same tick can cancel the download in some browsers.
-    window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    await saveJsonFile(backupFileName(), snapshot);
     return true;
   } catch {
     return false;

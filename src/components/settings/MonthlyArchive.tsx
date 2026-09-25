@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { toast } from '@/components/ui/Toast';
 import { cn } from '@/components/ui/cn';
+import { SAVE_LOCATION, saveJsonFile } from '@/lib/files';
 import { peso, fmtDate } from '@/lib/format';
 import {
   archivableMonths,
@@ -40,18 +41,15 @@ export function MonthlyArchive() {
   const [exported, setExported] = useState<Set<string>>(new Set());
   const [confirmPrune, setConfirmPrune] = useState(false);
 
-  function exportMonth(month: string) {
-    const archive = build(month);
-    const blob = new Blob([JSON.stringify(archive)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = archiveFileName(month);
-    link.click();
-    // Revoking in the same tick can cancel the download in some browsers.
-    window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  async function exportMonth(month: string) {
+    try {
+      await saveJsonFile(archiveFileName(month), build(month));
+    } catch {
+      toast('The archive could not be saved. Check storage and download settings.', 'danger');
+      return;
+    }
     setExported((prev) => new Set(prev).add(month));
-    toast(`Saved ${archiveFileName(month)}`, 'success');
+    toast(`Saved ${archiveFileName(month)} to ${SAVE_LOCATION}`, 'success');
   }
 
   function openArchive(file: File) {
@@ -117,7 +115,7 @@ export function MonthlyArchive() {
                   Saved
                 </span>
               )}
-              <Button size="sm" variant="secondary" onClick={() => exportMonth(month)}>
+              <Button size="sm" variant="secondary" onClick={() => void exportMonth(month)}>
                 <Download size={13} aria-hidden />
                 {exported.has(month) ? 'Save again' : 'Save file'}
               </Button>

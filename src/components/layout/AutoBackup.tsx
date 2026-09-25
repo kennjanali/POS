@@ -3,7 +3,8 @@
 import { useEffect, useRef } from 'react';
 
 import { toast } from '@/components/ui/Toast';
-import { autoBackupDue, backupFileName, downloadBackup } from '@/lib/backup';
+import { autoBackupDue, backupFileName, saveBackup } from '@/lib/backup';
+import { SAVE_LOCATION } from '@/lib/files';
 import { usePos } from '@/store/usePos';
 
 /** How often the clock is checked. A minute is precise enough for 23:59. */
@@ -23,26 +24,26 @@ const TICK_MS = 60_000;
  */
 export function AutoBackup() {
   const hydrated = usePos((s) => s.hydrated);
-  // A download in flight must not be started twice by the next tick.
+  // A save in flight must not be started twice by the next tick.
   const running = useRef(false);
 
   useEffect(() => {
     if (!hydrated) return;
 
-    const attempt = () => {
+    const attempt = async () => {
       if (running.current) return;
       const state = usePos.getState();
       if (!autoBackupDue(state.lastBackupAt, state.unbackedUp())) return;
 
       running.current = true;
       try {
-        if (downloadBackup(state.exportSnapshot())) {
+        if (await saveBackup(state.exportSnapshot())) {
           state.recordBackup();
-          toast(`Saved ${backupFileName()}`, 'success');
+          toast(`Saved ${backupFileName()} to ${SAVE_LOCATION}`, 'success');
         } else {
-          // Chrome blocks unattended downloads in some configurations. Saying
-          // so is the whole point — a backup that silently never happened is
-          // the failure this feature exists to prevent.
+          // A blocked download or a refused permission. Saying so is the whole
+          // point — a backup that silently never happened is the failure this
+          // feature exists to prevent.
           toast(
             'Could not save the daily backup automatically. Open Settings and save it.',
             'danger',
@@ -53,8 +54,8 @@ export function AutoBackup() {
       }
     };
 
-    attempt();
-    const timer = window.setInterval(attempt, TICK_MS);
+    void attempt();
+    const timer = window.setInterval(() => void attempt(), TICK_MS);
     return () => window.clearInterval(timer);
   }, [hydrated]);
 

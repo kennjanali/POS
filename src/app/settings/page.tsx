@@ -15,7 +15,8 @@ import { toast } from '@/components/ui/Toast';
 import { computeBill } from '@/lib/tax';
 import { cents } from '@/lib/money';
 import { peso, fmtDate } from '@/lib/format';
-import { downloadBackup } from '@/lib/backup';
+import { backupFileName, saveBackup } from '@/lib/backup';
+import { canShareFiles, SAVE_LOCATION, shareSavedFile } from '@/lib/files';
 import type { DataSnapshot } from '@/lib/types';
 import { usePos } from '@/store/usePos';
 
@@ -41,14 +42,19 @@ export default function SettingsPage() {
   const plain = computeBill(sample, settings, { kind: 'none' });
   const senior = computeBill(sample, settings, { kind: 'senior' });
 
-  function download() {
-    if (downloadBackup(exportSnapshot())) {
-      // Recorded here too, so saving from Settings clears the reminder the
-      // same way the bar's own button does.
-      recordBackup();
-      toast('Backup downloaded', 'success');
-    } else {
-      toast('The browser blocked the download. Check its download settings.', 'danger');
+  async function download() {
+    if (!(await saveBackup(exportSnapshot()))) {
+      toast('The backup could not be saved. Check storage and download settings.', 'danger');
+      return;
+    }
+    // Recorded here too, so saving from Settings clears the reminder the
+    // same way the automatic backup does.
+    recordBackup();
+    toast(`Backup saved to ${SAVE_LOCATION}`, 'success');
+    // On the tablet, hand it straight to Drive or Messenger: a file on the
+    // same device is not yet a copy that survives losing it.
+    if (canShareFiles()) {
+      await shareSavedFile(backupFileName()).catch(() => undefined);
     }
   }
 
@@ -237,9 +243,9 @@ export default function SettingsPage() {
               : 'No backup has ever been saved from this device.'}
           </p>
           <div className="flex gap-2">
-            <Button variant="secondary" fullWidth onClick={download}>
+            <Button variant="secondary" fullWidth onClick={() => void download()}>
               <Download size={14} aria-hidden />
-              Download backup
+              {canShareFiles() ? 'Save and share backup' : 'Download backup'}
             </Button>
             <Button variant="secondary" fullWidth onClick={() => fileRef.current?.click()}>
               <Upload size={14} aria-hidden />
