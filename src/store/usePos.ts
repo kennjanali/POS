@@ -3,6 +3,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 
+import { PRODUCT_NAME } from '@/lib/brand';
 import { buildDemoData } from '@/lib/demo';
 import { hashPin, isValidPin, verifyPin, PIN_LENGTH } from '@/lib/crypto';
 import { ROWS, idbStorage, onPersistWrite, readRows, writeRows } from '@/lib/idb';
@@ -288,7 +289,7 @@ const SNAPSHOT_VERSION = 7;
  */
 function describeBadSnapshot(snapshot: DataSnapshot): string | null {
   if (!snapshot || typeof snapshot !== 'object') {
-    return 'That file is not a KRAMGEN backup.';
+    return `That file is not a ${PRODUCT_NAME} backup.`;
   }
   if (snapshot.version !== SNAPSHOT_VERSION) {
     return (
@@ -1151,7 +1152,8 @@ export const usePos = create<PosState>()(
       clearPersistError: () => set({ persistError: null }),
     }),
     {
-      name: 'kramgen-pos-v7',
+      // Frozen, like DB_NAME in idb.ts: a new name is an empty till.
+      name: 'pos034-v7',
       version: 7,
       storage: createJSONStorage(() => idbStorage),
       // `orders` and `stockMoves` are deliberately absent: they go to their own

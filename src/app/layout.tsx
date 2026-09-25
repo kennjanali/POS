@@ -1,10 +1,11 @@
 import type { Metadata, Viewport } from 'next';
 import { AppShell } from '@/components/layout/AppShell';
+import { PRODUCT_NAME } from '@/lib/brand';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'KRAMGEN POS',
-  description: 'Offline-first point of sale for Philippine carinderias.',
+  title: PRODUCT_NAME,
+  description: 'Offline-first point of sale for Philippine restaurants.',
 };
 
 export const viewport: Viewport = {

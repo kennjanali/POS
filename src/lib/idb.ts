@@ -10,7 +10,8 @@
  * UI through the store's `persistError` flag.
  */
 
-const DB_NAME = 'kramgen';
+/** Frozen: renaming this hides every sale already on a customer's device. */
+const DB_NAME = 'pos034';
 /** v2 added the per-row `orders` and `stockMoves` stores. See ROWS below. */
 const DB_VERSION = 2;
 const STORE = 'kv';

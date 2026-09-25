@@ -6,6 +6,7 @@ import { AlertTriangle, Lock, WifiOff } from 'lucide-react';
 
 import { usePos } from '@/store/usePos';
 import { useAuth } from '@/store/useAuth';
+import { PRODUCT_NAME } from '@/lib/brand';
 import { ROLE_LABELS } from '@/lib/permissions';
 
 const TITLES: Record<string, string> = {
@@ -53,7 +54,7 @@ export function Topbar() {
     };
   }, []);
 
-  const title = TITLES[pathname.replace(/\/$/, '') || '/'] ?? 'KRAMGEN';
+  const title = TITLES[pathname.replace(/\/$/, '') || '/'] ?? PRODUCT_NAME;
   // A closed branch stays out of the switcher; its history is still readable
   // from Orders, but nothing new can be rung up against it.
   const open = branches.filter((b) => b.active);

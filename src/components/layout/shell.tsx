@@ -16,8 +16,8 @@ interface ShellValue {
 
 const ShellContext = createContext<ShellValue | null>(null);
 
-const THEME_KEY = 'kramgen.theme';
-const RAIL_KEY = 'kramgen.rail';
+const THEME_KEY = 'pos034.theme';
+const RAIL_KEY = 'pos034.rail';
 
 export function ShellProvider({ children }: { children: React.ReactNode }) {
   const [theme, setTheme] = useState<Theme>('light');

@@ -34,7 +34,7 @@ function emit(name, file) {
   writeFileSync(join(dir, `${name}.js`), js);
 }
 
-for (const n of ['money', 'tax', 'format', 'id', 'seed', 'demo', 'crypto', 'idb', 'permissions', 'types', 'archive', 'backup'])
+for (const n of ['brand', 'money', 'tax', 'format', 'id', 'seed', 'demo', 'crypto', 'idb', 'permissions', 'types', 'archive', 'backup'])
   emit(n, `src/lib/${n}.ts`);
 for (const n of ['useAuth', 'usePos']) emit(n, `src/store/${n}.ts`);
 
@@ -357,7 +357,7 @@ console.log('\n— Daily backup: the device is not the only copy —');
   check('a fresh install is due a backup', backupIsDue(null) === true);
   check('backed up today is not due', backupIsDue(Date.now()) === false);
   check('backed up yesterday IS due', backupIsDue(Date.now() - DAY) === true);
-  check('the file is named for the day', /^kramgen-backup-\d{4}-\d{2}-\d{2}\.json$/.test(backupFileName()),
+  check('the file is named for the day', /^pos034-backup-\d{4}-\d{2}-\d{2}\.json$/.test(backupFileName()),
     backupFileName());
 
   // Nothing sold yet, so nothing is at risk even though a backup is due.

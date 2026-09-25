@@ -9,11 +9,12 @@
  * folder and the copy leaves the building by itself.
  */
 
+import { PRODUCT_SLUG } from './brand';
 import { businessDate } from './format';
 import type { DataSnapshot } from './types';
 
 export function backupFileName(at: number = Date.now()): string {
-  return `kramgen-backup-${businessDate(at)}.json`;
+  return `${PRODUCT_SLUG}-backup-${businessDate(at)}.json`;
 }
 
 /**

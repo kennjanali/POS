@@ -66,7 +66,7 @@ export function FirstRunSetup() {
           <ShoppingCart size={20} className="text-white" aria-hidden />
         </span>
         <p className="text-[22px] leading-none font-extrabold tracking-tight text-white">
-          KRAM<span className="text-accent">GEN</span>
+          POS<span className="text-accent">@034</span>
         </p>
         <p className="mt-1.5 text-[11px] tracking-[2px] text-ink-3 uppercase">First run</p>
 

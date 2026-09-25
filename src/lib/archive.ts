@@ -12,6 +12,7 @@
  * renders correctly even if the menu has been rewritten since.
  */
 
+import { PRODUCT_SLUG } from './brand';
 import { businessDate } from './format';
 import { addC, cents, type Centavos } from './money';
 import {
@@ -79,9 +80,9 @@ export function monthLabel(month: string): string {
   return date.toLocaleDateString('en-PH', { month: 'long', year: 'numeric' });
 }
 
-/** `kramgen-2026-09.json` — sorts chronologically in a folder listing. */
+/** `pos034-2026-09.json` — sorts chronologically in a folder listing. */
 export function archiveFileName(month: string): string {
-  return `kramgen-${month}.json`;
+  return `${PRODUCT_SLUG}-${month}.json`;
 }
 
 /**

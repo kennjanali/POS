@@ -38,7 +38,7 @@ export default function GlobalError({
               margin: '0 0 6px',
             }}
           >
-            KRAM<span style={{ color: '#ff5c1a' }}>GEN</span>
+            POS<span style={{ color: '#ff5c1a' }}>@034</span>
           </p>
           <h1 style={{ fontSize: 15, fontWeight: 700, margin: '0 0 10px' }}>
             Something broke on this screen

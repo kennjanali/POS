@@ -19,8 +19,8 @@ import type { Role, User } from '@/lib/types';
 export const MAX_ATTEMPTS = 5;
 export const LOCK_MS = 30_000;
 
-const SESSION_KEY = 'kramgen.session';
-const LOCKOUT_KEY = 'kramgen.lockout';
+const SESSION_KEY = 'pos034.session';
+const LOCKOUT_KEY = 'pos034.lockout';
 
 export interface Session {
   userId: string;
