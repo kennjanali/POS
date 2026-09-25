@@ -507,11 +507,14 @@ Restore (do by hand); the Vitest port, proposed for Phase 5.
 - [ ] Port `scripts/verify-*.mjs` into Vitest; Playwright flows at tablet viewport
 - **Verify on the test tablet:** opens in airplane mode; kill the app mid-sale 20× → no lost closed sale; receipt prints on each tested printer; printer off/on mid-shift reconnects; reboot → data intact; reinstall-over-top with the same key → data intact.
 
-### Phase 3 — Licensing, cloud backup, vendor dashboard (2–3 weeks)
-- [ ] Worker + D1; Ed25519 keypair; online + QR offline activation; training mode gated on license
-- [ ] 8.7 layer 2: encrypted cloud backup to R2 + restore-on-new-tablet flow
-- [ ] Daily close (§10): end-of-day summary, running total that only goes up, each day hash-chained to the last; the heartbeat's daily totals come from it
-- [ ] Vendor dashboard "My Customers" + heartbeat (§7a); KRAMGEN as the first row
+### Phase 3 — Licensing, cloud backup, vendor dashboard — **built and tested locally 2026-09-25** (branch `phase-3-licensing`)
+- [x] Worker + D1 (`license-server/`); Ed25519 keypair (private key in `~/.pos034/`, becomes a Worker secret); online activation; training mode gated on license. QR offline activation deferred until a customer needs it
+- [x] 8.7 layer 2: encrypted cloud backup to R2 + restore-on-new-tablet flow in the setup wizard
+- [x] Daily close (§10): windows follow the clock `[previous close, now)`, voids of closed days carried forward, hash-chained; auto at 23:59 / next launch, manual + printable on the Dashboard
+- [x] Vendor dashboard "My Customers" + heartbeat (§7a); fees by month, payments, release/revoke/extend
+- [x] Fee rules: training closes never billed; closes deduplicated by id across replacement tablets; first reported close anchors the chain
+- Verified: app checks (license forgery, daily close chain, seal/open) and 23 server checks against a local Worker (activation, second-tablet refusal, heartbeat, forged licence, doctored close flagged, no double billing after a tablet swap, backup round trip).
+- [ ] Deploy: enable R2, create the D1 database, set the signing-key secret, turn on Cloudflare Access for `/admin`, then test end to end on the emulator
 - **Verify:** tampered license rejected; license from tablet A rejected on tablet B; factory-reset tablet → re-activate + restore works; server-side the backup is unreadable ciphertext; wrong recovery code can't decrypt.
 
 ### ~~Phase 4 — BIR features~~ — dropped 2026-09-25
