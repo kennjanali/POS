@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import { AutoBackup } from './AutoBackup';
+import { TabletBehaviour } from './TabletBehaviour';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
 import { ShellProvider, useShell } from './shell';
@@ -149,6 +150,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {/* Outside the gate: closing time is when the till is locked, and a
           locked till still has to save the day. */}
       <AutoBackup />
+      <TabletBehaviour />
       {/* Outside the gate: the keypad and the first-run screen raise toasts too. */}
       <Toaster />
     </ShellProvider>
