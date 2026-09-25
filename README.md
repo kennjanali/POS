@@ -3,9 +3,8 @@
 Offline-first point of sale for small Philippine restaurants, sold and installed one store at
 a time on an Android tablet with a Bluetooth receipt printer.
 
-**Status: Phase 1 of the rework is done** (see [REWORK-PLAN.md](REWORK-PLAN.md)). The app
-runs in a browser today; the Android app shell, licensing and BIR features come in later
-phases. [TECH-STACK.md](TECH-STACK.md) lists what it is built with.
+**Status: Phases 1 and 2 of the rework are done** (see [REWORK-PLAN.md](REWORK-PLAN.md)). The app
+runs in a browser and as an Android app; licensing and the vendor dashboard come next. [TECH-STACK.md](TECH-STACK.md) lists what it is built with.
 
 ## Run it
 
@@ -21,7 +20,7 @@ No backend. All data lives on the device (IndexedDB).
 ## What it does now
 
 - **Setup wizard on first launch.** No account ships with the app. The wizard asks for the
-  business name, address, TIN, BIR branch code and VAT status, creates the owner's
+  business name, address and VAT status, creates the owner's
   superadmin account and 6-digit PIN, and shows a **recovery code** once. A sample
   carinderia menu is optional.
 - **Recovery code.** "Forgot PIN?" on the lock screen resets a superadmin's PIN with it.

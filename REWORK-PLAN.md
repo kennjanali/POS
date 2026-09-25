@@ -18,7 +18,7 @@ tablet = one install = one store.
 1. **Keep the architecture you already have: one local database per install.** The app is
    already single-tenant by construction (local storage, no server). You do not need tenant
    IDs, a shared cloud DB, or a user-account backend. What you are missing is the *product
-   shell* around it: an Android app, licensing, updates, printing, and BIR supplier features.
+   shell* around it: an Android app, licensing, updates and printing.
 2. **Wrap the existing static export in a Capacitor 8 Android app.** Same React code, running
    inside a native Android app with SQLite storage, Bluetooth receipt printing, and its own
    data sandbox — no browser profile to clear, opens with no internet.
@@ -32,9 +32,9 @@ tablet = one install = one store.
    read it. New tablet → activate → recovery code → sales are back.
 6. **Stack ([TECH-STACK.md](TECH-STACK.md)): don't rewrite.** Keep React + TypeScript + Next
    static export + zustand; add Capacitor (Android), SQLite, and Cloudflare Workers + D1.
-7. **BIR is the real work.** Selling to other businesses makes you a POS *supplier*: X/Z
-   readings, non-resettable grand total, e-journal, MIN/serial/AC number on the receipt, and
-   supplier enrolment. These are not in the code today (see §2, finding 4).
+7. **A sales tracker, not a BIR machine (§10).** POS@034 keeps accurate sales, inventory and
+   staff records and prints order slips marked "not an official receipt". BIR invoicing and
+   registration stay with the business owner.
 
 ---
 
@@ -180,10 +180,9 @@ extra.
 1. **Drop the shipped `000000` owner; use the first-run wizard.** A product you sell should not
    ship every customer the same published credential. Revive `FirstRunSetup.tsx` and extend it
    into a setup wizard:
-   1. Business name, address, TIN
-   2. Branch code (BIR), VAT-registered yes/no, prices include VAT yes/no
-   3. BIR machine details: MIN, tablet serial no., Acknowledgement Certificate no. (optional at
-      setup, required before training mode can be turned off)
+   1. Business name, address
+   2. VAT-registered yes/no, prices include VAT yes/no (drives the Senior/PWD maths)
+   3. Sample menu yes/no
    4. Owner name + PIN (entered twice)
    5. Pair the Bluetooth printer + test print
    6. **Recovery code** shown once — print it on the receipt printer and keep it safe (see 2)
@@ -250,14 +249,13 @@ extra.
     calendar-year-to-date to **current month** ([dashboard/page.tsx:20](src/app/dashboard/page.tsx#L20));
     update the fee check in `verify-safeguards.mjs` to match.
   - **Tampering:** the fee base comes from data on the store's own tablet, so it can't be made
-    tamper-proof offline. What makes it hard to fake: the non-resettable grand total and the
-    hash-chained Z-readings (Phase 4 BIR features) — the daily totals you receive must add up
-    to the grand-total movement, and a gap or rewind shows in My Customers.
+    tamper-proof offline. What makes it hard to fake: the daily close (§10, Phase 3) — a
+    running total that only goes up, each day chained to the previous one. The daily totals you
+    receive must add up to its movement, and a gap or rewind shows in My Customers.
 - **Never block access to existing data.** An expired or missing license must still allow
-  sign-in, viewing orders, reports, Z-readings and backups. What it restricts:
+  sign-in, viewing orders, reports, daily closes and backups. What it restricts:
   - **No license / trial:** app runs in training mode (already exists: watermark, demo data
-    allowed, can't be registered with BIR). Training mode can only be turned off when a valid
-    license is present.
+    allowed). Training mode can only be turned off when a valid license is present.
   - **Maintenance expired:** app keeps working; the updater refuses newer versions.
 
 ### License file
@@ -265,7 +263,7 @@ JSON payload + Ed25519 signature, e.g.:
 ```json
 {
   "licenseId": "LIC-2026-0042",
-  "licensee": { "businessName": "…", "tin": "…" },
+  "licensee": { "businessName": "…", "city": "…" },
   "installId": "0199…",               // from 6.6
   "device": "sha256(ANDROID_ID + appId)",
   "plan": "standard",
@@ -347,7 +345,7 @@ detail page: license history, activations/tablets, version history, heartbeat lo
 totals, invoices + payments (GCash/bank ref no.), gap warnings, support notes.
 
 ### Where the data comes from
-- **Activation** (§7) creates the row: licenseId, business name, TIN, city, installId, device hash.
+- **Activation** (§7) creates the row: licenseId, business name, city, installId, device hash.
 - **Heartbeat:** the tablet sends a small ping at launch and once a day *when online* (fails
   silently offline, retried next time):
   ```json
@@ -397,7 +395,7 @@ totals, invoices + payments (GCash/bank ref no.), gap warnings, support notes.
 
 Two layers:
 
-1. **Web-layer live updates** (most releases: screens, logic, reports, tax, BIR changes):
+1. **Web-layer live updates** (most releases: screens, logic, reports, discount-rule changes):
    `@capgo/capacitor-updater`, **self-hosted**. The bundle zip + checksum sits in R2 and is
    served through the license Worker, so maintenance entitlement is enforced. Automatic
    rollback if a new bundle fails to start.
@@ -407,7 +405,7 @@ Two layers:
 
 Rules:
 - **Never update mid-shift.** Check at launch; apply only when there are no open orders, or at
-  close after the Z-reading. Take a backup first.
+  close after the daily close. Take a backup first.
 - Channels: `stable` for customers, `beta` for KRAMGEN (customer #1 runs every release for a
   week first).
 - CI: GitHub Actions on tag `v*`: `npm ci` → `npm run check` → `next build` → `cap sync` →
@@ -420,37 +418,27 @@ Rules:
 
 ---
 
-## 10. BIR — what selling it adds
+## 10. Scope: a sales tracker, not a BIR machine (decided 2026-09-25)
 
-> Confirm with a PH tax practitioner / your RDO. The research below is from public summaries,
-> not from reading the regulations in full.
+POS@034 keeps **accurate sales, inventory and staff records**. It is **not** a BIR-registered
+POS and does not issue receipts or invoices. BIR invoicing stays with the business owner — for
+example the booklet sales invoices many small restaurants already use.
 
-**Two separate obligations:**
-- **You (supplier/developer):** enrol in BIR's eACCReg system and file the sworn declaration
-  (RMC 5-2021 Annex "A", documents per RR 11-2004 §5) for the POS software.
-- **Each customer:** registers *their* machine (the tablet) at *their* RDO and receives an
-  Acknowledgement Certificate (the Permit to Use was removed under RMC 5-2021). You typically
-  assist — make it part of your install service. Confirm with the RDO that a tablet + Bluetooth
-  printer is accepted as the registered machine and which serial goes on the form.
+What that means in the product:
+- The printout is an **order slip**, always marked *"This is not an official receipt or
+  invoice"*. No TIN, no BIR branch code, no MIN or AC number anywhere.
+- No BIR supplier enrolment (eACCReg), no machine registration at installs, no BIR reports.
+  The former Phase 4 is dropped.
+- **Kept, because accurate data needs them:** void-never-delete, gapless order numbers, who did
+  what on every sale, totals frozen at payment, backups — and the Senior/PWD discount rules
+  (RA 9994 / RA 10754 / RR 7-2010), which bind every restaurant regardless of its POS.
+- **A daily close** (Phase 3): an end-of-day summary with a running total that only goes up and
+  each day chained to the previous one. It serves the owner's own end-of-day count and is what
+  the daily fee totals are checked against — not a BIR Z-reading.
+- Marketing must never say "BIR-ready" or "BIR-accredited".
 
-**Software features to add** (RMO 9-2021 standard functionalities + invoicing rules RR 7-2024 /
-RR 6-2022; e-invoicing RR 11-2025 as extended by RR 26-2025):
-
-| Feature | Today | Add |
-|---|---|---|
-| Sequential invoice no., no gaps/reuse/override | Yes (per branch) | Keep; prefix with branch code + terminal no. |
-| Non-resettable accumulating grand total | **No** | Stored grand total, only increases, survives "clear sales" and restore; shown on every Z-read |
-| X-reading (mid-shift, non-resetting) | **No** | New report, printable on the Bluetooth printer |
-| Z-reading (end of day, increments reset counter) | **No** | New report + counter; ties into the daily backup |
-| Tamper evidence | Audit log only | Hash-chain each Z-read to the previous one |
-| E-journal (copy of every receipt) | Orders retained | Exportable e-journal file per day/month; retention 10 yrs guidance (cloud backup helps here) |
-| Receipt fields | Missing (old AUDIT item 7) | MIN, machine serial, AC number, supplier name/address/TIN/accreditation no., "Sales Invoice" title per RR 7-2024 |
-| Backend sales reports (sales book, SC/PWD book) | Partial (dashboard) | BIR-format sales summary, SC/PWD discount book |
-| No training mode once registered | Yes | Tie to license + AC number present |
-| EIS e-invoice transmission | No | Only for *covered* taxpayers, deadline 31 Dec 2026 per RR 26-2025. Most carinderias aren't covered — defer, but keep order data serialisable |
-
-Competitors in this segment sell on "BIR-ready". Do not claim "BIR-accredited" anywhere until
-the supplier enrolment is done.
+If customers later ask for a BIR-registered POS, the old plan (git history, `REWORK-PLAN.md` at
+commit `11eb687`, §10) lists what it would take.
 
 ---
 
@@ -501,8 +489,7 @@ Each phase ends with a verifiable check. Don't start a phase until the previous 
   lock → forgot PIN → recovery code → new PIN, old PIN refused. **Still to do by hand:** the same
   run on a real tablet's Chrome.
 - Differences from the plan: the recovery code is not rotated automatically after use (it can be
-  reissued from Settings); BIR machine fields and printer pairing are not in the wizard yet
-  (they arrive with Phase 4 and Phase 2).
+  reissued from Settings). TIN and BIR branch code were later removed entirely (§10).
 
 ### Phase 2 — Android app — **built and emulator-tested 2026-09-25** (branch `phase-2-android`)
 Verified on an Android 15 tablet emulator (Pixel Tablet, 2560×1600), release APK signed with the
@@ -523,14 +510,12 @@ Restore (do by hand); the Vitest port, proposed for Phase 5.
 ### Phase 3 — Licensing, cloud backup, vendor dashboard (2–3 weeks)
 - [ ] Worker + D1; Ed25519 keypair; online + QR offline activation; training mode gated on license
 - [ ] 8.7 layer 2: encrypted cloud backup to R2 + restore-on-new-tablet flow
+- [ ] Daily close (§10): end-of-day summary, running total that only goes up, each day hash-chained to the last; the heartbeat's daily totals come from it
 - [ ] Vendor dashboard "My Customers" + heartbeat (§7a); KRAMGEN as the first row
 - **Verify:** tampered license rejected; license from tablet A rejected on tablet B; factory-reset tablet → re-activate + restore works; server-side the backup is unreadable ciphertext; wrong recovery code can't decrypt.
 
-### Phase 4 — BIR features (2–4 weeks)
-- [ ] Grand total, X/Z readings, Z hash-chain, e-journal export, receipt fields, BIR reports
-- [ ] New `verify:bir` tests (grand total never decreases across void/clear/restore; Z counter monotonic; chain verifies; receipt contains every required field)
-- [ ] File supplier sworn declaration / eACCReg enrolment
-- **Verify:** tests pass; practitioner signs off on printed receipt + Z-read samples.
+### ~~Phase 4 — BIR features~~ — dropped 2026-09-25
+POS@034 is a sales tracker, not a BIR machine (§10). The daily close moved to Phase 3.
 
 ### Phase 5 — Release pipeline (1 week)
 - [ ] GitHub Actions → signed APK + web bundle → R2; self-hosted live updates via the Worker; beta channel on KRAMGEN
@@ -574,8 +559,9 @@ All decided 2026-09-25:
 | 11 | Hardware | **Regular Android tablet + Bluetooth thermal printer** |
 | 12 | App shell | **Capacitor 8** (was Tauri 2 — Tauri's mobile support is too new for a POS) |
 | 13 | Distribution | **You install the APK yourself** (word-of-mouth sales); no Play Store for now; Windows code signing no longer applies |
+| 14 | BIR | **Not a BIR machine.** A sales and inventory tracker; prints order slips marked not an official receipt; the owner handles BIR invoicing. No TIN or branch code in the app; Phase 4 dropped (§10) |
 
-Still open: nothing blocking Phase 1. Tax practitioner (Phase 0) must happen before Phase 4.
+Still open: nothing blocking.
 
 ---
 
@@ -583,8 +569,8 @@ Still open: nothing blocking Phase 1. Tax practitioner (Phase 0) must happen bef
 
 Target reader: owner of a small Philippine restaurant/carinderia, not technical, price-
 sensitive, burned before by internet outages and by POS vendors with monthly fees. Write plain
-English (Taglish touches optional). **Only publish claims that are true on launch day** —
-especially anything about BIR.
+English (Taglish touches optional). **Only publish claims that are true on launch day.** Never
+say "BIR-ready" or "BIR-accredited": POS@034 is not a BIR machine (§10).
 
 Stack: Astro static page on Cloudflare (see TECH-STACK.md), reusing the POS colors (`#f0ede9`
 ground, `#080808` rail, `#ff5c1a` accent).
@@ -614,7 +600,7 @@ ground, `#080808` rail, `#ff5c1a` accent).
    - Bluetooth receipt printer — no cables across the counter
    - Inventory that flags oversells instead of hiding them
    - Dashboard: today's net, best sellers, gross profit with cost frozen at time of sale
-   - BIR-ready features: sequential invoices, Z-reading, grand total *(only once Phase 4 ships)*
+   - Daily close: every day's total, locked so it can't be quietly changed later
 6. **How it works** (3 steps)
    1. **We set it up** — tablet, printer, your menu and your staff.
    2. **Train in practice mode** — ring up fake orders until everyone's comfortable.
@@ -634,7 +620,7 @@ ground, `#080808` rail, `#ff5c1a` accent).
    - *What tablet do I need?* A 10–11" Android tablet (Android 10 or newer) and a Bluetooth receipt printer. We list tested models, or sell you a ready bundle.
    - *What if the tablet breaks or gets stolen?* Get a new one, enter your recovery code, and last night's backup comes back.
    - *Can I use it on more than one tablet?* Each tablet needs its own license. Waiter tablets and multi-branch sync are on the roadmap.
-   - *Is it BIR-compliant?* State exactly what's done (see §10). Don't claim accreditation until it's filed.
+   - *Does it replace my BIR invoices?* No. POS@034 keeps your sales, stock and staff records accurate. Keep issuing your own BIR invoices; the order slip says it is not an official receipt.
    - *What happens if I stop paying for updates?* Nothing breaks. You keep using your version.
    - *Who can see my sales?* Only you. For the technology fee we receive one number per day —
      your total net sales. Backups are encrypted with your recovery code; we can't open them.
@@ -648,7 +634,7 @@ ground, `#080808` rail, `#ff5c1a` accent).
 - [ ] Real photos of the tablet + printer, real screenshots
 - [ ] Demo link opens the watermarked training-mode web build
 - [ ] Messenger link — most leads will come from a Facebook page
-- [ ] No "BIR-accredited" wording until true; no invented testimonials
+- [ ] No "BIR-ready" or "BIR-accredited" wording; no invented testimonials
 
 ---
 

@@ -109,7 +109,7 @@ dashboard.
 | Typecheck / lint | `tsc --noEmit`, ESLint 9 + `eslint-config-next` | Keep | |
 | Domain checks | `scripts/verify-*.mjs` (tax, auth, demo, safeguards) | **Rework** → Vitest | Port them; keep every assertion. Add `verify:bir`, `verify:migrate` |
 | Unit tests | **Vitest** | **Add** | |
-| End-to-end | **Playwright** at tablet viewports (1280×800, 1920×1200) | **Add** | Wizard, sell, void, Z-read, backup/restore |
+| End-to-end | **Playwright** at tablet viewports (1280×800, 1920×1200) | **Add** | Wizard, sell, void, daily close, backup/restore |
 | Device testing | Real test tablet + 2–3 Bluetooth printers | **Add** | Emulators can't test Bluetooth printing |
 | CI/CD | **GitHub Actions** (`ubuntu-latest` + Android SDK + JDK 21) | **Add** | check → `next build` → `cap sync` → Gradle release → sign → R2 |
 | Logs | Rotating local log + "Export support file" | **Add** | Works offline; no customer data |
