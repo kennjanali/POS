@@ -504,8 +504,16 @@ Each phase ends with a verifiable check. Don't start a phase until the previous 
   reissued from Settings); BIR machine fields and printer pairing are not in the wizard yet
   (they arrive with Phase 4 and Phase 2).
 
-### Phase 2 — Android app (2–3 weeks)
-- [ ] 6.10 platform seams (storage, printing, backup, device ID), drawn with the Android implementation beside the web one
+### Phase 2 — Android app — **built and emulator-tested 2026-09-25** (branch `phase-2-android`)
+Verified on an Android 15 tablet emulator (Pixel Tablet, 2560×1600), release APK signed with the
+POS@034 key: setup wizard → sale (receipt total correct) → table left open → **force-killed** → both
+orders back, app locked → **airplane mode + reboot** → opens offline, both orders intact → automatic
+backup written to Documents/POS034 with installId, appVersion and recovery hash → **app uninstalled,
+backup file still there** → Bluetooth permission prompt appears; with Bluetooth off the printer says so.
+Still open: printing on a real printer; restoring that backup onto a fresh install via Settings →
+Restore (do by hand); the Vitest port, proposed for Phase 5.
+
+- [x] 6.10 platform seams (storage, printer, files) in `src/lib`; device ID moves to Phase 3 with licensing
 - [ ] 8.1–8.6, 8.8, 8.11 (Capacitor, frozen app ID + origin, SQLite, Bluetooth printing, tablet behaviour)
 - [ ] 8.7 layers 1 and 3 (local backup copy, manual export/share)
 - [ ] 8.9 signing keystore created and backed up in two offline places
