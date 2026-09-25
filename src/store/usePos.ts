@@ -5,7 +5,15 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 
 import { PRODUCT_NAME } from '@/lib/brand';
 import { buildDemoData } from '@/lib/demo';
-import { hashPin, isValidPin, verifyPin, PIN_LENGTH } from '@/lib/crypto';
+import {
+  hashPin,
+  hashRecoveryCode,
+  isValidPin,
+  verifyPin,
+  verifyRecoveryCode,
+  PIN_LENGTH,
+  type PinCredential,
+} from '@/lib/crypto';
 import { ROWS, idbStorage, onPersistWrite, readRows, writeRows } from '@/lib/idb';
 import { uuidv7 } from '@/lib/id';
 import { businessDate } from '@/lib/format';
@@ -21,15 +29,7 @@ import {
 import { isLastActiveSuperadmin } from '@/lib/permissions';
 import { type Centavos, addC, cents, mulQty } from '@/lib/money';
 import { computeBill, type DiscountKind } from '@/lib/tax';
-import {
-  DEFAULT_BRANCH,
-  DEFAULT_PRODUCTS,
-  DEFAULT_SETTINGS,
-  DEFAULT_PIN,
-  DEFAULT_SUPERADMIN,
-  OPENING_STOCK,
-  hasDefaultPin,
-} from '@/lib/seed';
+import { DEFAULT_BRANCH, DEFAULT_SETTINGS, OPENING_STOCK, SAMPLE_MENU } from '@/lib/seed';
 import { actorId } from './useAuth';
 import type {
   AuditEntry,
@@ -51,6 +51,20 @@ import type {
 /** Every user mutation can fail on a rule the UI has to explain. */
 export type UserResult = { ok: true } | { ok: false; error: string };
 
+/** What the first-run wizard collects. */
+export interface SetupInput {
+  business: Pick<
+    Settings,
+    'businessName' | 'address' | 'tin' | 'vatRegistered' | 'pricesIncludeVat'
+  >;
+  branchCode: string;
+  sampleMenu: boolean;
+  ownerName: string;
+  pin: string;
+  /** Generated and shown by the wizard; only its hash is kept. */
+  recoveryCode: string;
+}
+
 interface PosState {
   branches: Branch[];
   /** Who may sign in. Business data, so it lives here and in the snapshot —
@@ -65,6 +79,8 @@ interface PosState {
   settings: Settings;
   /** branchId -> last issued invoice number */
   invoiceSeq: Record<string, number>;
+  /** Hash of the owner's recovery code. Null until the wizard has run. */
+  recovery: PinCredential | null;
 
   activeBranchId: string;
   activeOrderId: string | null;
@@ -133,6 +149,15 @@ interface PosState {
   setUserActive: (id: string, active: boolean) => UserResult;
   recordLogin: (id: string) => void;
 
+  // ── setup and recovery ──────────────────────────────────────────────
+  /** The wizard's last step. Refused once anyone exists on this install. */
+  setupInstall: (input: SetupInput) => Promise<UserResult>;
+  recoveryCodeMatches: (code: string) => Promise<boolean>;
+  /** Forgot-PIN path: the recovery code sets a new PIN for a superadmin. */
+  resetPinWithRecoveryCode: (code: string, userId: string, pin: string) => Promise<UserResult>;
+  /** For when the written copy is lost. The old code stops working. */
+  replaceRecoveryCode: (code: string) => Promise<void>;
+
   // ── admin ───────────────────────────────────────────────────────────
   setActiveBranch: (id: string) => void;
   upsertBranch: (branch: Branch) => void;
@@ -165,8 +190,6 @@ interface PosState {
   unbackedUp: () => number;
   /** Called once a backup file has actually been handed to the browser. */
   recordBackup: () => void;
-  /** Active accounts that can still be opened with the shipped PIN. */
-  defaultPinAccounts: () => User[];
   clearPersistError: () => void;
 }
 
@@ -325,18 +348,17 @@ export const usePos = create<PosState>()(
   persist(
     (set, get) => ({
       branches: [DEFAULT_BRANCH],
-      // Every install ships able to be signed into: one superadmin, PIN
-      // 000000. There is no server to reset a forgotten PIN against, so a till
-      // that can lock its owner out permanently is not an acceptable design.
-      // The app nags on every screen until this PIN is changed.
-      users: [DEFAULT_SUPERADMIN],
-      products: DEFAULT_PRODUCTS,
+      // Empty until the first-run wizard names the owner — AuthGate shows the
+      // wizard while this list is empty. No account ships with the app.
+      users: [],
+      products: [],
       orders: [],
-      stock: { [DEFAULT_BRANCH.id]: initialStock(DEFAULT_PRODUCTS) },
+      stock: { [DEFAULT_BRANCH.id]: {} },
       stockMoves: [],
       audit: [],
       settings: DEFAULT_SETTINGS,
       invoiceSeq: {},
+      recovery: null,
       activeBranchId: DEFAULT_BRANCH.id,
       activeOrderId: null,
       lastBackupAt: null,
@@ -728,12 +750,6 @@ export const usePos = create<PosState>()(
         if (!isValidPin(pin)) {
           return { ok: false, error: `The PIN has to be ${PIN_LENGTH} digits.` };
         }
-        if (pin === DEFAULT_PIN) {
-          return {
-            ok: false,
-            error: `${DEFAULT_PIN} is the default PIN this till ships with. Pick another one.`,
-          };
-        }
         const clash = await pinTaken(get().users, pin);
         if (clash) {
           return {
@@ -770,16 +786,6 @@ export const usePos = create<PosState>()(
         if (!target) return { ok: false, error: 'That user no longer exists.' };
         if (!isValidPin(pin)) {
           return { ok: false, error: `The PIN has to be ${PIN_LENGTH} digits.` };
-        }
-        // The shipped PIN is printed in the source and on the lock screen.
-        // Allowing it back would also defeat hasDefaultPin, which recognises
-        // the shipped credential by its salt — a re-set to 000000 would get a
-        // fresh salt and silently clear the warning while the door stayed open.
-        if (pin === DEFAULT_PIN) {
-          return {
-            ok: false,
-            error: `${DEFAULT_PIN} is the default PIN this till ships with. Pick another one.`,
-          };
         }
         const clash = await pinTaken(get().users, pin, id);
         if (clash) {
@@ -863,6 +869,112 @@ export const usePos = create<PosState>()(
           ),
         })),
 
+      // ── setup and recovery ────────────────────────────────────────
+      setupInstall: async (input) => {
+        if (get().users.length > 0) {
+          return { ok: false, error: 'This device is already set up.' };
+        }
+        const businessName = input.business.businessName.trim();
+        const ownerName = input.ownerName.trim();
+        if (!businessName) return { ok: false, error: 'Give the business a name.' };
+        if (!ownerName) return { ok: false, error: 'Give the owner a name.' };
+        if (!isValidPin(input.pin)) {
+          return { ok: false, error: `The PIN has to be ${PIN_LENGTH} digits.` };
+        }
+
+        const [pin, recovery] = await Promise.all([
+          hashPin(input.pin),
+          hashRecoveryCode(input.recoveryCode),
+        ]);
+        const owner: User = {
+          id: uuidv7(),
+          name: ownerName,
+          role: 'superadmin',
+          active: true,
+          pin,
+          createdAt: Date.now(),
+          lastLoginAt: null,
+        };
+        const address = input.business.address.trim();
+        const products = input.sampleMenu ? SAMPLE_MENU : [];
+
+        set((state) => {
+          const branch: Branch = {
+            ...(state.branches[0] ?? DEFAULT_BRANCH),
+            address,
+            branchCode: input.branchCode.trim() || DEFAULT_BRANCH.branchCode,
+          };
+          return {
+            ...state,
+            settings: {
+              ...state.settings,
+              ...input.business,
+              businessName,
+              address,
+              tin: input.business.tin.trim(),
+            },
+            branches: [branch],
+            activeBranchId: branch.id,
+            products,
+            stock: { [branch.id]: initialStock(products) },
+            users: [owner],
+            recovery,
+            audit: log(
+              state.audit,
+              'install.setup',
+              `Set up ${businessName} with ${ownerName} as superadmin`,
+              'info',
+              branch.id,
+            ),
+          };
+        });
+        return { ok: true };
+      },
+
+      recoveryCodeMatches: async (code) => {
+        const { recovery } = get();
+        return recovery ? verifyRecoveryCode(code, recovery) : false;
+      },
+
+      resetPinWithRecoveryCode: async (code, userId, pin) => {
+        if (!(await get().recoveryCodeMatches(code))) {
+          return { ok: false, error: 'That recovery code is not right.' };
+        }
+        const target = get().users.find((u) => u.id === userId);
+        if (!target?.active || target.role !== 'superadmin') {
+          return { ok: false, error: 'Only an active superadmin can be recovered this way.' };
+        }
+        const result = await get().setUserPin(userId, pin);
+        if (result.ok) {
+          set((s) => ({
+            ...s,
+            audit: log(
+              s.audit,
+              'user.recover',
+              `Reset the PIN for ${target.name} with the recovery code`,
+              'warn',
+              s.activeBranchId,
+            ),
+          }));
+        }
+        return result;
+      },
+
+      replaceRecoveryCode: async (code) => {
+        const recovery = await hashRecoveryCode(code);
+        set((s) => ({
+          ...s,
+          recovery,
+          audit: log(
+            s.audit,
+            'recovery.replace',
+            'Issued a new recovery code — the old one no longer works',
+            'warn',
+            s.activeBranchId,
+          ),
+        }));
+      },
+
       // ── admin ─────────────────────────────────────────────────────
       setActiveBranch: (id) =>
         set((state) => ({
@@ -925,8 +1037,11 @@ export const usePos = create<PosState>()(
         if (!state.settings.trainingMode) return 0;
 
         const mainBranch = state.branches[0] ?? DEFAULT_BRANCH;
+        // Demo sales need something to sell. An install that skipped the
+        // sample menu gets it along with the demo.
+        const products = state.products.length > 0 ? state.products : SAMPLE_MENU;
         const demo = buildDemoData({
-          products: state.products,
+          products,
           settings: state.settings,
           mainBranch,
           days: options?.days,
@@ -966,6 +1081,7 @@ export const usePos = create<PosState>()(
         set((s) => ({
           ...s,
           branches: [...byId.values()],
+          products,
           orders,
           stock: { ...s.stock, ...stock },
           stockMoves,
@@ -1053,6 +1169,7 @@ export const usePos = create<PosState>()(
           audit: s.audit,
           settings: s.settings,
           invoiceSeq: s.invoiceSeq,
+          recovery: s.recovery,
         };
       },
 
@@ -1089,6 +1206,9 @@ export const usePos = create<PosState>()(
             ),
             settings,
             invoiceSeq: snapshot.invoiceSeq ?? {},
+            // Travels with the users it recovers. A backup made before
+            // recovery codes existed leaves the current one in place.
+            recovery: snapshot.recovery ?? state.recovery,
             activeOrderId: null,
           };
         });
@@ -1106,8 +1226,8 @@ export const usePos = create<PosState>()(
           orders: [],
           stockMoves: [],
           activeOrderId: null,
-          products: DEFAULT_PRODUCTS,
-          stock: { [state.activeBranchId]: initialStock(DEFAULT_PRODUCTS) },
+          // The menu is the owner's and stays; only its stock starts over.
+          stock: { [state.activeBranchId]: initialStock(state.products) },
           // The invoice sequence is deliberately NOT reset. Restarting it at 1
           // reissues numbers that have already been on a printed receipt, and
           // a duplicated invoice number is worse than a large one.
@@ -1147,8 +1267,6 @@ export const usePos = create<PosState>()(
           ),
         })),
 
-      defaultPinAccounts: () => get().users.filter((u) => u.active && hasDefaultPin(u)),
-
       clearPersistError: () => set({ persistError: null }),
     }),
     {
@@ -1168,6 +1286,7 @@ export const usePos = create<PosState>()(
         audit: state.audit,
         settings: state.settings,
         invoiceSeq: state.invoiceSeq,
+        recovery: state.recovery,
         activeBranchId: state.activeBranchId,
         lastBackupAt: state.lastBackupAt,
       }),

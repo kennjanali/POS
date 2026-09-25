@@ -28,7 +28,7 @@ import { usePos } from '@/store/usePos';
  */
 export function MonthlyArchive() {
   // Derived here rather than through a store method: a selector that returns
-  // a fresh array re-renders forever. Same reason as DefaultPinBar.
+  // a fresh array re-renders forever — zustand compares by identity.
   const orders = usePos((s) => s.orders);
   const months = useMemo(() => archivableMonths(orders), [orders]);
   const build = usePos((s) => s.buildMonthlyArchive);

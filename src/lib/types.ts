@@ -204,4 +204,6 @@ export interface DataSnapshot {
   audit: AuditEntry[];
   settings: Settings;
   invoiceSeq: Record<string, number>;
+  /** Absent in backups made before recovery codes existed. */
+  recovery?: PinCredential | null;
 }

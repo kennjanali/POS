@@ -74,19 +74,27 @@ async function derive(pin: string, salt: Uint8Array, iterations: number): Promis
   return new Uint8Array(bits);
 }
 
-export async function hashPin(pin: string): Promise<PinCredential> {
+async function hashSecret(secret: string): Promise<PinCredential> {
   const salt = crypto.getRandomValues(new Uint8Array(SALT_BYTES));
-  const hash = await derive(pin, salt, ITERATIONS);
+  const hash = await derive(secret, salt, ITERATIONS);
   return { salt: toBase64(salt), hash: toBase64(hash), iterations: ITERATIONS };
+}
+
+export function hashPin(pin: string): Promise<PinCredential> {
+  return hashSecret(pin);
 }
 
 export async function verifyPin(pin: string, credential: PinCredential): Promise<boolean> {
   if (!isValidPin(pin)) return false;
+  return matches(pin, credential);
+}
+
+async function matches(secret: string, credential: PinCredential): Promise<boolean> {
   // Deliberately not wrapped in a try/catch. A missing crypto.subtle or a
   // corrupt stored credential is a fault the operator has to see and fix —
   // swallowing it here turns an unusable till into "Incorrect PIN" five times
   // over, followed by a lockout, with nothing on screen to explain why.
-  const candidate = await derive(pin, fromBase64(credential.salt), credential.iterations);
+  const candidate = await derive(secret, fromBase64(credential.salt), credential.iterations);
   const expected = fromBase64(credential.hash);
   if (candidate.length !== expected.length) return false;
   // Constant-time compare. Mostly principle at this layer, but it costs nothing.
@@ -95,4 +103,40 @@ export async function verifyPin(pin: string, credential: PinCredential): Promise
     diff |= (candidate[i] ?? 0) ^ (expected[i] ?? 0);
   }
   return diff === 0;
+}
+
+// ── Recovery code ──────────────────────────────────────────────────────
+//
+// The way back in when the owner forgets their PIN. Shown once at setup, then
+// only its hash is kept — same PBKDF2 path as a PIN. Twelve characters from a
+// 32-letter alphabet is 60 bits, so unlike a PIN it needs no lockout.
+
+/** No 0/O or 1/I: this gets written down by hand and read back later. */
+const RECOVERY_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const RECOVERY_LENGTH = 12;
+
+/** `ABCD-EFGH-JKLM`. */
+export function generateRecoveryCode(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(RECOVERY_LENGTH));
+  // 256 is a multiple of 32, so the modulo carries no bias.
+  const chars = Array.from(bytes, (b) => RECOVERY_ALPHABET[b % RECOVERY_ALPHABET.length]);
+  return [0, 4, 8].map((i) => chars.slice(i, i + 4).join('')).join('-');
+}
+
+/** Case, dashes and spaces don't matter when typing it back in. */
+function normalizeRecoveryCode(code: string): string {
+  return code.toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+export function hashRecoveryCode(code: string): Promise<PinCredential> {
+  return hashSecret(normalizeRecoveryCode(code));
+}
+
+export async function verifyRecoveryCode(
+  code: string,
+  credential: PinCredential,
+): Promise<boolean> {
+  const normalized = normalizeRecoveryCode(code);
+  if (normalized.length !== RECOVERY_LENGTH) return false;
+  return matches(normalized, credential);
 }

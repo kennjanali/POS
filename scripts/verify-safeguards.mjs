@@ -41,11 +41,10 @@ for (const n of ['useAuth', 'usePos']) emit(n, `src/store/${n}.ts`);
 const load = (n) => import(pathToFileURL(join(process.cwd(), dir, `${n}.js`)).href);
 const { usePos, orderGross } = await load('usePos');
 const { computeBill } = await load('tax');
-const { DEFAULT_PRODUCTS, DEFAULT_BRANCH } = await load('seed');
+const { SAMPLE_MENU, DEFAULT_BRANCH } = await load('seed');
 const { monthOf, orderMonth } = await load('archive');
 const { backupIsDue, backupFileName, autoBackupDue, CUTOFF_MINUTES } = await load('backup');
-const { DEFAULT_PIN, DEFAULT_SUPERADMIN, hasDefaultPin } = await load('seed');
-const { verifyPin } = await load('crypto');
+const { verifyPin, generateRecoveryCode } = await load('crypto');
 
 let failures = 0;
 function check(name, ok, detail = '') {
@@ -68,7 +67,52 @@ function ringUp(product, qty = 1) {
   return { id, due: bill.amountDue };
 }
 
-const product = DEFAULT_PRODUCTS[0];
+const product = SAMPLE_MENU[0];
+
+const OWNER_PIN = '481902';
+const RECOVERY = generateRecoveryCode();
+const setupInput = {
+  business: {
+    businessName: 'Test Carinderia',
+    address: 'Somewhere',
+    tin: '',
+    vatRegistered: false,
+    pricesIncludeVat: true,
+  },
+  branchCode: '00000',
+  sampleMenu: true,
+  ownerName: 'Owner',
+  pin: OWNER_PIN,
+  recoveryCode: RECOVERY,
+};
+
+console.log('\n— First run: no shipped account, the wizard sets the install up —');
+{
+  check('a fresh install has nobody on it', S().users.length === 0);
+  check('and no menu of its own', S().products.length === 0);
+  check('and no business name', S().settings.businessName === '');
+
+  const nameless = await S().setupInstall({
+    ...setupInput,
+    business: { ...setupInput.business, businessName: '  ' },
+  });
+  check('setup refuses a business with no name', nameless.ok === false);
+  check('and writes nothing', S().users.length === 0);
+
+  const done = await S().setupInstall(setupInput);
+  check('setup succeeds', done.ok === true, done.ok ? '' : done.error);
+  const [owner] = S().users;
+  check('exactly one account, a superadmin', S().users.length === 1 && owner.role === 'superadmin');
+  check('the chosen PIN opens it', (await verifyPin(OWNER_PIN, owner.pin)) === true);
+  check('the credential holds no plaintext PIN', !JSON.stringify(owner.pin).includes(OWNER_PIN));
+  check('the recovery code is stored only as a hash',
+    S().recovery !== null && !JSON.stringify(S().recovery).includes(RECOVERY.replace(/-/g, '')));
+  check('the business is named', S().settings.businessName === 'Test Carinderia');
+  check('the sample menu was loaded', S().products.length === SAMPLE_MENU.length);
+
+  const again = await S().setupInstall(setupInput);
+  check('setup cannot run twice', again.ok === false && S().users.length === 1);
+}
 
 console.log('\n— B3: clearing sales data —');
 {
@@ -120,7 +164,7 @@ console.log('\n— B4: training mode is a one-way door —');
   const res = S().importSnapshot({
     version: 7,
     exportedAt: '2026-01-01T00:00:00.000Z',
-    products: DEFAULT_PRODUCTS,
+    products: SAMPLE_MENU,
     orders: [],
     settings: { trainingMode: true },
   });
@@ -233,7 +277,7 @@ console.log('\n— H4: a restore has to earn it —');
   const base = {
     version: 7,
     exportedAt: '2026-01-01T00:00:00.000Z',
-    products: DEFAULT_PRODUCTS,
+    products: SAMPLE_MENU,
     orders: [],
   };
   const cases = [
@@ -394,36 +438,28 @@ console.log('\n— Daily backup: the device is not the only copy —');
 }
 
 
-console.log('\n— Default account: the till can never lock its owner out —');
+console.log('\n— Recovery code: the way back in without a shipped PIN —');
 {
-  check('a fresh install ships with exactly one account',
-    DEFAULT_SUPERADMIN.role === 'superadmin' && DEFAULT_SUPERADMIN.active === true);
+  const owner = S().users.find((u) => u.role === 'superadmin');
+  check('a wrong code does not match', (await S().recoveryCodeMatches('AAAA-AAAA-AAAA')) === false);
+  check('the right code matches, ignoring case and dashes',
+    (await S().recoveryCodeMatches(RECOVERY.toLowerCase().replace(/-/g, ''))) === true);
 
-  const opens = await verifyPin(DEFAULT_PIN, DEFAULT_SUPERADMIN.pin);
-  check(`the shipped PIN ${DEFAULT_PIN} actually opens it`, opens === true);
-  check('a different PIN does not', (await verifyPin('123456', DEFAULT_SUPERADMIN.pin)) === false);
-  // Only the credential matters here: the sentinel user id is a run of zeros
-  // and contains '000000' by coincidence, which is not the PIN being stored.
-  check('the credential holds no plaintext PIN',
-    !JSON.stringify(DEFAULT_SUPERADMIN.pin).includes(DEFAULT_PIN));
+  const refused = await S().resetPinWithRecoveryCode('AAAA-AAAA-AAAA', owner.id, '739104');
+  check('a wrong code cannot reset a PIN', refused.ok === false);
+  check('the PIN is unchanged', (await verifyPin(OWNER_PIN, S().user(owner.id).pin)) === true);
 
-  usePos.setState({ users: [{ ...DEFAULT_SUPERADMIN }] });
-  check('the warning is showing', S().defaultPinAccounts().length === 1);
+  const reset = await S().resetPinWithRecoveryCode(RECOVERY, owner.id, '739104');
+  check('the right code resets the PIN', reset.ok === true, reset.ok ? '' : reset.error);
+  check('the new PIN opens the account', (await verifyPin('739104', S().user(owner.id).pin)) === true);
+  check('the old PIN no longer does', (await verifyPin(OWNER_PIN, S().user(owner.id).pin)) === false);
+  check('the reset is named in the log', S().audit[0]?.kind === 'user.recover');
 
-  const back = await S().setUserPin(DEFAULT_SUPERADMIN.id, DEFAULT_PIN);
-  check('the default PIN cannot be re-set deliberately', back.ok === false, back.ok ? '' : back.error);
-
-  const dupe = await S().addUser({ name: 'Waiter', role: 'waiter', pin: DEFAULT_PIN });
-  check('a new user cannot claim the default PIN', dupe.ok === false, dupe.ok ? '' : dupe.error);
-
-  const changed = await S().setUserPin(DEFAULT_SUPERADMIN.id, '481902');
-  check('the owner can set a real PIN', changed.ok === true, changed.ok ? '' : changed.error);
-  check('the warning clears once changed', S().defaultPinAccounts().length === 0);
-  check('the old default no longer opens the account',
-    (await verifyPin(DEFAULT_PIN, S().users[0].pin)) === false);
-  check('the new PIN does', (await verifyPin('481902', S().users[0].pin)) === true);
-  check('a changed credential is not recognised as the default one',
-    hasDefaultPin(S().users[0]) === false);
+  const replacement = generateRecoveryCode();
+  await S().replaceRecoveryCode(replacement);
+  check('a replaced code stops working', (await S().recoveryCodeMatches(RECOVERY)) === false);
+  check('the new one works', (await S().recoveryCodeMatches(replacement)) === true);
+  check('a backup carries the recovery hash', S().exportSnapshot().recovery === S().recovery);
 }
 
 

@@ -4,9 +4,9 @@ import { useEffect, useState } from 'react';
 import { ShoppingCart } from 'lucide-react';
 
 import { PinPad } from './PinPad';
+import { RecoverPin } from './RecoverPin';
 import { usePos } from '@/store/usePos';
 import { useAuth } from '@/store/useAuth';
-import { DEFAULT_PIN } from '@/lib/seed';
 
 /**
  * The keypad. No usernames, no password field, no list of who works here —
@@ -17,8 +17,7 @@ export function LockScreen() {
   const users = usePos((s) => s.users);
   const recordLogin = usePos((s) => s.recordLogin);
   const businessName = usePos((s) => s.settings.businessName);
-  // Only while nobody has set a real PIN yet.
-  const untouched = usePos((s) => s.defaultPinAccounts().length > 0);
+  const [recovering, setRecovering] = useState(false);
 
   const signIn = useAuth((s) => s.signIn);
   const lockedUntil = useAuth((s) => s.lockedUntil);
@@ -62,26 +61,29 @@ export function LockScreen() {
         </p>
 
         <div className="mt-7 flex w-full flex-col items-center rounded-xl bg-surface px-6 py-7">
-          <h1 className="mb-5 text-[13px] font-bold tracking-wide text-ink-2 uppercase">
-            Enter your PIN
-          </h1>
-          <PinPad
-            onSubmit={attempt}
-            disabled={locked}
-            tone={error || locked ? 'bad' : 'muted'}
-            message={
-              locked ? `Too many attempts. Try again in ${secondsLeft}s.` : (error ?? ' ')
-            }
-          />
-
-          {/* A brand-new till has no one to ask for the PIN, so it says so.
-              Disappears for good the moment a real PIN is set. */}
-          {untouched && (
-            <p className="mt-4 rounded-md border border-line bg-raised px-3 py-2 text-center text-[11.5px] leading-relaxed text-ink-2">
-              First time on this device? Sign in with{' '}
-              <strong className="tnum text-ink">{DEFAULT_PIN}</strong>, then change
-              it in Settings → Users.
-            </p>
+          {recovering ? (
+            <RecoverPin onDone={() => setRecovering(false)} />
+          ) : (
+            <>
+              <h1 className="mb-5 text-[13px] font-bold tracking-wide text-ink-2 uppercase">
+                Enter your PIN
+              </h1>
+              <PinPad
+                onSubmit={attempt}
+                disabled={locked}
+                tone={error || locked ? 'bad' : 'muted'}
+                message={
+                  locked ? `Too many attempts. Try again in ${secondsLeft}s.` : (error ?? ' ')
+                }
+              />
+              <button
+                type="button"
+                onClick={() => setRecovering(true)}
+                className="mt-5 text-[12px] font-semibold text-ink-3 hover:text-accent"
+              >
+                Forgot PIN?
+              </button>
+            </>
           )}
         </div>
       </div>

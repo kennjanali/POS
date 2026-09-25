@@ -29,7 +29,7 @@ for (const name of ['money', 'tax', 'format', 'id', 'seed', 'demo']) {
 const load = (name) => import(pathToFileURL(join(dir, `${name}.js`)).href);
 const { buildDemoData } = await load('demo');
 const { computeBill } = await load('tax');
-const { DEFAULT_BRANCH, DEFAULT_PRODUCTS, DEFAULT_SETTINGS, OPENING_STOCK } =
+const { DEFAULT_BRANCH, SAMPLE_MENU, DEFAULT_SETTINGS, OPENING_STOCK } =
   await load('seed');
 const { businessDate } = await load('format');
 
@@ -51,7 +51,7 @@ for (const settings of [
   const days = 30;
   const ordersPerDay = 40;
   const data = buildDemoData({
-    products: DEFAULT_PRODUCTS,
+    products: SAMPLE_MENU,
     settings,
     mainBranch: DEFAULT_BRANCH,
     days,
@@ -147,7 +147,7 @@ for (const settings of [
   let drift = 0;
   let negative = 0;
   for (const branch of data.branches) {
-    for (const product of DEFAULT_PRODUCTS) {
+    for (const product of SAMPLE_MENU) {
       const onHand = data.stock[branch.id]?.[product.id] ?? 0;
       if (onHand !== (ledger[branch.id]?.[product.id] ?? 0)) drift++;
       if (onHand < 0) negative++;
@@ -159,7 +159,7 @@ for (const settings of [
   const opening = data.stockMoves.filter((m) => m.reason === 'opening');
   check(
     'one opening count per product per branch',
-    opening.length === DEFAULT_PRODUCTS.length * data.branches.length &&
+    opening.length === SAMPLE_MENU.length * data.branches.length &&
       opening.every((m) => m.delta === OPENING_STOCK),
   );
   const sales = data.stockMoves.filter((m) => m.reason === 'sale');
@@ -182,7 +182,7 @@ console.log('— today —');
   const now = Date.now();
   const today = businessDate(now);
   const fresh = buildDemoData({
-    products: DEFAULT_PRODUCTS,
+    products: SAMPLE_MENU,
     settings: DEFAULT_SETTINGS,
     mainBranch: DEFAULT_BRANCH,
   });
@@ -214,7 +214,7 @@ console.log('— today —');
 }
 
 const opts = {
-  products: DEFAULT_PRODUCTS,
+  products: SAMPLE_MENU,
   settings: DEFAULT_SETTINGS,
   mainBranch: DEFAULT_BRANCH,
   days: 5,

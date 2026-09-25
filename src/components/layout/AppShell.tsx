@@ -4,7 +4,6 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import { AutoBackup } from './AutoBackup';
-import { DefaultPinBar } from './DefaultPinBar';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
 import { ShellProvider, useShell } from './shell';
@@ -134,7 +133,6 @@ function Frame({ children }: { children: React.ReactNode }) {
       <Sidebar />
       <Topbar />
       <main className="ml-[var(--rail-w)] flex h-screen flex-col pt-[var(--topbar-h)] transition-[margin] duration-200">
-        <DefaultPinBar />
         <div className="min-h-0 flex-1">{children}</div>
       </main>
       {canOpenOrders && <NewOrderDialog />}

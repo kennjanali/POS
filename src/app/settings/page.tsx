@@ -5,6 +5,7 @@ import { Download, FlaskConical, Info, Upload } from 'lucide-react';
 
 import { BranchManager } from '@/components/settings/BranchManager';
 import { MonthlyArchive } from '@/components/settings/MonthlyArchive';
+import { RecoveryCode } from '@/components/settings/RecoveryCode';
 import { UserManager } from '@/components/settings/UserManager';
 import { Button } from '@/components/ui/Button';
 import { Field, Toggle } from '@/components/ui/Field';
@@ -205,6 +206,11 @@ export default function SettingsPage() {
         {/* ── Users ────────────────────────────────────────────── */}
         <Section title="Users" className="lg:col-span-2">
           <UserManager />
+        </Section>
+
+        {/* ── Recovery code ────────────────────────────────────── */}
+        <Section title="Recovery code">
+          <RecoveryCode />
         </Section>
 
         {/* ── Monthly archive ──────────────────────────────────── */}
