@@ -1,0 +1,2 @@
+LICENSE_PRIVATE_KEY='{...private JWK from ~/.pos034/license-signing-key.json...}'
+DEV_ADMIN=true

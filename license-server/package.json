@@ -1,0 +1,24 @@
+{
+  "name": "pos034-license-server",
+  "version": "0.1.0",
+  "private": true,
+  "description": "POS@034 licensing, heartbeat and vendor dashboard (Cloudflare Worker).",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "db:migrate:local": "wrangler d1 migrations apply pos034-license --local",
+    "db:migrate:remote": "wrangler d1 migrations apply pos034-license --remote",
+    "e2e": "node scripts/e2e.mjs http://127.0.0.1:8787"
+  },
+  "dependencies": {
+    "hono": "^4.13.9",
+    "jose": "^6.2.12"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260925.1",
+    "typescript": "^5.9.3",
+    "wrangler": "^4.139.0"
+  }
+}
