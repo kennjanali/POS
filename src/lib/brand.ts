@@ -8,3 +8,7 @@
  */
 export const PRODUCT_NAME = 'POS@034';
 export const PRODUCT_SLUG = 'pos034';
+
+/** From package.json, inlined by next.config.ts at build time. Stamped on
+ *  every backup so a file says which build wrote it. */
+export const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION ?? 'dev';

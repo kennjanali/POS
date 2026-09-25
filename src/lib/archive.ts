@@ -12,7 +12,7 @@
  * renders correctly even if the menu has been rewritten since.
  */
 
-import { PRODUCT_SLUG } from './brand';
+import { APP_VERSION, PRODUCT_SLUG } from './brand';
 import { businessDate } from './format';
 import { addC, cents, type Centavos } from './money';
 import {
@@ -55,6 +55,9 @@ export interface MonthlyArchive {
   month: string;
   exportedAt: string;
   businessName: string;
+  /** Which install and which build wrote the file. */
+  installId: string | null;
+  appVersion: string;
   /** Precomputed so opening a file answers "how did we do" without a rescan. */
   totals: MonthTotals;
   branches: Branch[];
@@ -214,6 +217,7 @@ export function summarise(
 export interface ArchiveSource {
   month: string;
   businessName: string;
+  installId: string | null;
   branches: Branch[];
   products: Product[];
   users: User[];
@@ -235,6 +239,8 @@ export function buildArchive(source: ArchiveSource): MonthlyArchive {
     month: source.month,
     exportedAt: new Date().toISOString(),
     businessName: source.businessName,
+    installId: source.installId,
+    appVersion: APP_VERSION,
     totals: summarise(orders, source.products, source.branches),
     branches: source.branches,
     products: source.products,

@@ -195,6 +195,9 @@ export interface Settings extends TaxProfile {
 export interface DataSnapshot {
   version: 7;
   exportedAt: string;
+  /** Which install and which build wrote the file. Absent in older backups. */
+  installId?: string | null;
+  appVersion?: string;
   branches: Branch[];
   users: User[];
   products: Product[];

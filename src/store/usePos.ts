@@ -3,7 +3,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 
-import { PRODUCT_NAME } from '@/lib/brand';
+import { APP_VERSION, PRODUCT_NAME } from '@/lib/brand';
 import { buildDemoData } from '@/lib/demo';
 import {
   hashPin,
@@ -81,6 +81,9 @@ interface PosState {
   invoiceSeq: Record<string, number>;
   /** Hash of the owner's recovery code. Null until the wizard has run. */
   recovery: PinCredential | null;
+  /** This install's identity, generated once by the wizard. Licensing and
+   *  every backup refer to it. A restore never overwrites it. */
+  installId: string | null;
 
   activeBranchId: string;
   activeOrderId: string | null;
@@ -359,6 +362,7 @@ export const usePos = create<PosState>()(
       settings: DEFAULT_SETTINGS,
       invoiceSeq: {},
       recovery: null,
+      installId: null,
       activeBranchId: DEFAULT_BRANCH.id,
       activeOrderId: null,
       lastBackupAt: null,
@@ -919,6 +923,7 @@ export const usePos = create<PosState>()(
             stock: { [branch.id]: initialStock(products) },
             users: [owner],
             recovery,
+            installId: uuidv7(),
             audit: log(
               state.audit,
               'install.setup',
@@ -1108,6 +1113,7 @@ export const usePos = create<PosState>()(
         return buildArchive({
           month,
           businessName: s.settings.businessName,
+          installId: s.installId,
           branches: s.branches,
           products: s.products,
           users: s.users,
@@ -1160,6 +1166,8 @@ export const usePos = create<PosState>()(
         return {
           version: 7,
           exportedAt: new Date().toISOString(),
+          installId: s.installId,
+          appVersion: APP_VERSION,
           branches: s.branches,
           users: s.users,
           products: s.products,
@@ -1287,6 +1295,7 @@ export const usePos = create<PosState>()(
         settings: state.settings,
         invoiceSeq: state.invoiceSeq,
         recovery: state.recovery,
+        installId: state.installId,
         activeBranchId: state.activeBranchId,
         lastBackupAt: state.lastBackupAt,
       }),

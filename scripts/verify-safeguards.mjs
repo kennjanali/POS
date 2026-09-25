@@ -112,6 +112,14 @@ console.log('\n— First run: no shipped account, the wizard sets the install up
 
   const again = await S().setupInstall(setupInput);
   check('setup cannot run twice', again.ok === false && S().users.length === 1);
+
+  const installId = S().installId;
+  check('setup gives the install an identity', typeof installId === 'string' && installId.length > 0);
+  const snapshot = S().exportSnapshot();
+  check('a backup names the install and the build',
+    snapshot.installId === installId && typeof snapshot.appVersion === 'string');
+  S().importSnapshot({ ...snapshot, installId: 'someone-elses-device' });
+  check('a restore keeps this device\'s identity', S().installId === installId);
 }
 
 console.log('\n— B3: clearing sales data —');
