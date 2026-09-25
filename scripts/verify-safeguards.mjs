@@ -309,6 +309,32 @@ console.log('\n— H4: a restore has to earn it —');
   );
 }
 
+console.log('\n— Migration: a backup from the KRAMGEN v7 build still restores —');
+{
+  setTraining(true);
+  const { id, due } = ringUp(product, 2);
+  S().addTender(id, { method: 'cash', amountCents: due, tenderedCents: due, changeCents: 0, refNo: null });
+  S().closeOrder(id);
+
+  // What the v7 build wrote: the same shape, minus everything added since.
+  const v7 = S().exportSnapshot();
+  delete v7.installId;
+  delete v7.appVersion;
+  delete v7.recovery;
+  const before = { orders: v7.orders.length, seq: JSON.stringify(v7.invoiceSeq), users: v7.users.length };
+  const keptRecovery = S().recovery;
+  const keptInstall = S().installId;
+
+  const res = S().importSnapshot(JSON.parse(JSON.stringify(v7)));
+  check('a v7 backup is accepted', res.ok === true, res.ok ? '' : res.error);
+  check('every sale comes back', S().orders.length === before.orders, `orders ${S().orders.length}`);
+  check('the invoice sequence comes back', JSON.stringify(S().invoiceSeq) === before.seq);
+  check('the staff come back', S().users.length === before.users);
+  check('the closed sale keeps its frozen total', S().order(id)?.netCents === due);
+  check('the install keeps its recovery code', S().recovery === keptRecovery);
+  check('and its identity', S().installId === keptInstall);
+}
+
 console.log('\n— Monthly archive: nothing leaves without a verified file —');
 {
   setTraining(true);

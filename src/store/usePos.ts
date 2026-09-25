@@ -1280,7 +1280,11 @@ export const usePos = create<PosState>()(
     {
       // Frozen, like DB_NAME in idb.ts: a new name is an empty till.
       name: 'pos034-v7',
+      // The one place stored data changes shape. Bump `version` only together
+      // with a step in `migrate`: without one, zustand discards stored state
+      // whose version differs — an empty till after an app update.
       version: 7,
+      migrate: (persisted) => persisted as PosState,
       storage: createJSONStorage(() => idbStorage),
       // `orders` and `stockMoves` are deliberately absent: they go to their own
       // row stores, written one record at a time. Everything listed here is
