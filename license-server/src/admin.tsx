@@ -5,13 +5,14 @@
  */
 
 import { Hono } from 'hono';
+import { raw } from 'hono/html';
 import type { Child } from 'hono/jsx';
 
+import { newToken, sha256, type Account } from './accounts';
 import type { Env } from './env';
+import { FEE_RATE, feeSummary, manilaMonth, peso } from './fees';
 import { newLicenseKey } from './license';
 
-/** Must match TECH_FEE_RATE in the app's Dashboard (src/app/dashboard/page.tsx). */
-const FEE_RATE = 0.02;
 const DAY = 86_400_000;
 
 interface Row {
@@ -33,8 +34,6 @@ interface Row {
 
 const admin = new Hono<{ Bindings: Env }>();
 
-const peso = (c: number) => `₱${(c / 100).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const month = (ts = Date.now()) => new Date(ts + 8 * 3600_000).toISOString().slice(0, 7); // Asia/Manila
 const ago = (ts: number | null) => {
   if (!ts) return 'never';
   const days = Math.floor((Date.now() - ts) / DAY);
@@ -67,18 +66,12 @@ async function loadCustomers(db: D1Database) {
     db.prepare('SELECT license_id, COUNT(*) AS n FROM closes WHERE linked = 0 GROUP BY license_id').all<{ license_id: string; n: number }>(),
   ]);
 
-  const current = month();
   const latest = rows.results.reduce((best, r) => (r.app_version && newer(r.app_version, best) ? r.app_version : best), '0.0.0');
   return rows.results.map((r) => {
-    const mine = fees.results.filter((f) => f.license_id === r.id);
-    const feeOf = (m: { net: number }) => Math.round(m.net * FEE_RATE);
-    const thisMonth = mine.filter((m) => m.month === current).reduce((s, m) => s + feeOf(m), 0);
-    const billed = mine.filter((m) => m.month < current).reduce((s, m) => s + feeOf(m), 0);
     const payments = paid.results.find((p) => p.license_id === r.id)?.paid ?? 0;
     return {
       ...r,
-      thisMonth,
-      due: Math.max(0, billed - payments),
+      ...feeSummary(fees.results.filter((f) => f.license_id === r.id), payments),
       gaps: gaps.results.find((g) => g.license_id === r.id)?.n ?? 0,
       behind: !!r.app_version && newer(latest, r.app_version),
       expiring: r.updates_until < new Date(Date.now() + 30 * DAY).toISOString().slice(0, 10),
@@ -98,12 +91,30 @@ const TABS: { key: string; label: string; show: (c: Customer) => boolean }[] = [
 ];
 
 admin.get('/', async (c) => {
-  const customers = await loadCustomers(c.env.DB);
+  const [customers, signups] = await Promise.all([
+    loadCustomers(c.env.DB),
+    c.env.DB.prepare("SELECT * FROM accounts WHERE status = 'pending' ORDER BY created_at").all<Account>(),
+  ]);
   const tab = TABS.find((t) => t.key === c.req.query('tab')) ?? TABS[0]!;
   const created = c.req.query('created');
   return c.html(
     <Page title="My Customers">
       {created && <p class="flash">License created. Give the customer this key: <b class="mono">{created}</b></p>}
+      {signups.results.length > 0 && (
+        <section class="signups">
+          <h2>New sign-ups</h2>
+          {signups.results.map((a) => (
+            <div class="signup">
+              <span class="name">
+                {a.business_name}
+                <small>{a.city} · {a.owner_name} · {a.mobile} · {a.email} · {ago(a.created_at)}</small>
+              </span>
+              <form method="post" action={`/admin/signups/${a.id}/approve`}><button>Approve</button></form>
+              <form method="post" action={`/admin/signups/${a.id}/delete`}><button class="danger">Delete</button></form>
+            </div>
+          ))}
+        </section>
+      )}
       <nav class="tabs">
         {TABS.map((t) => (
           <a href={`?tab=${t.key}`} class={t.key === tab.key ? 'tab on' : 'tab'}>
@@ -137,34 +148,73 @@ admin.get('/', async (c) => {
         <h2>New license</h2>
         <input name="business_name" placeholder="Business name" required />
         <input name="city" placeholder="City" />
-        <label>Updates until <input type="date" name="updates_until" value={new Date(Date.now() + 365 * DAY).toISOString().slice(0, 10)} required /></label>
+        <label>Updates until <input type="date" name="updates_until" value={aYearFromNow()} required /></label>
         <button>Create license</button>
       </form>
     </Page>,
   );
 });
 
+async function createLicense(db: D1Database, name: string, city: string, updatesUntil: string) {
+  const year = new Date().getUTCFullYear();
+  const count = await db.prepare('SELECT COUNT(*) AS n FROM licenses WHERE id LIKE ?').bind(`LIC-${year}-%`).first<{ n: number }>();
+  const id = `LIC-${year}-${String((count?.n ?? 0) + 1).padStart(4, '0')}`;
+  const key = newLicenseKey();
+  await db.prepare('INSERT INTO licenses (id, key, business_name, city, updates_until, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+    .bind(id, key, name, city, updatesUntil, Date.now())
+    .run();
+  return { id, key };
+}
+
+const aYearFromNow = () => new Date(Date.now() + 365 * DAY).toISOString().slice(0, 10);
+
 admin.post('/licenses', async (c) => {
   const form = await c.req.parseBody();
   const name = String(form.business_name ?? '').trim();
   if (!name) return c.redirect('/admin');
-  const year = new Date().getUTCFullYear();
-  const count = await c.env.DB.prepare('SELECT COUNT(*) AS n FROM licenses WHERE id LIKE ?').bind(`LIC-${year}-%`).first<{ n: number }>();
-  const id = `LIC-${year}-${String((count?.n ?? 0) + 1).padStart(4, '0')}`;
-  const key = newLicenseKey();
-  await c.env.DB.prepare(
-    'INSERT INTO licenses (id, key, business_name, city, updates_until, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-  )
-    .bind(id, key, name, String(form.city ?? '').trim(), String(form.updates_until), Date.now())
-    .run();
+  const { key } = await createLicense(c.env.DB, name, String(form.city ?? '').trim(), String(form.updates_until));
   return c.redirect(`/admin?created=${encodeURIComponent(key)}`);
+});
+
+// Approving a sign-up creates its license; the customer then sees the key
+// and the download on their account page.
+admin.post('/signups/:id/approve', async (c) => {
+  const account = await c.env.DB.prepare("SELECT * FROM accounts WHERE id = ? AND status = 'pending'")
+    .bind(c.req.param('id'))
+    .first<Account>();
+  if (!account) return c.redirect('/admin');
+  const { id } = await createLicense(c.env.DB, account.business_name, account.city, aYearFromNow());
+  await c.env.DB.prepare("UPDATE accounts SET status = 'approved', license_id = ? WHERE id = ?").bind(id, account.id).run();
+  return c.redirect(`/admin/licenses/${id}`);
+});
+
+admin.post('/signups/:id/delete', async (c) => {
+  const id = c.req.param('id');
+  await c.env.DB.batch([
+    c.env.DB.prepare("DELETE FROM sessions WHERE account_id IN (SELECT id FROM accounts WHERE id = ? AND status = 'pending')").bind(id),
+    c.env.DB.prepare("DELETE FROM accounts WHERE id = ? AND status = 'pending'").bind(id),
+  ]);
+  return c.redirect('/admin');
+});
+
+// No email is sent: you pass the link on yourself (Messenger, SMS).
+admin.post('/accounts/:id/reset', async (c) => {
+  const token = newToken();
+  const account = await c.env.DB.prepare('UPDATE accounts SET reset_hash = ?, reset_expires = ? WHERE id = ? RETURNING license_id')
+    .bind(await sha256(token), Date.now() + DAY, c.req.param('id'))
+    .first<{ license_id: string }>();
+  if (!account) return c.redirect('/admin');
+  const link = `${new URL(c.req.url).origin}/reset/${token}`;
+  return c.redirect(`/admin/licenses/${account.license_id}?reset=${encodeURIComponent(link)}`);
 });
 
 admin.get('/licenses/:id', async (c) => {
   const id = c.req.param('id');
   const cu = (await loadCustomers(c.env.DB)).find((x) => x.id === id);
   if (!cu) return c.notFound();
-  const [activations, closes, payments] = await Promise.all([
+  const [account, activations, closes, payments] = await Promise.all([
+    c.env.DB.prepare('SELECT id, owner_name, email, mobile FROM accounts WHERE license_id = ?').bind(id)
+      .first<{ id: number; owner_name: string; email: string; mobile: string }>(),
     c.env.DB.prepare('SELECT * FROM activations WHERE license_id = ? ORDER BY activated_at DESC').bind(id)
       .all<{ install_id: string; device: string; activated_at: number; released_at: number | null }>(),
     c.env.DB.prepare('SELECT no, date, orders, net_cents, linked FROM closes WHERE license_id = ? ORDER BY closed_at DESC LIMIT 31').bind(id)
@@ -175,7 +225,11 @@ admin.get('/licenses/:id', async (c) => {
   const action = (path: string) => `/admin/licenses/${id}/${path}`;
   return c.html(
     <Page title={cu.business_name} back>
+      {c.req.query('reset') && (
+        <p class="flash">Send the customer this link. It sets a new password and works once, for 24 hours: <b class="mono">{c.req.query('reset')}</b></p>
+      )}
       <dl class="facts">
+        <dt>Contact</dt><dd>{account ? `${account.owner_name} · ${account.mobile} · ${account.email}` : 'No website account'}</dd>
         <dt>License</dt><dd>{cu.id} · <span class="mono">{cu.key}</span> · {cu.status}</dd>
         <dt>Updates until</dt><dd>{cu.updates_until}</dd>
         <dt>Tablet</dt><dd>{cu.model ?? '—'} · app {cu.app_version ?? '—'} · printer {cu.printer_ok === null ? '—' : cu.printer_ok ? 'OK' : 'not reachable'}</dd>
@@ -186,7 +240,7 @@ admin.get('/licenses/:id', async (c) => {
       <section class="actions">
         <form method="post" action={action('payments')}>
           <h2>Record a payment</h2>
-          <input name="month" type="month" value={month(Date.now() - 20 * DAY)} required />
+          <input name="month" type="month" value={manilaMonth(Date.now() - 20 * DAY)} required />
           <input name="amount" type="number" step="0.01" min="0.01" placeholder="Amount (₱)" required />
           <select name="method"><option value="gcash">GCash</option><option value="bank">Bank</option><option value="other">Other</option></select>
           <input name="ref" placeholder="Reference no." />
@@ -202,6 +256,13 @@ admin.get('/licenses/:id', async (c) => {
           <p>Frees the license so the new tablet can activate. The old one keeps working offline until its license is replaced.</p>
           <button disabled={!cu.install_id}>Release current tablet</button>
         </form>
+        {account && (
+          <form method="post" action={`/admin/accounts/${account.id}/reset`}>
+            <h2>Forgot password</h2>
+            <p>Makes a one-time link that lets them set a new password.</p>
+            <button>Make reset link</button>
+          </form>
+        )}
         <form method="post" action={action(cu.status === 'active' ? 'revoke' : 'reactivate')}>
           <h2>{cu.status === 'active' ? 'Revoke' : 'Reactivate'}</h2>
           <button class={cu.status === 'active' ? 'danger' : ''}>{cu.status === 'active' ? 'Revoke license' : 'Reactivate license'}</button>
@@ -287,7 +348,7 @@ function Page({ title, back, children }: { title: string; back?: boolean; childr
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>{title} · POS@034</title>
-        <style>{CSS}</style>
+        <style>{raw(CSS)}</style>
       </head>
       <body>
         <main class="card">
@@ -324,7 +385,8 @@ h1{margin:0 0 16px;font-size:22px}h2{font-size:14px;margin:20px 0 8px}
 .flash{background:#dcfce7;border-radius:8px;padding:10px 14px}.mono{font-family:ui-monospace,monospace}
 form{background:#fff;border-radius:12px;padding:12px 16px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 form h2{width:100%;margin:0}form p{width:100%;margin:0;color:#71717a;font-size:12px}
-.new{margin-top:16px}.actions{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.new{margin-top:16px}.signups{background:#fff7ed;border-radius:12px;padding:4px 16px 12px;margin-bottom:16px}
+.signup{display:flex;gap:8px;align-items:center;border-top:1px solid #fed7aa;padding:8px 0}.signup .name{flex:1}.signup form{padding:0;background:none}.actions{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
 input,select,button{font:inherit;height:40px;border-radius:8px;border:1px solid #d4d4d8;padding:0 10px;background:#fff}
 button{background:#ff5c1a;border-color:#ff5c1a;color:#fff;font-weight:700;cursor:pointer}button:disabled{opacity:.4}
 button.danger{background:#dc2626;border-color:#dc2626}

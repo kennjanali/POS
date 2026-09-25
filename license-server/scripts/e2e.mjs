@@ -8,7 +8,8 @@ const BASE = process.argv[2] ?? 'http://localhost:8787';
 const password = process.env.ADMIN_PASSWORD ??
   readFileSync(new URL('../.dev.vars', import.meta.url), 'utf8').match(/^ADMIN_PASSWORD=(.*)$/m)?.[1]?.trim();
 const basic = (pw) => ({ authorization: `Basic ${Buffer.from(`admin:${pw}`).toString('base64')}` });
-const adminFetch = (path, init = {}) => fetch(BASE + path, { ...init, headers: { ...init.headers, ...basic(password) } });
+// Origin: the dashboard's forms only accept posts from its own pages.
+const adminFetch = (path, init = {}) => fetch(BASE + path, { ...init, headers: { origin: BASE, ...init.headers, ...basic(password) } });
 let failures = 0;
 const check = (name, ok, detail = '') => {
   if (!ok) failures++;
@@ -147,6 +148,67 @@ await post('/api/heartbeat', { license: live.license, closes: [firstLive] });
 const anchorId = JSON.parse(Buffer.from(live.license.split('.')[0], 'base64url').toString()).licenseId;
 const anchorPage = await (await adminFetch(`/admin/licenses/${anchorId}`)).text();
 check('the first live close anchors the chain', !anchorPage.includes('does not chain') && anchorPage.includes('₱1,200.00'));
+
+// ── Website: register, approval, download, login, reset ──────────────────
+const form = (path, fields, cookie = '', origin = BASE) =>
+  fetch(BASE + path, { method: 'POST', redirect: 'manual', body: new URLSearchParams(fields), headers: { origin, cookie } });
+const page = (path, cookie = '') => fetch(BASE + path, { redirect: 'manual', headers: { cookie } });
+const sessionOf = (res) => res.headers.get('set-cookie')?.match(/pos034_session=[0-9a-f]+/)?.[0] ?? '';
+
+const home = await (await page('/')).text();
+check('the landing page says what it does and links to sign-up', home.includes('keeps selling') && home.includes('href="/register"'));
+
+const email = `owner${Date.now()}@example.com`;
+const signup = { business_name: `Site Carinderia ${Date.now()}`, owner_name: 'Maria', mobile: '09171234567', city: 'Iloilo', email, password: 'correct horse' };
+check('a bad email is refused', (await form('/register', { ...signup, email: 'nope' })).status === 400);
+check('a short password is refused', (await form('/register', { ...signup, password: 'short' })).status === 400);
+check('another site cannot post the sign-up form', (await form('/register', signup, '', 'https://evil.example')).status === 403);
+const registered = await form('/register', { ...signup, email: email.toUpperCase() });
+let session = sessionOf(registered);
+check('registering logs them in', registered.status === 302 && registered.headers.get('location') === '/account' && !!session);
+check('the same email cannot register twice', (await form('/register', signup)).status === 409);
+
+let account = await (await page('/account', session)).text();
+check('a pending account has no key and no download', account.includes('We will call you') && !account.includes('/account/download'));
+check('and the download refuses it', (await page('/account/download', session)).headers.get('location') === '/account');
+check('no account page without logging in', (await page('/account')).headers.get('location') === '/login');
+
+const dash = await (await adminFetch('/admin')).text();
+const signupId = dash.match(/\/admin\/signups\/(\d+)\/approve/)?.[1];
+check('the sign-up waits on your dashboard', dash.includes(signup.business_name) && dash.includes('09171234567') && !!signupId);
+const approved = await adminFetch(`/admin/signups/${signupId}/approve`, { method: 'POST', redirect: 'manual' });
+const siteLicenseId = approved.headers.get('location')?.split('/').pop();
+const licensePage = await (await adminFetch(`/admin/licenses/${siteLicenseId}`)).text();
+check('approving creates their license, with their contact details', /LIC-\d{4}-\d{4}/.test(siteLicenseId ?? '') && licensePage.includes('Maria · 09171234567'));
+
+account = await (await page('/account', session)).text();
+const siteKey = account.match(/[A-Z2-9]{4}(-[A-Z2-9]{4}){3}/)?.[0];
+check('the customer now sees their license key', !!siteKey && licensePage.includes(siteKey));
+check('and the download', account.includes('href="/account/download"'));
+const apk = await page('/account/download', session);
+const apkBytes = new Uint8Array(await apk.arrayBuffer());
+check('the download is an APK', apk.headers.get('content-type') === 'application/vnd.android.package-archive' && apkBytes[0] === 0x50 && apkBytes[1] === 0x4b,
+  `${apk.status} ${apk.headers.get('content-type')} ${apkBytes.length} bytes`);
+
+check('a wrong password is refused', (await form('/login', { email, password: 'wrong password' })).status === 401);
+const loggedIn = await form('/login', { email, password: 'correct horse' });
+check('the right one logs in', loggedIn.status === 302 && !!sessionOf(loggedIn));
+
+for (let i = 0; i < 10; i++) await form('/login', { email, password: 'guess guess' });
+check('ten wrong passwords lock the account for a while', (await form('/login', { email, password: 'correct horse' })).status === 429);
+
+const reset = await adminFetch(`/admin/accounts/${signupId}/reset`, { method: 'POST', redirect: 'manual' });
+const resetLink = decodeURIComponent(new URL(reset.headers.get('location'), BASE).searchParams.get('reset') ?? '');
+const resetPath = new URL(resetLink).pathname;
+check('you can make a reset link', resetPath.startsWith('/reset/') && (await page(resetPath)).status === 200);
+const resetDone = await form(resetPath, { password: 'new password 1' });
+check('the link sets a new password and logs them in', resetDone.status === 302 && !!sessionOf(resetDone));
+check('and works only once', (await page(resetPath)).status === 410);
+check('it signs out the old sessions', (await page('/account', session)).headers.get('location') === '/login');
+session = sessionOf(await form('/login', { email, password: 'new password 1' }));
+check('the new password works, and clears the lock', !!session);
+await form('/logout', {}, session);
+check('logging out ends the session', (await page('/account', session)).headers.get('location') === '/login');
 
 console.log(failures ? `\n${failures} check(s) FAILED.` : '\nAll license-server checks passed.');
 process.exit(failures ? 1 : 0);

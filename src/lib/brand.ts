@@ -14,4 +14,4 @@ export const PRODUCT_SLUG = 'pos034';
 export const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION ?? 'dev';
 
 /** Activation, heartbeat and cloud backup (license-server/). */
-export const LICENSE_SERVER_URL = 'https://pos034-license.kennkennali.workers.dev';
+export const LICENSE_SERVER_URL = 'https://pos034.kennkennali.workers.dev';

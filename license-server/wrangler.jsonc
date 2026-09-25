@@ -1,6 +1,7 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "pos034-license",
+  // The website, your dashboard and the tablets' API: https://pos034.kennkennali.workers.dev
+  "name": "pos034",
   "account_id": "95b931194e93e924460507e04c746e46",
   "main": "src/index.tsx",
   "compatibility_date": "2026-09-22",
@@ -22,6 +23,12 @@
       "binding": "BACKUPS",
       // Created with `wrangler kv namespace create pos034-backups`.
       "id": "d39e41683f0d4796b074defc5991144f"
+    },
+    {
+      // The Android app, for logged-in customers (scripts/publish-apk.mjs).
+      "binding": "RELEASES",
+      // Created with `wrangler kv namespace create pos034-releases`.
+      "id": "5e5e6c32eadb4cd49a6ceb7bbf6eb736"
     }
   ],
 
