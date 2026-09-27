@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>POS-034 — Build Progress</title>
+<style>
+  :root {
+    --bg: #f0ede9; --panel: #ffffff; --ink: #1a1a1a; --ink-2: #555; --line: #d9d4ce;
+    --accent: #ff5c1a; --accent-soft: #ffe6da; --ok: #16794a; --no: #b42318; --code: #f6f3ef;
+    --wait: #b26b00; --wait-soft: #fdf0d5; --idle: #8a8a8a; --idle-soft: #ececea;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f0f0f; --panel: #1a1a1a; --ink: #eeeeee; --ink-2: #a8a8a8; --line: #333;
+      --accent: #ff7a42; --accent-soft: #3a2116; --ok: #4ade80; --no: #f87171; --code: #232323;
+      --wait: #fbbf24; --wait-soft: #3a2e10; --idle: #8a8a8a; --idle-soft: #262626;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f0f0f; --panel: #1a1a1a; --ink: #eeeeee; --ink-2: #a8a8a8; --line: #333;
+    --accent: #ff7a42; --accent-soft: #3a2116; --ok: #4ade80; --no: #f87171; --code: #232323;
+    --wait: #fbbf24; --wait-soft: #3a2e10; --idle: #8a8a8a; --idle-soft: #262626;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 1080px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 28px; margin: 0 0 4px; }
+  h2 { font-size: 19px; margin: 36px 0 10px; padding-bottom: 6px; border-bottom: 2px solid var(--accent); }
+  h3 { font-size: 15px; margin: 18px 0 6px; }
+  p, li { color: var(--ink); }
+  .sub { color: var(--ink-2); margin: 0 0 16px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin: 10px 0; }
+  .grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+  table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; font-size: 14px; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { background: var(--accent-soft); font-weight: 600; }
+  tr:last-child td { border-bottom: 0; }
+  .scroll { overflow-x: auto; }
+  code { background: var(--code); padding: 1px 5px; border-radius: 4px; font-size: 13px; }
+  .yes { color: var(--ok); font-weight: 700; }
+  .no { color: var(--no); font-weight: 700; }
+
+  .stat { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+  .stat b { display: block; font-size: 24px; line-height: 1.15; }
+  .stat span { color: var(--ink-2); font-size: 12.5px; }
+
+  .bar { display: flex; gap: 3px; height: 14px; border-radius: 99px; overflow: hidden; margin: 14px 0 6px; background: var(--idle-soft); }
+  .bar i { display: block; }
+  .bar .d { background: var(--ok); } .bar .w { background: var(--wait); } .bar .n { background: var(--idle-soft); }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; color: var(--ink-2); font-size: 13px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .dot { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+
+  .tag { display: inline-block; border-radius: 99px; padding: 1px 9px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .t-done { background: var(--ok); color: #fff; }
+  .t-wait { background: var(--wait); color: #241a00; }
+  .t-idle { background: var(--idle-soft); color: var(--ink-2); }
+
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 10px; }
+  .chips button { font: inherit; font-size: 13px; cursor: pointer; border: 1px solid var(--line);
+    background: var(--panel); color: var(--ink-2); border-radius: 99px; padding: 4px 12px; }
+  .chips button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  tr.hide { display: none; }
+  .n { color: var(--ink-2); font-size: 12.5px; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; }
+  ul.tight { margin: 4px 0; padding-left: 20px; }
+  ul.tight li { margin: 2px 0; }
+  .strike { color: var(--ink-2); }
+</style>
+</head>
+<body>
+<main>
+
+<h1>POS-034 &mdash; Build Progress</h1>
+<p class="sub">
+  Offline POS for small shops, by kennali.com. One tablet = one shop.<br>
+  Branch <code>pos-034-redesign</code> &middot; 30 commits ahead of <code>main</code>, none pushed &middot; as of 2026-09-28.<br>
+  Spec: <code>docs/superpowers/specs/2026-09-27-pos-034-design.md</code> &middot;
+  Plan: <code>docs/superpowers/plans/2026-09-27-pos-034-app.md</code> (18 tasks) &middot;
+  Ledger: <code>.superpowers/sdd/2026-09-27-pos-034-app/progress.md</code>
+</p>
+
+<div class="grid">
+  <div class="stat"><b>10<span class="n">/18</span></b><span>Tasks complete</span></div>
+  <div class="stat"><b>1</b><span>In progress (Task 11)</span></div>
+  <div class="stat"><b>7</b><span>Not started</span></div>
+  <div class="stat"><b class="yes">PASS</b><span><code>npm run check</code> — all 6 stages</span></div>
+  <div class="stat"><b>121</b><span>Tests passing (17 files)</span></div>
+</div>
+
+<div class="bar" role="img" aria-label="10 of 18 tasks complete, 1 in progress, 7 not started">
+  <i class="d" style="width:55.6%"></i><i class="w" style="width:5.6%"></i><i class="n" style="width:38.8%"></i>
+</div>
+<div class="legend">
+  <span><i class="dot" style="background:var(--ok)"></i>10 complete</span>
+  <span><i class="dot" style="background:var(--wait)"></i>1 in progress</span>
+  <span><i class="dot" style="background:var(--idle-soft);border:1px solid var(--line)"></i>7 not started</span>
+</div>
+
+<h2>Quality gate</h2>
+<div class="scroll">
+<table>
+  <tr><th>Stage</th><th>Result</th><th>What it covers</th></tr>
+  <tr><td><code>typecheck</code></td><td class="yes">PASS</td><td><code>tsc --noEmit</code></td></tr>
+  <tr><td><code>lint</code></td><td class="yes">PASS</td><td><code>eslint src</code></td></tr>
+  <tr><td><code>test</code></td><td class="yes">PASS</td><td>121 tests, 17 files</td></tr>
+  <tr><td><code>verify:auth</code></td><td class="yes">PASS</td><td>Route guard for every role, last-owner protection, PIN hashing</td></tr>
+  <tr><td><code>verify:demo</code></td><td class="yes">PASS</td><td>Demo data: frozen totals, gapless numbers, stock sums to on hand</td></tr>
+  <tr><td><code>verify:safeguards</code></td><td class="yes">PASS</td><td>First run, license offline binding, one-way practice door, daily close chain, backup encryption, receipt width, archive pruning</td></tr>
+</table>
+</div>
+
+<h2>Tasks</h2>
+<div class="chips" role="group" aria-label="Filter tasks by status">
+  <button type="button" data-f="all" aria-pressed="true">All 18</button>
+  <button type="button" data-f="done" aria-pressed="false">Complete (10)</button>
+  <button type="button" data-f="wait" aria-pressed="false">In progress (1)</button>
+  <button type="button" data-f="idle" aria-pressed="false">Not started (7)</button>
+</div>
+<div class="scroll">
+<table id="tasks">
+  <thead>
+    <tr><th>#</th><th>Task</th><th>Status</th><th>Commits</th><th>Delivers</th></tr>
+  </thead>
+  <tbody>
+    <tr data-s="done">
+      <td>1</td><td>Rename to POS-034, move the Android app ID</td>
+      <td><span class="tag t-done">Complete</span></td>
+      <td class="mono">a9fade0..fb91bf5</td>
+      <td>Name POS-034, slug <code>pos034</code>, app ID <code>com.kennali.pos034</code></td>
+    </tr>
+    <tr data-s="done">
+      <td>2</td><td>Remove the technology fee and sales reporting from the heartbeat</td>
+      <td><span class="tag t-done">Complete</span></td>
+      <td class="mono">fb91bf5..b79cafa</td>
+      <td>No 2% fee, no closes payload to the server. Removes the billing model from the old plan.</td>
+    </tr>
+    <tr data-s="done">
+      <td>3</td><td>Vitest, and a tax engine with promo/owner discounts and no statutory branch</td>
+      <td><span class="tag t-done">Complete</span></td>
+      <td class="mono">b79cafa..000af38</td>
+      <td>Test runner; percent or fixed discounts; Senior/PWD branch removed from the engine</td>
+    </tr>
+    <tr data-s="done">
+      <td>4</td><td>Data model v8, part 1: remove Senior/PWD, add sale discounts and the migration module</td>
+      <td><span class="tag t-done">Complete</span></td>
+      <td class="mono">000af38..3026abb</td>
+      <td><code>SaleDiscount</code>, the v7&rarr;v8 migration, backup carries the new shape</td>
+    </tr>
+    <tr data-s="done">
+      <td>5</td><td>Owner and Staff roles</td>
+      <td><span class="tag t-done">Complete</span></td>
+      <td class="mono">3026abb..5c626a7</td>
+      <td>Two roles; every guarded action refused in the store, not just hidden on screen</td>
+    </tr>
+    <tr data-s="done">
+      <td>6</td><td>Atomic saves: one batch per change, with new row stores</td>
+      <td><span class="tag t-done">Complete</span></td>
+      <td class="mono">5c626a7..4064c9c</td>
+      <td>One change = one batch; products and audit as row stores; a failed batch is retried, not dropped</td>
+    </tr>
+    <tr data-s="done">
+      <td>7</td><td>Shop-type presets and feature switches</td>
+      <td><span class="tag t-done">Complete</span></td>
+      <td class="mono">4064c9c..c077f40</td>
+      <td>Preset bundles that switch features on/off per shop type; settings merge fills missing fields</td>
+    </tr>
+    <tr data-s="done">
+      <td>8</td><td>Quantities in thousandths, and product kind/SKU/category</td>
+      <td><span class="tag t-done">Complete</span></td>
+      <td class="mono">c077f40..168ea20</td>
+      <td>Decimal quantities for measured units (wire per m, labor per hour); unique SKU</td>
+    </tr>
+    <tr data-s="done">
+      <td>9</td><td>Stock rules: holds, never below zero, and numbers assigned at payment</td>
+      <td><span class="tag t-done">Complete</span></td>
+      <td class="mono">168ea20..dc0ccc0</td>
+      <td>Open orders hold stock; stock cannot go under zero; invoice numbers issued at payment, not at open</td>
+    </tr>
+    <tr data-s="done">
+      <td>10</td><td>The Inventory screen (owner only)</td>
+      <td><span class="tag t-done">Complete</span></td>
+      <td class="mono">dc0ccc0..be7c5aa</td>
+      <td>Products, services, add stock, count, damage, quick-add, per-item stock history, low-stock bell</td>
+    </tr>
+    <tr data-s="wait">
+      <td>11</td><td>Sell screen and payment, the easy way</td>
+      <td><span class="tag t-wait">In progress</span></td>
+      <td class="mono strike">uncommitted</td>
+      <td><code>payExact</code> one-tap cash/GCash; retail cart vs ticket floor; VAT line on the slip. <b>Sales-history VAT column still to do.</b></td>
+    </tr>
+    <tr data-s="idle">
+      <td>12</td><td>Promo codes</td>
+      <td><span class="tag t-idle">Not started</span></td>
+      <td class="mono">&mdash;</td>
+      <td><code>promo.ts</code>, owner-made codes staff can apply, one discount per sale, locked after first use</td>
+    </tr>
+    <tr data-s="idle">
+      <td>13</td><td>Quotations</td>
+      <td><span class="tag t-idle">Not started</span></td>
+      <td class="mono">&mdash;</td>
+      <td><code>quotes.ts</code>, <code>/quotes</code> page, save a cart as a quote, convert at quoted prices, re-quote, cancel</td>
+    </tr>
+    <tr data-s="idle">
+      <td>14</td><td>Today, This month, and Today's summary</td>
+      <td><span class="tag t-idle">Not started</span></td>
+      <td class="mono">&mdash;</td>
+      <td><code>/sell</code> and <code>/month</code> routes, <code>today.ts</code>, close format 2 (VAT, promo/owner split, expected vs counted cash)</td>
+    </tr>
+    <tr data-s="idle">
+      <td>15</td><td>Setup wizard (four questions) and the Finish-setting-up checklist</td>
+      <td><span class="tag t-idle">Not started</span></td>
+      <td class="mono">&mdash;</td>
+      <td><code>catalogs.ts</code> with 10&ndash;15 sample items per shop type, 4-step wizard, 5-item checklist</td>
+    </tr>
+    <tr data-s="idle">
+      <td>16</td><td>Spreadsheet (CSV) import and export</td>
+      <td><span class="tag t-idle">Not started</span></td>
+      <td class="mono">&mdash;</td>
+      <td><code>csv.ts</code> (RFC 4180), preview with per-row errors, import good rows only, export template</td>
+    </tr>
+    <tr data-s="idle">
+      <td>17</td><td>Demo businesses</td>
+      <td><span class="tag t-idle">Not started</span></td>
+      <td class="mono">&mdash;</td>
+      <td>Four demo shops, one per preset; replaces <code>scripts/verify-demo.mjs</code> with <code>demo.test.ts</code></td>
+    </tr>
+    <tr data-s="idle">
+      <td>18</td><td>First-use tips, the wording pass, and the README</td>
+      <td><span class="tag t-idle">Not started</span></td>
+      <td class="mono">&mdash;</td>
+      <td><code>Tip</code> component, plain words everywhere, README rewritten for POS-034, device pass on the emulator</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Task 11 in detail</h2>
+<p class="sub">9 files changed, +735 / &minus;377, plus 2 new test files. Nothing committed yet.</p>
+<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr))">
+  <div class="card">
+    <h3 style="margin-top:0">Done and passing</h3>
+    <ul class="tight">
+      <li><code>payExact(orderId, 'cash')</code> closes a &pob;150 cart with one 15000 payment</li>
+      <li>GCash refused without a <code>refNo</code>; closes with one &mdash; order stays open when refused</li>
+      <li>Retail flow: always one cart, first tap opens a walk-in, clear = discard</li>
+      <li>Ticket flow: the floor of open tickets, customer name/phone and plate</li>
+      <li><code>MenuGrid</code> &rarr; <code>ProductGrid</code>, category tabs, search by name or SKU</li>
+      <li>Slip prints <code>VAT (12%) included</code> under TOTAL, nothing on a non-VAT shop</li>
+      <li>Open-order rules: qty &le; 0 refused, a line at zero is removed, a paid order can't be discarded</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Still to do</h3>
+    <ul class="tight">
+      <li><b>VAT column on the sales-history table</b> &mdash; <code>src/app/orders/page.tsx</code> has no VAT reference at all. Named in the brief, not started.</li>
+      <li>Wording still to change in that file: "Order no.", "Tender" (brief wants "Payment"), "Void" &rarr; "Cancel sale", "Search menu" &rarr; "Search items"</li>
+      <li>Sidebar still reads "New order"; the <code>POS@034</code> wordmark is Task 18's wording pass</li>
+      <li>Manual pass at 1280&times;800 on both presets (retail exact-cash flow, auto plate + GCash)</li>
+      <li>Commit: <code>Easy sell screen: one-tap payments, carts for retail, tickets for jobs and tables</code></li>
+    </ul>
+  </div>
+</div>
+
+<h2>Carried decisions and open risks</h2>
+<div class="scroll">
+<table>
+  <tr><th>Item</th><th>State</th><th>Goes to</th></tr>
+  <tr>
+    <td>30 commits ahead of <code>main</code>, branch has <b>no upstream</b> &mdash; a single point of loss</td>
+    <td class="no">Open</td>
+    <td>Now</td>
+  </tr>
+  <tr>
+    <td>A failed load used to set <code>hydrated: true</code>, so the next flush could write default state over the stored blob. A <code>loadFailed</code> flag now stops all writes for that session.</td>
+    <td>Mitigated, flagged for final review</td>
+    <td>Final review</td>
+  </tr>
+  <tr>
+    <td>Ruling 1: every v8 change lives in one v7&rarr;v8 migration with no intermediate versions, on the assumption that no real shop runs the app yet. A tablet that ran a mid-branch build won't re-migrate.</td>
+    <td>Assumption to confirm</td>
+    <td>Now</td>
+  </tr>
+  <tr>
+    <td><code>demo.ts</code> dates some of today's orders in the future just after midnight. <code>verify:demo</code> is pinned to noon as a workaround.</td>
+    <td class="n">Deferred</td>
+    <td>Task 17</td>
+  </tr>
+  <tr>
+    <td>The <code>SAVED</code> list in <code>usePos.ts</code> must gain promos and quotes</td>
+    <td class="n">Carried</td>
+    <td>Tasks 12, 13</td>
+  </tr>
+  <tr>
+    <td><code>setupInput</code> in <code>verify-safeguards.mjs</code> and <code>verify-auth.mjs</code> must follow the new wizard shape</td>
+    <td class="n">Carried</td>
+    <td>Task 15</td>
+  </tr>
+  <tr>
+    <td><code>importSnapshot</code> of a v7 backup doesn't reset negative stock</td>
+    <td class="n">Deferred</td>
+    <td>Task 16</td>
+  </tr>
+  <tr>
+    <td>Wording, README, and the stale <code>brand.ts</code> comment still say POS@034 / superadmin / waiter</td>
+    <td class="n">Carried</td>
+    <td>Task 18</td>
+  </tr>
+  <tr>
+    <td>Several deferred test gaps (guards beyond two actions, a change landing while a batch is in flight, <code>setOwnerDiscountPercent</code> range checks)</td>
+    <td class="n">Carried</td>
+    <td>Task 12, final review</td>
+  </tr>
+  <tr>
+    <td><code>vitest.config.ts</code> warns about ESM syntax in a CommonJS-loaded file on every run</td>
+    <td class="n">Cosmetic</td>
+    <td>Any time</td>
+  </tr>
+</table>
+</div>
+
+<h2>What the redesign changed</h2>
+<p class="sub">The 2026-09-27 spec supersedes the product direction in <code>REWORK-PLAN.md</code> (restaurant-only, 2% fee) and <code>PROJECT-BRIEF.md</code>. Those files stay as history.</p>
+<ul class="tight">
+  <li><b>Dropped:</b> the 2% technology fee and all server-side billing; the Senior/PWD statutory discount; multi-branch.</li>
+  <li><b>Added:</b> shop-type presets (restaurant, hardware, auto, car wash, general) as feature switches; promo codes; quotations; product kind / SKU / category; decimal quantities.</li>
+  <li><b>Kept:</b> the offline engine, void-never-delete, the audit trail, PINs and the recovery code, the permission matrix, licensing, backups, printing, the daily close.</li>
+  <li><b>New rules:</b> stock can never go below zero; one discount per sale and it comes from the owner; no price is ever typed at the counter; every sale is paid in full &mdash; no credit.</li>
+</ul>
+
+<p class="sub" style="margin-top:36px">Generated 2026-09-28 from the SDD ledger and the git log. Regenerate after each task commit.</p>
+
+</main>
+<script>
+  const chips = document.querySelectorAll('.chips button');
+  const rows = document.querySelectorAll('#tasks tbody tr');
+  chips.forEach((b) => b.addEventListener('click', () => {
+    chips.forEach((o) => o.setAttribute('aria-pressed', String(o === b)));
+    const f = b.dataset.f;
+    rows.forEach((r) => r.classList.toggle('hide', f !== 'all' && r.dataset.s !== f));
+  }));
+</script>
+</body>
+</html>
