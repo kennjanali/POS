@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { cents } from '@/lib/money';
 import { applyPreset, type ShopType } from '@/lib/presets';
-import { qty } from '@/lib/qty';
+import { qty, type Qty } from '@/lib/qty';
 import { computeBill } from '@/lib/tax';
 import type { Product } from '@/lib/types';
 import { ownerShop, resetStore, signInAs } from '@/test/store';
@@ -42,7 +42,7 @@ describe('stock rules', () => {
     await ownerShop();
     preset('retail');
     S().upsertProduct(WIDGET);
-    S().adjustStock('w', qty(3), 'opening');
+    S().receiveStock({ lines: [{ productId: 'w', qty: qty(3) }] });
   });
 
   it('refuses more than is available', () => {
@@ -90,7 +90,7 @@ describe('stock rules', () => {
   it('re-checks on hand at close and changes nothing when short', () => {
     const id = S().openOrder('A', 'walk-in');
     S().addLine(id, 'w', qty(3));
-    S().adjustStock('w', qty(-1), 'count');
+    S().countStock('w', qty(2));
     payFor(id);
     const moves = S().stockMoves;
 
@@ -116,12 +116,13 @@ describe('stock rules', () => {
     expect(S().order(id)?.lines.map((l) => l.unitCents)).toEqual([10000, 12000]);
   });
 
-  it('never lets an adjustment take stock below zero', () => {
-    S().adjustStock('w', qty(-2), 'count');
-    expect(S().adjustStock('w', qty(-5), 'count')).toEqual({
+  it('never lets damage or a count take stock below zero', () => {
+    S().recordDamage('w', qty(2), 'dropped');
+    expect(S().recordDamage('w', qty(5), 'dropped')).toEqual({
       ok: false,
-      error: "Stock can't go below zero.",
+      error: 'Only 1 on hand.',
     });
+    expect(S().countStock('w', -1000 as Qty)).toEqual({ ok: false, error: 'Enter a count of 0 or more.' });
     expect(S().stockOf('w')).toBe(qty(1));
   });
 
@@ -159,7 +160,7 @@ describe('stock rules', () => {
     const id = S().openOrder('T1', 'dine-in');
     S().addLine(id, 'w', qty(3));
     S().addLine(id, 'p1');
-    S().adjustStock('w', qty(-1), 'count');
+    S().countStock('w', qty(2));
 
     expect(S().serveAll(id)).toEqual({ ok: false, error: 'Widget: only 2 left.' });
     expect(S().order(id)?.lines.every((l) => !l.served)).toBe(true);

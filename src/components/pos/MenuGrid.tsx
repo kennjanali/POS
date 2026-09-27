@@ -1,13 +1,16 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Search } from 'lucide-react';
+import { Plus, Search } from 'lucide-react';
 
 import { peso } from '@/lib/format';
+import { can } from '@/lib/permissions';
 import { sortProducts } from '@/lib/products';
 import { decimalsAllowed, formatQty, parseQty, type Qty } from '@/lib/qty';
 import type { Product } from '@/lib/types';
+import { useAuth } from '@/store/useAuth';
 import { heldStock, usePos, type UserResult } from '@/store/usePos';
+import { QuickAdd } from '@/components/inventory/QuickAdd';
 import { Button } from '@/components/ui/Button';
 import { cn } from '@/components/ui/cn';
 import { Field } from '@/components/ui/Field';
@@ -25,10 +28,17 @@ export function MenuGrid({ orderId }: MenuGridProps) {
   const branchId = usePos((s) => s.activeBranchId);
   const settings = usePos((s) => s.settings);
   const addLine = usePos((s) => s.addLine);
+  const canManage = useAuth((s) => can(s.session, 'inventory.manage'));
 
   const [query, setQuery] = useState('');
   /** A measured item waiting for its quantity. */
   const [measuring, setMeasuring] = useState<Product | null>(null);
+  const [quickAdding, setQuickAdding] = useState(false);
+
+  function pick(product: Product) {
+    if (decimalsAllowed(product.unit, settings.features)) setMeasuring(product);
+    else add(product.id);
+  }
 
   // Open orders hold what is on them, so the tiles count what is left after that.
   const held = useMemo(() => heldStock(orders, branchId), [orders, branchId]);
@@ -77,11 +87,7 @@ export function MenuGrid({ orderId }: MenuGridProps) {
               key={product.id}
               type="button"
               disabled={out}
-              onClick={() =>
-                decimalsAllowed(product.unit, settings.features)
-                  ? setMeasuring(product)
-                  : add(product.id)
-              }
+              onClick={() => pick(product)}
               className={cn(
                 'flex min-h-[76px] flex-col justify-between gap-1 rounded-lg border p-2.5 text-left',
                 'transition-[border-color,transform]',
@@ -113,12 +119,34 @@ export function MenuGrid({ orderId }: MenuGridProps) {
           );
         })}
 
+        {canManage && (
+          <button
+            type="button"
+            onClick={() => setQuickAdding(true)}
+            className="flex min-h-[76px] items-center justify-center gap-1.5 rounded-lg border border-dashed border-line p-2.5 text-[12.5px] font-semibold text-ink-2 hover:border-accent hover:text-accent"
+          >
+            <Plus size={14} aria-hidden />
+            Add item
+          </button>
+        )}
+
         {visible.length === 0 && (
           <p className="col-span-full py-8 text-center text-[13px] text-ink-3">
             No items match “{query}”.
           </p>
         )}
       </div>
+
+      {quickAdding && (
+        <QuickAdd
+          onClose={() => setQuickAdding(false)}
+          onAdded={(id) => {
+            setQuickAdding(false);
+            const product = usePos.getState().product(id);
+            if (product) pick(product);
+          }}
+        />
+      )}
 
       {measuring && (
         <QtyPad

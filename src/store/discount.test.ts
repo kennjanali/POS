@@ -23,7 +23,7 @@ function ringUp500(): string {
     active: true,
     reorderLevel: null,
   });
-  S().adjustStock('p500', qty(1), 'opening');
+  S().receiveStock({ lines: [{ productId: 'p500', qty: qty(1) }] });
   const id = S().openOrder('T1', 'dine-in');
   S().addLine(id, 'p500');
   S().serveAll(id);

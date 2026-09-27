@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
-import { AlertTriangle, Lock, WifiOff } from 'lucide-react';
+import { AlertTriangle, Bell, Lock, WifiOff, X } from 'lucide-react';
 
-import { usePos } from '@/store/usePos';
+import { heldStock, usePos } from '@/store/usePos';
 import { useAuth } from '@/store/useAuth';
 import { PRODUCT_NAME } from '@/lib/brand';
-import { ROLE_LABELS } from '@/lib/permissions';
+import { can, ROLE_LABELS } from '@/lib/permissions';
+import { formatQty, type Qty } from '@/lib/qty';
 
 const TITLES: Record<string, string> = {
   '/': 'Point of Sale',
@@ -99,6 +100,8 @@ export function Topbar() {
 
       <time className="tnum text-[12px] font-semibold text-ink-2">{clock}</time>
 
+      {can(session, 'inventory.manage') && <LowStockBell />}
+
       {session && (
         <>
           <span className="ml-1 flex flex-col items-end leading-tight">
@@ -121,5 +124,69 @@ export function Topbar() {
         </>
       )}
     </header>
+  );
+}
+
+/** The owner's low-stock alerts: items a sale or a stock change took to their reorder level. */
+function LowStockBell() {
+  const alerts = usePos((s) => s.lowStockAlerts);
+  const products = usePos((s) => s.products);
+  const stock = usePos((s) => s.stock);
+  const orders = usePos((s) => s.orders);
+  const branchId = usePos((s) => s.activeBranchId);
+  const dismiss = usePos((s) => s.dismissLowStockAlert);
+  const [open, setOpen] = useState(false);
+
+  // An alert for an item since removed from Inventory has nothing to say.
+  const shown = alerts.flatMap((id) => {
+    const product = products.find((p) => p.id === id);
+    return product ? [product] : [];
+  });
+  const held = heldStock(orders, branchId);
+  const left = (id: string) =>
+    Math.max(0, (stock[branchId]?.[id] ?? 0) - (held.get(id) ?? 0)) as Qty;
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        aria-label={`Low stock alerts: ${shown.length}`}
+        className="relative grid size-10 place-items-center rounded-md border border-line bg-raised text-ink-2 transition-colors hover:border-accent hover:text-accent"
+      >
+        <Bell size={15} aria-hidden />
+        {shown.length > 0 && (
+          <span className="tnum absolute -top-1 -right-1 grid min-w-4.5 place-items-center rounded-full bg-warn px-1 text-[10px] leading-4.5 font-bold text-white">
+            {shown.length}
+          </span>
+        )}
+      </button>
+      {open && (
+        <div className="absolute top-12 right-0 z-200 w-72 rounded-md border border-line bg-surface p-2 shadow-xl">
+          {shown.length === 0 ? (
+            <p className="px-2 py-3 text-[12px] text-ink-3">No low-stock alerts.</p>
+          ) : (
+            <ul className="flex flex-col">
+              {shown.map((product) => (
+                <li key={product.id} className="flex items-center justify-between gap-2 px-2">
+                  <span className="text-[12px]">
+                    Low stock: {product.name} — {formatQty(left(product.id))} left
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => dismiss(product.id)}
+                    aria-label={`Dismiss ${product.name}`}
+                    className="grid size-10 shrink-0 place-items-center rounded text-ink-3 hover:bg-raised hover:text-ink"
+                  >
+                    <X size={14} aria-hidden />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

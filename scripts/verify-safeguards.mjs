@@ -63,7 +63,7 @@ const setTraining = (on) =>
  *  on it, serve it. Returns id and the bill due. The restock keeps the
  *  no-negative-stock rule from refusing a sale these checks are not about. */
 function ringUp(product, units = 1) {
-  S().adjustStock(product.id, qty(units), 'restock');
+  S().receiveStock({ lines: [{ productId: product.id, qty: qty(units) }] });
   const id = S().openOrder(`T${Math.random().toString(36).slice(2, 7)}`, 'dine-in');
   S().addLine(id, product.id, qty(units));
   S().serveAll(id);
@@ -517,7 +517,7 @@ console.log('\n— Thermal receipt: never wider than the paper —');
   setTraining(true);
   const long = { ...product, id: 'long-name', name: 'Extra Special Chicken Inasal Family Platter with Java Rice' };
   S().upsertProduct(long);
-  S().adjustStock(long.id, qty(5), 'restock');
+  S().receiveStock({ lines: [{ productId: long.id, qty: qty(5) }] });
   const { id, due } = ringUp(long, 3);
   S().addTender(id, { method: 'gcash', amountCents: due, tenderedCents: null, changeCents: null, refNo: '1234567890123' });
   S().closeOrder(id);

@@ -60,10 +60,10 @@ import type {
   OrderLine,
   OrderType,
   Product,
+  ProductKind,
   SaleDiscount,
   Settings,
   StockMove,
-  StockReason,
   Tender,
   TenderMethod,
   DataSnapshot,
@@ -79,7 +79,7 @@ export type UserResult = { ok: true } | { ok: false; error: string };
  * refuses it anyway, so a missed button or a stale screen cannot void a sale
  * or change a price. Null means go ahead.
  */
-function guard(p: Permission): UserResult | null {
+function guard(p: Permission): { ok: false; error: string } | null {
   return can(useAuth.getState().session, p)
     ? null
     : { ok: false, error: 'Only the owner can do that.' };
@@ -182,13 +182,29 @@ interface PosState {
   voidOrder: (orderId: string, reason: string) => UserResult;
 
   // ── inventory ───────────────────────────────────────────────────────
-  adjustStock: (
-    productId: string,
-    delta: Qty,
-    reason: StockReason,
-    note?: string,
-    branchId?: string,
-  ) => UserResult;
+  /** A delivery: one restock move per line. A new unit cost applies to future sales. */
+  receiveStock: (input: {
+    lines: { productId: string; qty: Qty; unitCostCents?: Centavos }[];
+    supplier?: string;
+    docNo?: string;
+  }) => UserResult;
+  /** What is on the shelf: the difference from on hand is written as a count move. */
+  countStock: (productId: string, counted: Qty, note?: string) => UserResult;
+  /** Damaged or spoiled stock, never more than is on hand. */
+  recordDamage: (productId: string, q: Qty, note: string) => UserResult;
+  /** An item added from the sell screen, sold like any other from then on. */
+  quickAddProduct: (input: {
+    name: string;
+    priceCents: Centavos;
+    kind: ProductKind;
+    unit: string;
+    openingQty: Qty;
+  }) => { ok: true; id: string } | { ok: false; error: string };
+  /** Active stock items at or below their reorder level, most urgent first. */
+  lowStock: () => { productId: string; available: Qty; level: Qty }[];
+  /** Products a move took to or below their reorder level, until dismissed. */
+  lowStockAlerts: string[];
+  dismissLowStockAlert: (productId: string) => void;
   upsertProduct: (product: Product) => UserResult;
   removeProduct: (productId: string) => UserResult;
 
@@ -356,6 +372,34 @@ function shortLine(lines: OrderLine[], onHand: Record<string, Qty>): string | nu
   return null;
 }
 
+/** The delivery fields of a move that is not a restock. */
+const NO_DELIVERY = { supplier: null, docNo: null, unitCostCents: null } as const;
+
+function reorderLevel(product: Product, settings: Settings): Qty {
+  return product.reorderLevel ?? settings.lowStockAt;
+}
+
+/**
+ * The alerts after a stock change: each product the change took from above its
+ * reorder level to at or below it is added, once. Only a dismiss removes one.
+ */
+function alertCrossings(
+  s: Pick<PosState, 'products' | 'settings' | 'lowStockAlerts'>,
+  before: Record<string, Qty>,
+  after: Record<string, Qty>,
+): string[] {
+  let alerts = s.lowStockAlerts;
+  for (const [productId, now] of Object.entries(after)) {
+    const was = before[productId] ?? 0;
+    if (now >= was || alerts.includes(productId)) continue;
+    const product = s.products.find((p) => p.id === productId);
+    if (!product) continue;
+    const level = reorderLevel(product, s.settings);
+    if (was > level && now <= level) alerts = [...alerts, productId];
+  }
+  return alerts;
+}
+
 /** Take these lines off the shelf: the new on-hand, and a sale move per stock line. */
 function deduct(
   onHand: Record<string, Qty>,
@@ -379,6 +423,7 @@ function deduct(
       note: null,
       at,
       actorUserId: actor,
+      ...NO_DELIVERY,
     });
   }
   return { onHand: next, moves };
@@ -563,6 +608,7 @@ export const usePos = create<PosState>()(
       hydrated: false,
       persistError: null,
       rowsNeedV8: false,
+      lowStockAlerts: [],
 
       // ── selectors ─────────────────────────────────────────────────
       branch: (id) => {
@@ -719,6 +765,7 @@ export const usePos = create<PosState>()(
               note: reason,
               at: Date.now(),
               actorUserId: actorId(),
+              ...NO_DELIVERY,
             });
           }
 
@@ -887,6 +934,7 @@ export const usePos = create<PosState>()(
           ...s,
           activeOrderId: s.activeOrderId === orderId ? null : s.activeOrderId,
           stock: { ...s.stock, [order.branchId]: taken.onHand },
+          lowStockAlerts: alertCrossings(s, onHand, taken.onHand),
           stockMoves: [...taken.moves, ...s.stockMoves],
           invoiceSeq: seq,
           orders: s.orders.map((o) =>
@@ -953,6 +1001,7 @@ export const usePos = create<PosState>()(
               note: reason,
               at: Date.now(),
               actorUserId: actorId(),
+              ...NO_DELIVERY,
             });
           }
 
@@ -996,35 +1045,238 @@ export const usePos = create<PosState>()(
       },
 
       // ── inventory ─────────────────────────────────────────────────
-      adjustStock: (productId, delta, reason, note, branchId) => {
+      receiveStock: ({ lines, supplier, docNo }) => {
         const refused = guard('inventory.manage');
         if (refused) return refused;
-        const bid = branchId ?? get().activeBranchId;
-        if ((get().stock[bid]?.[productId] ?? 0) + delta < 0) {
-          return { ok: false, error: "Stock can't go below zero." };
+        if (lines.length === 0) return { ok: false, error: 'Add at least one item.' };
+        for (const line of lines) {
+          const product = get().product(line.productId);
+          if (product?.kind !== 'stock') return { ok: false, error: 'Only stock items take deliveries.' };
+          if (!Number.isSafeInteger(line.qty) || line.qty <= 0) {
+            return { ok: false, error: `Enter how many ${product.name} came in.` };
+          }
+          if (line.unitCostCents !== undefined && line.unitCostCents < 0) {
+            return { ok: false, error: 'Cost cannot be negative.' };
+          }
         }
-        set((state) => {
-          const branchStock = { ...(state.stock[bid] ?? {}) };
-          branchStock[productId] = ((branchStock[productId] ?? 0) + delta) as Qty;
-          const move: StockMove = {
-            id: uuidv7(),
-            branchId: bid,
-            productId,
-            delta,
-            reason,
-            refOrderId: null,
-            note: note ?? null,
-            at: Date.now(),
-            actorUserId: actorId(),
-          };
+        const from = supplier?.trim() || null;
+        const doc = docNo?.trim() || null;
+        const at = Date.now();
+        const actor = actorId();
+        set((s) => {
+          const bid = s.activeBranchId;
+          const onHand = { ...(s.stock[bid] ?? {}) };
+          const newCost = new Map<string, Centavos>();
+          const moves: StockMove[] = lines.map((line) => {
+            onHand[line.productId] = ((onHand[line.productId] ?? 0) + line.qty) as Qty;
+            if (line.unitCostCents !== undefined) newCost.set(line.productId, line.unitCostCents);
+            return {
+              id: uuidv7(),
+              branchId: bid,
+              productId: line.productId,
+              delta: line.qty,
+              reason: 'restock',
+              refOrderId: null,
+              note: null,
+              at,
+              actorUserId: actor,
+              supplier: from,
+              docNo: doc,
+              unitCostCents: line.unitCostCents ?? null,
+            };
+          });
           return {
-            ...state,
-            stock: { ...state.stock, [bid]: branchStock },
-            stockMoves: [move, ...state.stockMoves],
+            ...s,
+            stock: { ...s.stock, [bid]: onHand },
+            stockMoves: [...moves, ...s.stockMoves],
+            // The new cost is for sales from now on; sold lines keep the cost they froze.
+            products: s.products.map((p) => {
+              const cost = newCost.get(p.id);
+              return cost === undefined || cost === p.costCents ? p : { ...p, costCents: cost };
+            }),
+            audit: log(
+              s.audit,
+              'stock.receive',
+              `Received ${lines.length} item${lines.length === 1 ? '' : 's'}` +
+                (from ? ` from ${from}` : '') +
+                (doc ? `, ${doc}` : ''),
+              'info',
+              bid,
+            ),
           };
         });
         return { ok: true };
       },
+
+      countStock: (productId, counted, note) => {
+        const refused = guard('inventory.manage');
+        if (refused) return refused;
+        const product = get().product(productId);
+        if (product?.kind !== 'stock') return { ok: false, error: 'Only stock items are counted.' };
+        if (!Number.isSafeInteger(counted) || counted < 0) {
+          return { ok: false, error: 'Enter a count of 0 or more.' };
+        }
+        set((s) => {
+          const bid = s.activeBranchId;
+          const before = s.stock[bid] ?? {};
+          const was = before[productId] ?? (0 as Qty);
+          const after = { ...before, [productId]: counted };
+          // Written even when the count matches: it records that the shelf was checked.
+          const move: StockMove = {
+            id: uuidv7(),
+            branchId: bid,
+            productId,
+            delta: (counted - was) as Qty,
+            reason: 'count',
+            refOrderId: null,
+            note: note?.trim() || null,
+            at: Date.now(),
+            actorUserId: actorId(),
+            ...NO_DELIVERY,
+          };
+          return {
+            ...s,
+            stock: { ...s.stock, [bid]: after },
+            stockMoves: [move, ...s.stockMoves],
+            lowStockAlerts: alertCrossings(s, before, after),
+            audit: log(
+              s.audit,
+              'stock.count',
+              `Counted ${product.name}: ${formatQty(counted)} (was ${formatQty(was)})`,
+              counted === was ? 'info' : 'warn',
+              bid,
+            ),
+          };
+        });
+        return { ok: true };
+      },
+
+      recordDamage: (productId, q, note) => {
+        const refused = guard('inventory.manage');
+        if (refused) return refused;
+        const product = get().product(productId);
+        if (product?.kind !== 'stock') return { ok: false, error: 'Only stock items can be damaged.' };
+        if (!Number.isSafeInteger(q) || q <= 0) return { ok: false, error: 'Enter how many were damaged.' };
+        if (!note.trim()) return { ok: false, error: 'Say what happened to it.' };
+        const have = get().stockOf(productId);
+        if (q > have) return { ok: false, error: `Only ${formatQty(Math.max(0, have) as Qty)} on hand.` };
+        set((s) => {
+          const bid = s.activeBranchId;
+          const before = s.stock[bid] ?? {};
+          const after = { ...before, [productId]: ((before[productId] ?? 0) - q) as Qty };
+          const move: StockMove = {
+            id: uuidv7(),
+            branchId: bid,
+            productId,
+            delta: -q as Qty,
+            reason: 'spoilage',
+            refOrderId: null,
+            note: note.trim(),
+            at: Date.now(),
+            actorUserId: actorId(),
+            ...NO_DELIVERY,
+          };
+          return {
+            ...s,
+            stock: { ...s.stock, [bid]: after },
+            stockMoves: [move, ...s.stockMoves],
+            lowStockAlerts: alertCrossings(s, before, after),
+            audit: log(
+              s.audit,
+              'stock.damage',
+              `Wrote off ${formatQty(q)} ${product.name} — ${note.trim()}`,
+              'warn',
+              bid,
+            ),
+          };
+        });
+        return { ok: true };
+      },
+
+      quickAddProduct: ({ name, priceCents, kind, unit, openingQty }) => {
+        const refused = guard('inventory.manage');
+        if (refused) return refused;
+        const trimmed = name.trim();
+        if (!trimmed) return { ok: false, error: 'Give the item a name.' };
+        if (!Number.isSafeInteger(priceCents) || priceCents < 0) {
+          return { ok: false, error: 'Price cannot be negative.' };
+        }
+        const stocked = kind === 'stock';
+        if (stocked && (!Number.isSafeInteger(openingQty) || openingQty < 0)) {
+          return { ok: false, error: 'Enter an opening quantity of 0 or more.' };
+        }
+        const product: Product = {
+          id: uuidv7(),
+          name: trimmed,
+          kind,
+          sku: null,
+          category: '',
+          unit,
+          priceCents,
+          costCents: cents(0),
+          vatExempt: false,
+          active: true,
+          reorderLevel: null,
+        };
+        set((s) => {
+          const bid = s.activeBranchId;
+          const opening: StockMove[] =
+            stocked && openingQty > 0
+              ? [
+                  {
+                    id: uuidv7(),
+                    branchId: bid,
+                    productId: product.id,
+                    delta: openingQty,
+                    reason: 'opening',
+                    refOrderId: null,
+                    note: 'Added from the sell screen',
+                    at: Date.now(),
+                    actorUserId: actorId(),
+                    ...NO_DELIVERY,
+                  },
+                ]
+              : [];
+          return {
+            ...s,
+            products: [...s.products, product],
+            stock: stocked
+              ? { ...s.stock, [bid]: { ...(s.stock[bid] ?? {}), [product.id]: openingQty } }
+              : s.stock,
+            stockMoves: [...opening, ...s.stockMoves],
+            audit: log(s.audit, 'product.create', `Added ${trimmed}`, 'info', bid),
+          };
+        });
+        return { ok: true, id: product.id };
+      },
+
+      lowStock: () => {
+        const s = get();
+        const held = heldStock(s.orders, s.activeBranchId);
+        const onHand = s.stock[s.activeBranchId] ?? {};
+        return s.products
+          .filter((p) => p.active && p.kind === 'stock')
+          .map((p) => ({
+            name: p.name,
+            row: {
+              productId: p.id,
+              available: Math.max(0, (onHand[p.id] ?? 0) - (held.get(p.id) ?? 0)) as Qty,
+              level: reorderLevel(p, s.settings),
+            },
+          }))
+          .filter(({ row }) => row.available <= row.level)
+          // Out of stock first, then available ÷ level, compared without dividing.
+          .sort(
+            (a, b) =>
+              Number(a.row.available > 0) - Number(b.row.available > 0) ||
+              a.row.available * b.row.level - b.row.available * a.row.level ||
+              a.name.localeCompare(b.name),
+          )
+          .map(({ row }) => row);
+      },
+
+      dismissLowStockAlert: (productId) =>
+        set((s) => ({ ...s, lowStockAlerts: s.lowStockAlerts.filter((id) => id !== productId) })),
 
       upsertProduct: (product) => {
         const refused = guard('inventory.manage');
@@ -1746,6 +1998,7 @@ export const usePos = create<PosState>()(
         users: state.users,
         stock: state.stock,
         rowsNeedV8: state.rowsNeedV8,
+        lowStockAlerts: state.lowStockAlerts,
         settings: state.settings,
         invoiceSeq: state.invoiceSeq,
         recovery: state.recovery,
@@ -1985,6 +2238,7 @@ function resetNegativeStock(
         note: "Reset at upgrade: stock can't be negative",
         at: Date.now(),
         actorUserId: actorId(),
+        ...NO_DELIVERY,
       };
       stockMoves = [move, ...stockMoves];
       const name = s.products.find((p) => p.id === productId)?.name ?? productId;
@@ -2023,6 +2277,7 @@ function serveLines(
   set((state) => ({
     ...state,
     stock: { ...state.stock, [order.branchId]: taken.onHand },
+    lowStockAlerts: alertCrossings(state, onHand, taken.onHand),
     stockMoves: [...taken.moves, ...state.stockMoves],
     orders: state.orders.map((o) =>
       o.id !== order.id

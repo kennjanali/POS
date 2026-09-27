@@ -89,8 +89,8 @@ export function migrateOrderV7(o: unknown): Order {
 
 /** A v7 stock move, counted in thousandths. */
 export function migrateMoveV7(m: unknown): StockMove {
-  const move = m as StockMove;
-  return { ...move, delta: qty(move.delta) };
+  const move = m as Omit<StockMove, 'supplier' | 'docNo' | 'unitCostCents'>;
+  return { supplier: null, docNo: null, unitCostCents: null, ...move, delta: qty(move.delta) };
 }
 
 /** On hand per branch, counted in thousandths. */

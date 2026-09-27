@@ -190,6 +190,9 @@ export function buildDemoData(options: DemoOptions): DemoDataset {
         note: 'Demo opening count',
         at: windowStart - 3_600_000,
         actorUserId: null,
+        supplier: null,
+        docNo: null,
+        unitCostCents: null,
       });
     }
   }
@@ -291,6 +294,9 @@ export function buildDemoData(options: DemoOptions): DemoDataset {
           note: `Delivery ${businessDate(dayStart)}`,
           at: dayStart + 8 * 3_600_000,
           actorUserId: null,
+          supplier: null,
+          docNo: null,
+          unitCostCents: null,
         });
       }
 
@@ -309,6 +315,9 @@ export function buildDemoData(options: DemoOptions): DemoDataset {
             note: null,
             at: line.servedAt ?? order.openedAt,
             actorUserId: null,
+            supplier: null,
+            docNo: null,
+            unitCostCents: null,
           });
           if (order.status !== 'voided') continue;
           branchStock[line.productId] = ((branchStock[line.productId] ?? 0) + line.qty) as Qty;
@@ -322,6 +331,9 @@ export function buildDemoData(options: DemoOptions): DemoDataset {
             note: order.voidedReason,
             at: order.voidedAt ?? order.openedAt,
             actorUserId: null,
+            supplier: null,
+            docNo: null,
+            unitCostCents: null,
           });
         }
         orders.push(order);
@@ -353,6 +365,9 @@ export function buildDemoData(options: DemoOptions): DemoDataset {
         note: 'Short on closing count',
         at: now - 20 * 60_000,
         actorUserId: null,
+        supplier: null,
+        docNo: null,
+        unitCostCents: null,
       });
     }
   }

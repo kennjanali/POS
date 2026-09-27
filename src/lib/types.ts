@@ -200,6 +200,11 @@ export interface StockMove {
   note: string | null;
   at: number;
   actorUserId: string | null;
+  /** Restocks only: who delivered and their delivery or invoice number. */
+  supplier: string | null;
+  docNo: string | null;
+  /** Restocks only: the unit cost on the delivery, when one was entered. */
+  unitCostCents: Centavos | null;
 }
 
 export interface AuditEntry {
