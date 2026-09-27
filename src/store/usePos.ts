@@ -81,8 +81,6 @@ interface PosState {
   stockMoves: StockMove[];
   /** Daily closes, oldest first. Written once, never changed. */
   closes: DailyClose[];
-  /** The last close number the license server confirmed receiving. */
-  closesAckedThrough: number;
   /** Encrypts the cloud backup. Derived from the recovery code while it was on
    *  screen. Stays on this tablet: never in a snapshot or a backup file. */
   backupKey: BackupKey | null;
@@ -229,8 +227,6 @@ interface PosState {
   oldestUnclosed: () => number | null;
   /** Close everything since the last close. Null when there is nothing to close. */
   closeDay: () => Promise<DailyClose | null>;
-  /** The server has closes through `no`; only later ones are sent again. */
-  recordCloseAck: (no: number) => void;
   clearPersistError: () => void;
 }
 
@@ -412,7 +408,6 @@ export const usePos = create<PosState>()(
       stock: { [DEFAULT_BRANCH.id]: {} },
       stockMoves: [],
       closes: [],
-      closesAckedThrough: 0,
       backupKey: null,
       lastCloudBackupAt: null,
       audit: [],
@@ -1140,8 +1135,6 @@ export const usePos = create<PosState>()(
             return {
               ...state,
               settings,
-              // Closes taken in training are never reported, so never billed.
-              closesAckedThrough: state.closes.at(-1)?.no ?? 0,
               audit: log(
                 state.audit,
                 'settings.golive',
@@ -1330,8 +1323,6 @@ export const usePos = create<PosState>()(
             stockMoves: snapshot.stockMoves ?? [],
             // Closes describe the restored sales, not the ones they replace.
             closes: snapshot.closes ?? [],
-            // Report them again; the server skips any it already has.
-            closesAckedThrough: 0,
             audit: log(
               snapshot.audit ?? [],
               'data.import',
@@ -1461,8 +1452,6 @@ export const usePos = create<PosState>()(
         return close;
       },
 
-      recordCloseAck: (no) => set((s) => (no > s.closesAckedThrough ? { closesAckedThrough: no } : s)),
-
       clearPersistError: () => set({ persistError: null }),
     }),
     {
@@ -1489,7 +1478,6 @@ export const usePos = create<PosState>()(
         recovery: state.recovery,
         installId: state.installId,
         license: state.license,
-        closesAckedThrough: state.closesAckedThrough,
         backupKey: state.backupKey,
         lastCloudBackupAt: state.lastCloudBackupAt,
         activeBranchId: state.activeBranchId,
