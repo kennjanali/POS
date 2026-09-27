@@ -6,6 +6,7 @@ import { Plus } from 'lucide-react';
 import { AddStockModal } from '@/components/inventory/AddStockModal';
 import { CountModal } from '@/components/inventory/CountModal';
 import { DamageModal } from '@/components/inventory/DamageModal';
+import { ImportExport } from '@/components/inventory/ImportExport';
 import { ProductForm } from '@/components/inventory/ProductForm';
 import { PromoCodes } from '@/components/inventory/PromoCodes';
 import { StockHistory } from '@/components/inventory/StockHistory';
@@ -104,6 +105,7 @@ export default function InventoryPage() {
                 Add stock
               </Button>
             )}
+            <ImportExport />
             <Button
               size="sm"
               onClick={() =>

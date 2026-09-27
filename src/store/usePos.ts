@@ -55,6 +55,7 @@ import { computeBill, type BillBreakdown } from '@/lib/tax';
 import { UPGRADE_RESET_NOTE } from '@/lib/stockHistory';
 import { DEFAULT_BRANCH, DEFAULT_SETTINGS } from '@/lib/seed';
 import { OPENING_STOCK, seedCatalog } from '@/lib/catalogs';
+import type { ImportPreview } from '@/lib/csv';
 import { actorId, useAuth } from './useAuth';
 import { REFERENCED_METHODS, TENDER_LABELS } from '@/lib/types';
 import type {
@@ -263,6 +264,8 @@ interface PosState {
   dismissLowStockAlert: (productId: string) => void;
   upsertProduct: (product: Product) => UserResult;
   removeProduct: (productId: string) => UserResult;
+  /** Write a previewed spreadsheet in one go. Owner only. */
+  applyImport: (preview: ImportPreview) => UserResult;
 
   // ── promo codes ──────────────────────────────────────────────────────
   createPromo: (input: PromoInput) => UserResult;
@@ -1779,6 +1782,86 @@ export const usePos = create<PosState>()(
             p.id === productId ? { ...p, active: false } : p,
           ),
         }));
+        return { ok: true };
+      },
+
+      /**
+       * A spreadsheet, written in one go.
+       *
+       * One `set`, one log line: a 300-row file is one act by the owner, and a
+       * half-written import is worse than none at all. A matched SKU updates
+       * what the file says about the item — price, cost, category, unit and
+       * reorder level — and nothing else, because the name and the kind are
+       * what the history and the stock ledger are filed under. An item already
+       * on the shelf has been counted; the file's opening quantity is ignored,
+       * or the second import of the same file would double the stock.
+       */
+      applyImport: (preview) => {
+        const refused = guard('inventory.manage');
+        if (refused) return refused;
+        if (preview.rows.length === 0) {
+          return { ok: false, error: 'There is nothing to import in that file.' };
+        }
+        set((s) => {
+          const bid = s.activeBranchId;
+          const now = Date.now();
+          const products = [...s.products];
+          const before = s.stock[bid] ?? {};
+          const after: Record<string, Qty> = { ...before };
+          const moves: StockMove[] = [];
+          let added = 0;
+          let updated = 0;
+
+          for (const row of preview.rows) {
+            const at = row.matchId === null ? -1 : products.findIndex((p) => p.id === row.matchId);
+            if (at >= 0) {
+              const current = products[at]!;
+              products[at] = {
+                ...current,
+                category: row.product.category,
+                unit: row.product.unit,
+                priceCents: row.product.priceCents,
+                costCents: row.product.costCents,
+                reorderLevel: row.product.reorderLevel,
+              };
+              updated += 1;
+              continue;
+            }
+            const product: Product = { id: uuidv7(), active: true, ...row.product };
+            products.push(product);
+            added += 1;
+            if (row.openingQty > 0) {
+              after[product.id] = row.openingQty;
+              moves.push({
+                id: uuidv7(),
+                branchId: bid,
+                productId: product.id,
+                delta: row.openingQty,
+                reason: 'opening',
+                refOrderId: null,
+                note: 'From a spreadsheet',
+                at: now,
+                actorUserId: actorId(),
+                ...NO_DELIVERY,
+              });
+            }
+          }
+
+          return {
+            ...s,
+            products,
+            stock: { ...s.stock, [bid]: after },
+            stockMoves: [...moves, ...s.stockMoves],
+            lowStockAlerts: alertCrossings(s, before, after),
+            audit: log(
+              s.audit,
+              'inventory.import',
+              `Imported ${preview.rows.length} items from a spreadsheet: ${added} added, ${updated} updated`,
+              'info',
+              bid,
+            ),
+          };
+        });
         return { ok: true };
       },
 

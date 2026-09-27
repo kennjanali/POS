@@ -168,6 +168,23 @@ describe('the finish-setting-up checklist', () => {
     expect(checklistItems(S()).find((i) => i.id === 'vat')?.done).toBe(true);
   });
 
+  it('retires a job dismissed on any of them, not just the VAT question', async () => {
+    await setup();
+    S().updateSettings({ checklistDismissed: ['printer', 'address', 'license', 'staff'] });
+    for (const id of ['printer', 'address', 'license', 'staff'] as const) {
+      expect(checklistItems(S()).find((i) => i.id === id)?.done).toBe(true);
+    }
+  });
+
+  it('hides the card once every job is done or retired', async () => {
+    await setup();
+    S().updateSettings({
+      address: '123 Mabini St',
+      checklistDismissed: ['printer', 'vat', 'license', 'staff'],
+    });
+    expect(checklistItems(S()).some((i) => !i.done)).toBe(false);
+  });
+
   it('calls the printer done once one is paired', async () => {
     await setup();
     S().updateSettings({

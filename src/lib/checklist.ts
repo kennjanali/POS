@@ -46,11 +46,13 @@ const JOBS: { id: ChecklistId; label: string; done: (state: ChecklistState) => b
   },
 ];
 
-/** Every job, done or not, in the order the owner meets them. */
+/** Every job, done or not, in the order the owner meets them. A job the owner
+ *  has retired counts as done whichever rule it has: "not now" on the printer
+ *  is as final an answer as pairing one. */
 export function checklistItems(state: ChecklistState): ChecklistItem[] {
   return JOBS.map(({ id, label, done }) => ({
     id,
-    done: done(state),
+    done: retired(id, state) || done(state),
     label,
     href: '/settings',
   }));
