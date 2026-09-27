@@ -32,13 +32,15 @@ import {
 } from '@/lib/archive';
 import { isLastActiveSuperadmin } from '@/lib/permissions';
 import { type Centavos, addC, cents, mulQty } from '@/lib/money';
-import { computeBill, type DiscountKind } from '@/lib/tax';
+import { computeBill } from '@/lib/tax';
 import { DEFAULT_BRANCH, DEFAULT_SETTINGS, OPENING_STOCK, SAMPLE_MENU } from '@/lib/seed';
 import { actorId } from './useAuth';
+import { orderDiscountRequest } from '@/lib/types';
 import type {
   AuditEntry,
   Branch,
   DailyClose,
+  DiscountKind,
   Order,
   OrderLine,
   OrderType,
@@ -60,7 +62,7 @@ export type UserResult = { ok: true } | { ok: false; error: string };
 export interface SetupInput {
   business: Pick<
     Settings,
-    'businessName' | 'address' | 'vatRegistered' | 'pricesIncludeVat'
+    'businessName' | 'address' | 'vatRegistered'
   >;
   sampleMenu: boolean;
   ownerName: string;
@@ -647,12 +649,7 @@ export const usePos = create<PosState>()(
           (sum, l) => addC(sum, mulQty(l.unitCents, l.qty)),
           cents(0),
         );
-        const bill = computeBill(gross, state.settings, {
-          kind: order.discountKind,
-          customPercent: order.customPercent,
-          diners: order.diners,
-          eligibleDiners: order.eligibleDiners,
-        });
+        const bill = computeBill(gross, state.settings, orderDiscountRequest(order));
 
         // Money kept has to equal the bill exactly. Checking the tender total
         // alone was not enough: applying a discount or voiding a line *after*
@@ -676,7 +673,7 @@ export const usePos = create<PosState>()(
                   // Frozen. Later settings changes never rewrite this receipt.
                   grossCents: bill.gross,
                   vatableCents: bill.vatableSale,
-                  vatExemptCents: bill.vatExemptSale,
+                  vatExemptCents: cents(0),
                   vatCents: bill.vat,
                   discountCents: bill.discount,
                   netCents: bill.amountDue,
@@ -1131,12 +1128,23 @@ export const usePos = create<PosState>()(
             settings.trainingMode = true;
           }
 
+          const audit =
+            settings.vatRegistered !== state.settings.vatRegistered
+              ? log(
+                  state.audit,
+                  'settings.vat',
+                  `VAT registration turned ${settings.vatRegistered ? 'on' : 'off'}`,
+                  'info',
+                  state.activeBranchId,
+                )
+              : state.audit;
+
           if (state.settings.trainingMode && !settings.trainingMode) {
             return {
               ...state,
               settings,
               audit: log(
-                state.audit,
+                audit,
                 'settings.golive',
                 'Training mode turned off — this install is now live and ' +
                   'cannot be put back into training mode',
@@ -1145,7 +1153,7 @@ export const usePos = create<PosState>()(
               ),
             };
           }
-          return { ...state, settings };
+          return { ...state, settings, audit };
         }),
 
       loadDemoData: (options) => {
@@ -1700,12 +1708,7 @@ export function useBill(orderId: string | null) {
     (sum, l) => addC(sum, mulQty(l.unitCents, l.qty)),
     cents(0),
   );
-  return computeBill(gross, settings, {
-    kind: order.discountKind,
-    customPercent: order.customPercent,
-    diners: order.diners,
-    eligibleDiners: order.eligibleDiners,
-  });
+  return computeBill(gross, settings, orderDiscountRequest(order));
 }
 
 export type { DiscountKind, TenderMethod };

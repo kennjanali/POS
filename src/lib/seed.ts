@@ -38,7 +38,6 @@ export const DEFAULT_SETTINGS: Settings = {
   // VAT filer. v6 hard-coded VAT on. The honest default is off — switch it on
   // in Settings once the business is actually VAT-registered.
   vatRegistered: false,
-  pricesIncludeVat: true,
   vatRate: 0.12,
   vatLabel: 'VAT',
 };

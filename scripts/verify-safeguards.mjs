@@ -76,7 +76,6 @@ const setupInput = {
     businessName: 'Test Carinderia',
     address: 'Somewhere',
     vatRegistered: false,
-    pricesIncludeVat: true,
   },
   sampleMenu: true,
   ownerName: 'Owner',
@@ -209,6 +208,26 @@ console.log('\n— B4: training mode is a one-way door —');
   check('a backup cannot reopen the door', res.ok && S().settings.trainingMode === false);
 }
 
+console.log('\n— VAT registration changes are audited —');
+{
+  S().updateSettings({ vatRegistered: true });
+  check(
+    'turning VAT on is recorded',
+    S().audit[0]?.kind === 'settings.vat' &&
+      S().audit[0]?.message === 'VAT registration turned on',
+    `top entry: ${S().audit[0]?.kind} ${S().audit[0]?.message}`,
+  );
+  S().updateSettings({ vatRegistered: false });
+  check(
+    'turning VAT off is recorded',
+    S().audit[0]?.kind === 'settings.vat' &&
+      S().audit[0]?.message === 'VAT registration turned off',
+  );
+  const entries = S().audit.length;
+  S().updateSettings({ vatRegistered: false, receiptFooter: 'Salamat' });
+  check('an unchanged VAT setting writes nothing', S().audit.length === entries);
+}
+
 console.log('\n— H1: payment must match the bill it was taken against —');
 {
   setTraining(true);
@@ -246,7 +265,7 @@ console.log('\n— H1: payment must match the bill it was taken against —');
     check('underpayment is refused', S().closeOrder(id) === false);
   }
   {
-    // The audit's H1: pay in full, then apply the senior discount.
+    // The audit's H1: pay in full, then apply a discount.
     const { id, due } = ringUp(product);
     S().addTender(id, {
       method: 'gcash',
@@ -255,7 +274,7 @@ console.log('\n— H1: payment must match the bill it was taken against —');
       changeCents: null,
       refNo: 'X2',
     });
-    S().setDiscount(id, { discountKind: 'senior', discountIdNo: 'SC-1' });
+    S().setDiscount(id, { discountKind: 'custom', customPercent: 20 });
     check('e-wallet over-recorded by a later discount is refused', S().closeOrder(id) === false);
     check('the order stays open for correction', S().order(id).status === 'open');
   }
@@ -269,16 +288,15 @@ console.log('\n— H1: payment must match the bill it was taken against —');
       changeCents: 0,
       refNo: null,
     });
-    S().setDiscount(id, { discountKind: 'pwd', discountIdNo: 'PWD-1' });
+    S().setDiscount(id, { discountKind: 'custom', customPercent: 20 });
     check('cash with stale change is refused', S().closeOrder(id) === false);
 
     // Remove it, take the right amount, and the sale settles.
     const stale = S().order(id).tenders[0];
     S().removeTender(id, stale.id);
     const after = computeBill(orderGross(S().order(id)), S().settings, {
-      kind: 'pwd',
-      diners: 1,
-      eligibleDiners: 1,
+      kind: 'percent',
+      percent: 20,
     });
     S().addTender(id, {
       method: 'cash',

@@ -1,7 +1,7 @@
 import type { PinCredential } from './crypto';
 import type { Centavos } from './money';
 import type { ReceiptPrinter } from './printer';
-import type { DiscountKind, TaxProfile } from './tax';
+import type { DiscountRequest, TaxProfile } from './tax';
 
 export type OrderStatus = 'open' | 'closed' | 'voided';
 export type OrderType = 'dine-in' | 'takeout' | 'grab' | 'panda';
@@ -103,6 +103,22 @@ export interface Tender {
   /** GCash / Maya / card reference, for end-of-day reconciliation. */
   refNo: string | null;
   takenAt: number;
+}
+
+/** An order's discount as stored before the v8 data model. Temporary. */
+export type DiscountKind = 'none' | 'senior' | 'pwd' | 'custom';
+
+/**
+ * What the tax engine gets for an order's stored discount. Only a custom
+ * discount still counts; senior and PWD no longer discount anything.
+ * Temporary, until orders carry their own discount (data v8).
+ */
+export function orderDiscountRequest(
+  order: Pick<Order, 'discountKind' | 'customPercent'>,
+): DiscountRequest {
+  return order.discountKind === 'custom'
+    ? { kind: 'percent', percent: order.customPercent }
+    : { kind: 'none' };
 }
 
 export interface Order {

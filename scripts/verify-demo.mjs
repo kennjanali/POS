@@ -22,13 +22,14 @@ function emit(name, file) {
   writeFileSync(join(dir, `${name}.js`), js);
 }
 
-for (const name of ['money', 'tax', 'format', 'id', 'seed', 'demo']) {
+for (const name of ['money', 'tax', 'format', 'id', 'seed', 'types', 'demo']) {
   emit(name, `src/lib/${name}.ts`);
 }
 
 const load = (name) => import(pathToFileURL(join(dir, `${name}.js`)).href);
 const { buildDemoData } = await load('demo');
 const { computeBill } = await load('tax');
+const { orderDiscountRequest } = await load('types');
 const { DEFAULT_BRANCH, SAMPLE_MENU, DEFAULT_SETTINGS, OPENING_STOCK } =
   await load('seed');
 const { businessDate } = await load('format');
@@ -40,7 +41,7 @@ function check(name, ok, detail = '') {
 }
 
 // Run against a VAT-registered profile too — the frozen-total check is only
-// interesting when there is actually VAT and a statutory exemption in play.
+// interesting when there is actually VAT in play.
 for (const settings of [
   DEFAULT_SETTINGS,
   { ...DEFAULT_SETTINGS, vatRegistered: true },
@@ -90,19 +91,14 @@ for (const settings of [
     if (order.status === 'open') continue;
     const served = order.lines.filter((l) => l.served && !l.voided);
     const gross = served.reduce((sum, l) => sum + l.unitCents * l.qty, 0);
-    const bill = computeBill(gross, settings, {
-      kind: order.discountKind,
-      customPercent: order.customPercent,
-      diners: order.diners,
-      eligibleDiners: order.eligibleDiners,
-    });
+    const bill = computeBill(gross, settings, orderDiscountRequest(order));
     kinds.add(order.discountKind);
     if (
       order.grossCents !== bill.gross ||
       order.netCents !== bill.amountDue ||
       order.vatCents !== bill.vat ||
       order.vatableCents !== bill.vatableSale ||
-      order.vatExemptCents !== bill.vatExemptSale ||
+      order.vatExemptCents !== 0 ||
       order.discountCents !== bill.discount
     ) {
       mismatch++;

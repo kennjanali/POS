@@ -10,11 +10,13 @@ import { toast } from '@/components/ui/Toast';
 import { cn } from '@/components/ui/cn';
 import { peso } from '@/lib/format';
 import { cents, parsePesos, type Centavos } from '@/lib/money';
-import { computeBill, type DiscountKind } from '@/lib/tax';
+import { computeBill } from '@/lib/tax';
 import {
   REFERENCED_METHODS,
   TENDER_LABELS,
   TENDER_METHODS,
+  orderDiscountRequest,
+  type DiscountKind,
   type Order,
   type TenderMethod,
 } from '@/lib/types';
@@ -55,21 +57,9 @@ export function Checkout({ order, open, onClose, onPaid }: CheckoutProps) {
       (sum, l) => cents(sum + l.unitCents * l.qty),
       cents(0),
     );
-    return computeBill(gross, settings, {
-      kind: order.discountKind,
-      customPercent: order.customPercent,
-      diners: order.diners,
-      eligibleDiners: order.eligibleDiners,
-    });
+    return computeBill(gross, settings, orderDiscountRequest(order));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    order.lines,
-    order.discountKind,
-    order.customPercent,
-    order.diners,
-    order.eligibleDiners,
-    settings,
-  ]);
+  }, [order.lines, order.discountKind, order.customPercent, settings]);
 
   // What the till keeps once change is handed back — the figure that has to
   // match the bill. See keptByTill in the store.
@@ -220,13 +210,6 @@ export function Checkout({ order, open, onClose, onPaid }: CheckoutProps) {
           <dl className="flex flex-col gap-1 border-t border-line pt-2.5 text-[12.5px]">
             <Row label="Gross" value={peso(bill.gross, settings.currency)} />
 
-            {bill.vatExemptSale > 0 && (
-              <Row
-                label={`${settings.vatLabel}-exempt sale`}
-                value={peso(bill.vatExemptSale, settings.currency)}
-                tone="note"
-              />
-            )}
             {bill.discount > 0 && (
               <Row
                 label={statutory ? 'Statutory discount (20%)' : 'Discount'}
@@ -258,12 +241,6 @@ export function Checkout({ order, open, onClose, onPaid }: CheckoutProps) {
                 {bill.trace.map((step, i) => (
                   <p key={i}>{step}</p>
                 ))}
-                {bill.deductibleDiscount > 0 && (
-                  <p className="mt-1 font-semibold text-note">
-                    Deductible from gross income:{' '}
-                    {peso(bill.deductibleDiscount, settings.currency)}
-                  </p>
-                )}
               </div>
             </div>
           )}

@@ -42,7 +42,7 @@ export default function SettingsPage() {
   // Live worked example so the owner can see what the tax settings actually do.
   const sample = cents(50_000);
   const plain = computeBill(sample, settings, { kind: 'none' });
-  const senior = computeBill(sample, settings, { kind: 'senior' });
+  const discounted = computeBill(sample, settings, { kind: 'percent', percent: 10 });
 
   async function download() {
     if (!(await saveBackup(exportSnapshot()))) {
@@ -132,12 +132,6 @@ export default function SettingsPage() {
             checked={settings.vatRegistered}
             onChange={(vatRegistered) => update({ vatRegistered })}
           />
-          <Toggle
-            label="Menu prices include VAT"
-            hint="On a carinderia menu board they almost always do."
-            checked={settings.pricesIncludeVat}
-            onChange={(pricesIncludeVat) => update({ pricesIncludeVat })}
-          />
           <Field
             label="VAT rate"
             type="number"
@@ -165,13 +159,16 @@ export default function SettingsPage() {
                 <strong className="tnum">
                   {peso(plain.amountDue, settings.currency)}
                 </strong>
+                {settings.vatRegistered &&
+                  ` — ${settings.vatLabel} ${peso(plain.vat, settings.currency)} included`}
               </p>
               <p>
-                Senior / PWD pays{' '}
+                With a 10% discount, pays{' '}
                 <strong className="tnum">
-                  {peso(senior.amountDue, settings.currency)}
-                </strong>{' '}
-                — 20% off the VAT-exclusive amount, VAT-exempt (RA 9994 / RA 10754).
+                  {peso(discounted.amountDue, settings.currency)}
+                </strong>
+                {settings.vatRegistered &&
+                  ` — ${settings.vatLabel} ${peso(discounted.vat, settings.currency)} included`}
               </p>
             </div>
           </div>

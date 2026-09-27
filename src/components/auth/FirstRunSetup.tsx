@@ -34,7 +34,6 @@ export function FirstRunSetup() {
     businessName: '',
     address: '',
     vatRegistered: false,
-    pricesIncludeVat: true,
   });
   const [sampleMenu, setSampleMenu] = useState(true);
   const [ownerName, setOwnerName] = useState('');
@@ -121,13 +120,6 @@ export function FirstRunSetup() {
                 checked={business.vatRegistered}
                 onChange={(vatRegistered) => edit({ vatRegistered })}
               />
-              {business.vatRegistered && (
-                <Toggle
-                  label="Menu prices include VAT"
-                  checked={business.pricesIncludeVat}
-                  onChange={(pricesIncludeVat) => edit({ pricesIncludeVat })}
-                />
-              )}
               <Toggle
                 label="Start with a sample carinderia menu"
                 hint="Twelve common items you can edit or remove. Off starts with an empty menu."

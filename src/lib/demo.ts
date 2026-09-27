@@ -16,9 +16,11 @@ import { businessDate } from './format';
 import { uuidv7 } from './id';
 import { type Centavos, addC, cents, mulQty } from './money';
 import { BRANCH_COLORS, OPENING_STOCK, QUICK_LABELS } from './seed';
-import { computeBill, type DiscountKind } from './tax';
+import { computeBill } from './tax';
+import { orderDiscountRequest } from './types';
 import type {
   Branch,
+  DiscountKind,
   Order,
   OrderLine,
   OrderType,
@@ -479,16 +481,10 @@ function settleOrder(rand: () => number, order: Order, settings: Settings) {
     (sum, line) => addC(sum, mulQty(line.unitCents, line.qty)),
     cents(0),
   );
-  const bill = computeBill(gross, settings, {
-    kind: order.discountKind,
-    customPercent: order.customPercent,
-    diners: order.diners,
-    eligibleDiners: order.eligibleDiners,
-  });
+  const bill = computeBill(gross, settings, orderDiscountRequest(order));
 
   order.grossCents = bill.gross;
   order.vatableCents = bill.vatableSale;
-  order.vatExemptCents = bill.vatExemptSale;
   order.vatCents = bill.vat;
   order.discountCents = bill.discount;
   order.netCents = bill.amountDue;
