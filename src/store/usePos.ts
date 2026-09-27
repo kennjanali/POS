@@ -50,6 +50,7 @@ import {
 import { applyPreset } from '@/lib/presets';
 import { QTY_ONE, formatQty, lineTotal, type Qty } from '@/lib/qty';
 import { computeBill } from '@/lib/tax';
+import { UPGRADE_RESET_NOTE } from '@/lib/stockHistory';
 import { DEFAULT_BRANCH, DEFAULT_SETTINGS, OPENING_STOCK, SAMPLE_MENU } from '@/lib/seed';
 import { actorId, useAuth } from './useAuth';
 import type {
@@ -1049,6 +1050,9 @@ export const usePos = create<PosState>()(
         const refused = guard('inventory.manage');
         if (refused) return refused;
         if (lines.length === 0) return { ok: false, error: 'Add at least one item.' };
+        if (new Set(lines.map((l) => l.productId)).size !== lines.length) {
+          return { ok: false, error: 'Each item can only be listed once.' };
+        }
         for (const line of lines) {
           const product = get().product(line.productId);
           if (product?.kind !== 'stock') return { ok: false, error: 'Only stock items take deliveries.' };
@@ -2235,7 +2239,7 @@ function resetNegativeStock(
         delta: -q as Qty,
         reason: 'count',
         refOrderId: null,
-        note: "Reset at upgrade: stock can't be negative",
+        note: UPGRADE_RESET_NOTE,
         at: Date.now(),
         actorUserId: actorId(),
         ...NO_DELIVERY,

@@ -74,6 +74,18 @@ describe('inventory', () => {
     });
   });
 
+  it('refuses the same item twice in one delivery', () => {
+    expect(
+      S().receiveStock({
+        lines: [
+          { productId: 'w', qty: qty(1) },
+          { productId: 'w', qty: qty(2) },
+        ],
+      }),
+    ).toEqual({ ok: false, error: 'Each item can only be listed once.' });
+    expect(S().stockOf('w')).toBe(0);
+  });
+
   it('writes the difference of a count as a count move', () => {
     receive('w', 10);
     expect(S().countStock('w', qty(7))).toEqual({ ok: true });

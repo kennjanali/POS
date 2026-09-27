@@ -7,6 +7,7 @@ import { AddStockModal } from '@/components/inventory/AddStockModal';
 import { CountModal } from '@/components/inventory/CountModal';
 import { DamageModal } from '@/components/inventory/DamageModal';
 import { ProductForm } from '@/components/inventory/ProductForm';
+import { StockHistory } from '@/components/inventory/StockHistory';
 import { Button } from '@/components/ui/Button';
 import { cn } from '@/components/ui/cn';
 import { peso } from '@/lib/format';
@@ -29,7 +30,8 @@ type Dialog =
   | { kind: 'form'; product: Product | null; newKind: ProductKind }
   | { kind: 'stock'; productId: string | null }
   | { kind: 'count'; product: Product }
-  | { kind: 'damage'; product: Product };
+  | { kind: 'damage'; product: Product }
+  | { kind: 'history'; product: Product };
 
 export default function InventoryPage() {
   const products = usePos((s) => s.products);
@@ -242,6 +244,9 @@ export default function InventoryPage() {
                           <ActionButton onClick={() => setDialog({ kind: 'damage', product })}>
                             Damage
                           </ActionButton>
+                          <ActionButton onClick={() => setDialog({ kind: 'history', product })}>
+                            History
+                          </ActionButton>
                         </div>
                       </td>
                     </EditableRow>
@@ -300,6 +305,9 @@ export default function InventoryPage() {
       )}
       {dialog?.kind === 'damage' && (
         <DamageModal product={dialog.product} onClose={() => setDialog(null)} />
+      )}
+      {dialog?.kind === 'history' && (
+        <StockHistory product={dialog.product} onClose={() => setDialog(null)} />
       )}
     </div>
   );
