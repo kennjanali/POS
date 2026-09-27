@@ -30,12 +30,12 @@ import {
   orderMonth,
   type MonthlyArchive,
 } from '@/lib/archive';
-import { isLastActiveSuperadmin } from '@/lib/permissions';
+import { can, isLastActiveSuperadmin, type Permission } from '@/lib/permissions';
 import { type Centavos, addC, cents, mulQty } from '@/lib/money';
 import { discountRequest, migrateBlobV7, migrateOrderV7, migrateSnapshot } from '@/lib/migrate';
 import { computeBill } from '@/lib/tax';
 import { DEFAULT_BRANCH, DEFAULT_SETTINGS, OPENING_STOCK, SAMPLE_MENU } from '@/lib/seed';
-import { actorId } from './useAuth';
+import { actorId, useAuth } from './useAuth';
 import type {
   AuditEntry,
   Branch,
@@ -57,6 +57,17 @@ import type {
 
 /** Every user mutation can fail on a rule the UI has to explain. */
 export type UserResult = { ok: true } | { ok: false; error: string };
+
+/**
+ * The store's own permission check. Screens hide what staff may not do; this
+ * refuses it anyway, so a missed button or a stale screen cannot void a sale
+ * or change a price. Null means go ahead.
+ */
+function guard(p: Permission): UserResult | null {
+  return can(useAuth.getState().session, p)
+    ? null
+    : { ok: false, error: 'Only the owner can do that.' };
+}
 
 /** What the first-run wizard collects. */
 export interface SetupInput {
@@ -123,7 +134,7 @@ interface PosState {
   setActiveOrder: (id: string | null) => void;
   addLine: (orderId: string, productId: string, qty?: number) => void;
   changeQty: (orderId: string, lineNo: number, delta: number) => void;
-  voidLine: (orderId: string, lineNo: number, reason: string) => void;
+  voidLine: (orderId: string, lineNo: number, reason: string) => UserResult;
   serveAll: (orderId: string) => void;
   serveLine: (orderId: string, lineNo: number) => void;
 
@@ -137,7 +148,7 @@ interface PosState {
   ) => void;
   removeTender: (orderId: string, tenderId: string) => void;
   closeOrder: (orderId: string) => boolean;
-  voidOrder: (orderId: string, reason: string) => void;
+  voidOrder: (orderId: string, reason: string) => UserResult;
 
   // ── inventory ───────────────────────────────────────────────────────
   adjustStock: (
@@ -146,9 +157,9 @@ interface PosState {
     reason: StockReason,
     note?: string,
     branchId?: string,
-  ) => void;
-  upsertProduct: (product: Product) => void;
-  removeProduct: (productId: string) => void;
+  ) => UserResult;
+  upsertProduct: (product: Product) => UserResult;
+  removeProduct: (productId: string) => UserResult;
 
   // ── users ───────────────────────────────────────────────────────────
   /** The PIN is the identity, so it has to be unique. Hashing is async, and
@@ -179,7 +190,7 @@ interface PosState {
   // ── admin ───────────────────────────────────────────────────────────
   setActiveBranch: (id: string) => void;
   upsertBranch: (branch: Branch) => void;
-  updateSettings: (patch: Partial<Settings>) => void;
+  updateSettings: (patch: Partial<Settings>) => UserResult;
   /**
    * Replace sales history with a generated demo month. Training mode only —
    * returns the number of orders written, or 0 if the install is locked.
@@ -512,7 +523,9 @@ export const usePos = create<PosState>()(
           }),
         })),
 
-      voidLine: (orderId, lineNo, reason) =>
+      voidLine: (orderId, lineNo, reason) => {
+        const refused = guard('sale.cancel');
+        if (refused) return refused;
         set((state) => {
           const order = state.orders.find((o) => o.id === orderId);
           const line = order?.lines.find((l) => l.lineNo === lineNo);
@@ -567,7 +580,9 @@ export const usePos = create<PosState>()(
               order.branchId,
             ),
           };
-        }),
+        });
+        return { ok: true };
+      },
 
       serveLine: (orderId, lineNo) => {
         const order = get().order(orderId);
@@ -590,6 +605,8 @@ export const usePos = create<PosState>()(
       clearDiscount: (orderId) => setOpenDiscount(set, get, orderId, { kind: 'none' }),
 
       setOwnerDiscountPercent: (orderId, percent) => {
+        const refused = guard('discount.owner');
+        if (refused) return refused;
         if (!Number.isFinite(percent) || percent < 0 || percent > 100) {
           return { ok: false, error: 'Enter a percent from 0 to 100.' };
         }
@@ -685,7 +702,9 @@ export const usePos = create<PosState>()(
        * array — a deleted completed sale is indistinguishable from one that
        * never happened, which is exactly the pattern a BIR audit looks for.
        */
-      voidOrder: (orderId, reason) =>
+      voidOrder: (orderId, reason) => {
+        const refused = guard('sale.cancel');
+        if (refused) return refused;
         set((state) => {
           const order = state.orders.find((o) => o.id === orderId);
           if (!order || order.status === 'voided') return state;
@@ -735,10 +754,14 @@ export const usePos = create<PosState>()(
               order.branchId,
             ),
           };
-        }),
+        });
+        return { ok: true };
+      },
 
       // ── inventory ─────────────────────────────────────────────────
-      adjustStock: (productId, delta, reason, note, branchId) =>
+      adjustStock: (productId, delta, reason, note, branchId) => {
+        const refused = guard('inventory.manage');
+        if (refused) return refused;
         set((state) => {
           const bid = branchId ?? state.activeBranchId;
           const branchStock = { ...(state.stock[bid] ?? {}) };
@@ -759,9 +782,13 @@ export const usePos = create<PosState>()(
             stock: { ...state.stock, [bid]: branchStock },
             stockMoves: [move, ...state.stockMoves],
           };
-        }),
+        });
+        return { ok: true };
+      },
 
-      upsertProduct: (product) =>
+      upsertProduct: (product) => {
+        const refused = guard('inventory.manage');
+        if (refused) return refused;
         set((state) => {
           const exists = state.products.some((p) => p.id === product.id);
           return {
@@ -777,19 +804,27 @@ export const usePos = create<PosState>()(
               state.activeBranchId,
             ),
           };
-        }),
+        });
+        return { ok: true };
+      },
 
       /** Soft delete — history references these rows. */
-      removeProduct: (productId) =>
+      removeProduct: (productId) => {
+        const refused = guard('inventory.manage');
+        if (refused) return refused;
         set((state) => ({
           ...state,
           products: state.products.map((p) =>
             p.id === productId ? { ...p, active: false } : p,
           ),
-        })),
+        }));
+        return { ok: true };
+      },
 
       // ── users ─────────────────────────────────────────────────────
       addUser: async ({ name, role, pin }) => {
+        const refused = guard('users.manage');
+        if (refused) return refused;
         const trimmed = name.trim();
         if (!trimmed) return { ok: false, error: 'Give this person a name.' };
         if (!isValidPin(pin)) {
@@ -827,35 +862,14 @@ export const usePos = create<PosState>()(
       },
 
       setUserPin: async (id, pin) => {
-        const target = get().users.find((u) => u.id === id);
-        if (!target) return { ok: false, error: 'That user no longer exists.' };
-        if (!isValidPin(pin)) {
-          return { ok: false, error: `The PIN has to be ${PIN_LENGTH} digits.` };
-        }
-        const clash = await pinTaken(get().users, pin, id);
-        if (clash) {
-          return {
-            ok: false,
-            error: `That PIN already belongs to ${clash.name}. Pick another one.`,
-          };
-        }
-
-        const credential = await hashPin(pin);
-        set((state) => ({
-          ...state,
-          users: state.users.map((u) => (u.id === id ? { ...u, pin: credential } : u)),
-          audit: log(
-            state.audit,
-            'user.pin',
-            `Changed the PIN for ${target.name}`,
-            'warn',
-            state.activeBranchId,
-          ),
-        }));
-        return { ok: true };
+        const refused = guard('users.manage');
+        if (refused) return refused;
+        return writePin(set, get, id, pin);
       },
 
       setUserRole: (id, role) => {
+        const refused = guard('users.manage');
+        if (refused) return refused;
         const state = get();
         const target = state.users.find((u) => u.id === id);
         if (!target) return { ok: false, error: 'That user no longer exists.' };
@@ -883,6 +897,8 @@ export const usePos = create<PosState>()(
       /** Deactivate, never delete — orders, stock moves and audit rows point
        *  at these ids and a dangling actor is worse than an inactive one. */
       setUserActive: (id, active) => {
+        const refused = guard('users.manage');
+        if (refused) return refused;
         const state = get();
         const target = state.users.find((u) => u.id === id);
         if (!target) return { ok: false, error: 'That user no longer exists.' };
@@ -990,7 +1006,7 @@ export const usePos = create<PosState>()(
         if (!target?.active || target.role !== 'superadmin') {
           return { ok: false, error: 'Only an active superadmin can be recovered this way.' };
         }
-        const result = await get().setUserPin(userId, pin);
+        const result = await writePin(set, get, userId, pin);
         if (result.ok) {
           set((s) => ({
             ...s,
@@ -1100,7 +1116,9 @@ export const usePos = create<PosState>()(
           };
         }),
 
-      updateSettings: (patch) =>
+      updateSettings: (patch) => {
+        const refused = guard('settings.manage');
+        if (refused) return refused;
         set((state) => {
           const settings = { ...state.settings, ...patch };
 
@@ -1144,7 +1162,9 @@ export const usePos = create<PosState>()(
             };
           }
           return { ...state, settings, audit };
-        }),
+        });
+        return { ok: true };
+      },
 
       loadDemoData: (options) => {
         const state = get();
@@ -1692,6 +1712,42 @@ function serveLines(set: SetState, order: Order, lines: OrderLine[]) {
       ),
     };
   });
+}
+
+/** Set someone's PIN. Unguarded: `setUserPin` checks users.manage first, and
+ *  on the lock screen the recovery code is the proof. */
+async function writePin(
+  set: SetState,
+  get: () => PosState,
+  id: string,
+  pin: string,
+): Promise<UserResult> {
+  const target = get().users.find((u) => u.id === id);
+  if (!target) return { ok: false, error: 'That user no longer exists.' };
+  if (!isValidPin(pin)) {
+    return { ok: false, error: `The PIN has to be ${PIN_LENGTH} digits.` };
+  }
+  const clash = await pinTaken(get().users, pin, id);
+  if (clash) {
+    return {
+      ok: false,
+      error: `That PIN already belongs to ${clash.name}. Pick another one.`,
+    };
+  }
+
+  const credential = await hashPin(pin);
+  set((state) => ({
+    ...state,
+    users: state.users.map((u) => (u.id === id ? { ...u, pin: credential } : u)),
+    audit: log(
+      state.audit,
+      'user.pin',
+      `Changed the PIN for ${target.name}`,
+      'warn',
+      state.activeBranchId,
+    ),
+  }));
+  return { ok: true };
 }
 
 /** One discount per sale, and only while it is open: a closed sale's totals are frozen. */

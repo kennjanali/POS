@@ -150,7 +150,7 @@ export function FirstRunSetup() {
                 <ShieldCheck size={16} className="mt-0.5 shrink-0 text-accent" aria-hidden />
                 <p className="text-[12.5px] leading-relaxed text-ink-2">
                   This account is the <strong>superadmin</strong> — everything, including
-                  who else gets in. Waiters and purchasers are added afterwards in Settings.
+                  who else gets in. Staff are added afterwards in Settings.
                 </p>
               </div>
               <Field

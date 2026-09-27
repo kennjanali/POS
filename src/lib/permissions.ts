@@ -3,9 +3,9 @@
  *
  * Every access decision in the app — a nav link, a route guard, a disabled
  * button, a store mutation — resolves through `can()`. Scattering
- * `role === 'waiter'` checks through components is how an access model rots:
+ * `role === 'staff'` checks through components is how an access model rots:
  * the eighth check written six months later disagrees with the first seven and
- * nobody notices until a waiter voids a sale.
+ * nobody notices until staff void a sale.
  *
  * This is client-side. It keeps people on the job they were given; anyone with
  * browser devtools on the till can work around it, so it is not a defence
@@ -15,65 +15,60 @@
 import type { Role } from './types';
 
 export type Permission =
-  /** See the floor and the menu grid. */
-  | 'pos.use'
-  | 'order.open'
-  | 'order.item'
+  /** Ring up a sale: open it, add and change lines before payment. */
+  | 'sell'
   | 'order.serve'
   | 'order.pay'
-  | 'order.void'
-  | 'line.void'
-  /** The Orders history page. */
-  | 'orders.view'
-  | 'inventory.view'
-  | 'stock.adjust'
-  | 'product.edit'
-  | 'dashboard.view'
+  | 'quote.make'
+  | 'promo.apply'
+  | 'today.view'
+  /** A discount the owner gives by hand, not a promo code. */
+  | 'discount.owner'
+  /** Void a sale or a line on it. */
+  | 'sale.cancel'
+  | 'quote.cancel'
+  /** Stock, products, prices and promo codes. */
+  | 'inventory.manage'
+  /** Sales history and reports beyond today. */
+  | 'reports.view'
   | 'settings.manage'
   | 'users.manage';
 
-const WAITER: readonly Permission[] = [
-  'pos.use',
-  'order.open',
-  'order.item',
+const STAFF: readonly Permission[] = [
+  'sell',
   'order.serve',
   'order.pay',
-  // Read-only history, so a waiter can check their own service went through
-  // correctly. Reading a sale is not the same as unmaking one: 'order.void'
-  // stays off this list and the void control is hidden accordingly.
-  'orders.view',
+  'quote.make',
+  'promo.apply',
+  'today.view',
 ];
 
-const PURCHASER: readonly Permission[] = ['inventory.view', 'stock.adjust', 'product.edit'];
-
-const SUPERADMIN: readonly Permission[] = [
-  ...WAITER,
-  ...PURCHASER,
-  'order.void',
-  'line.void',
-  'dashboard.view',
+const OWNER: readonly Permission[] = [
+  ...STAFF,
+  'discount.owner',
+  'sale.cancel',
+  'quote.cancel',
+  'inventory.manage',
+  'reports.view',
   'settings.manage',
   'users.manage',
 ];
 
 const MATRIX: Record<Role, readonly Permission[]> = {
-  superadmin: SUPERADMIN,
-  waiter: WAITER,
-  purchaser: PURCHASER,
+  superadmin: OWNER,
+  staff: STAFF,
 };
 
-export const ROLES: readonly Role[] = ['superadmin', 'waiter', 'purchaser'];
+export const ROLES: readonly Role[] = ['superadmin', 'staff'];
 
 export const ROLE_LABELS: Record<Role, string> = {
-  superadmin: 'Superadmin',
-  waiter: 'Waiter',
-  purchaser: 'Purchaser',
+  superadmin: 'Owner',
+  staff: 'Staff',
 };
 
 export const ROLE_HINTS: Record<Role, string> = {
   superadmin: 'Everything, including users and settings.',
-  waiter: 'The POS floor only — open orders, serve, take payment.',
-  purchaser: 'Inventory only — stock counts and menu items.',
+  staff: "Takes orders and payments, makes quotes, sees today's sales.",
 };
 
 /** Minimum an actor has to be for a permission question. Both `User` and the
@@ -84,7 +79,9 @@ export interface Actor {
 
 export function can(actor: Actor | null | undefined, permission: Permission): boolean {
   if (!actor) return false;
-  return MATRIX[actor.role].includes(permission);
+  // A session saved by an older build can still say 'waiter' until AuthGate
+  // re-reads the user; an unknown role holds nothing rather than throwing.
+  return MATRIX[actor.role]?.includes(permission) ?? false;
 }
 
 // ── Routes ─────────────────────────────────────────────────────────────
@@ -98,10 +95,10 @@ export interface RouteSpec {
 }
 
 export const ROUTES: readonly RouteSpec[] = [
-  { href: '/', label: 'POS', permission: 'pos.use' },
-  { href: '/orders', label: 'Orders', permission: 'orders.view' },
-  { href: '/inventory', label: 'Inventory', permission: 'inventory.view' },
-  { href: '/dashboard', label: 'Dashboard', permission: 'dashboard.view' },
+  { href: '/', label: 'Sell', permission: 'sell' },
+  { href: '/orders', label: 'Sales', permission: 'reports.view' },
+  { href: '/inventory', label: 'Inventory', permission: 'inventory.manage' },
+  { href: '/dashboard', label: 'Dashboard', permission: 'reports.view' },
   { href: '/settings', label: 'Settings', permission: 'settings.manage' },
 ];
 

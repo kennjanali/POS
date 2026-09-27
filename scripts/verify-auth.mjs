@@ -29,7 +29,6 @@ const load = (name) => import(pathToFileURL(join(dir, `${name}.js`)).href);
 const { PIN_LENGTH, hashPin, isValidPin, verifyPin } = await load('crypto');
 const {
   ROUTES,
-  can,
   canVisit,
   isLastActiveSuperadmin,
   landingFor,
@@ -43,94 +42,17 @@ function check(name, ok, detail = '') {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? `\n      ${detail}` : ''}`);
 }
 
-const SUPERADMIN = { role: 'superadmin' };
-const WAITER = { role: 'waiter' };
-const PURCHASER = { role: 'purchaser' };
+const OWNER = { role: 'superadmin' };
+const STAFF = { role: 'staff' };
 
-const ALL_PERMISSIONS = [
-  'pos.use',
-  'order.open',
-  'order.item',
-  'order.serve',
-  'order.pay',
-  'order.void',
-  'line.void',
-  'orders.view',
-  'inventory.view',
-  'stock.adjust',
-  'product.edit',
-  'dashboard.view',
-  'settings.manage',
-  'users.manage',
-];
-
-// ── The matrix ─────────────────────────────────────────────────────────
-console.log('\n— permission matrix —');
-
-// Stated plainly so a future edit to the matrix has to disagree with this
-// list out loud rather than quietly.
-const EXPECTED = {
-  waiter: [
-    'pos.use',
-    'order.open',
-    'order.item',
-    'order.serve',
-    'order.pay',
-    // Read-only: checking their own service, not undoing it.
-    'orders.view',
-  ],
-  purchaser: ['inventory.view', 'stock.adjust', 'product.edit'],
-  superadmin: ALL_PERMISSIONS,
-};
-
-for (const [role, granted] of Object.entries(EXPECTED)) {
-  const actor = { role };
-  const actualGranted = ALL_PERMISSIONS.filter((p) => can(actor, p));
-  const extra = actualGranted.filter((p) => !granted.includes(p));
-  const missing = granted.filter((p) => !actualGranted.includes(p));
-  check(
-    `${role}: exactly ${granted.length} permission(s)`,
-    extra.length === 0 && missing.length === 0,
-    extra.length || missing.length
-      ? `extra: [${extra}]  missing: [${missing}]`
-      : actualGranted.join(', '),
-  );
-}
-
-// The four the owner called out by name.
-check('waiter cannot void an order', !can(WAITER, 'order.void'));
-check('waiter cannot void a line', !can(WAITER, 'line.void'));
-check('waiter cannot edit products', !can(WAITER, 'product.edit'));
-check('waiter cannot open settings', !can(WAITER, 'settings.manage'));
-check('waiter cannot see dashboard numbers', !can(WAITER, 'dashboard.view'));
-// Reading the history must never imply being able to rewrite it.
-check(
-  'waiter reads order history but cannot void from it',
-  can(WAITER, 'orders.view') && !can(WAITER, 'order.void'),
-);
-check('purchaser cannot use the POS floor', !can(PURCHASER, 'pos.use'));
-check('purchaser cannot take payment', !can(PURCHASER, 'order.pay'));
-check('only superadmin manages users', can(SUPERADMIN, 'users.manage') && !can(WAITER, 'users.manage') && !can(PURCHASER, 'users.manage'));
-
-check(
-  'every permission is held by superadmin',
-  ALL_PERMISSIONS.every((p) => can(SUPERADMIN, p)),
-  'an unreachable permission is a typo, not a policy',
-);
-
-// Nobody signed in is nobody at all.
-check(
-  'a null actor holds nothing',
-  ALL_PERMISSIONS.every((p) => !can(null, p)) && !can(undefined, 'pos.use'),
-);
+// The matrix itself is checked in src/lib/permissions.test.ts.
 
 // ── Routes ─────────────────────────────────────────────────────────────
 console.log('\n— route guard —');
 
 const VISIBLE = {
   superadmin: ['/', '/orders', '/inventory', '/dashboard', '/settings'],
-  waiter: ['/', '/orders'],
-  purchaser: ['/inventory'],
+  staff: ['/'],
 };
 
 for (const [role, expected] of Object.entries(VISIBLE)) {
@@ -157,18 +79,13 @@ for (const [role, expected] of Object.entries(VISIBLE)) {
   }
 }
 
-check('landing: waiter starts on the POS', landingFor(WAITER) === '/', landingFor(WAITER));
-check(
-  'landing: purchaser starts on Inventory',
-  landingFor(PURCHASER) === '/inventory',
-  landingFor(PURCHASER),
-);
-check('landing: superadmin starts on the POS', landingFor(SUPERADMIN) === '/');
+check('landing: staff start on Sell', landingFor(STAFF) === '/', landingFor(STAFF));
+check('landing: the owner starts on Sell', landingFor(OWNER) === '/');
 
 check('a signed-out visitor may visit nothing', ROUTES.every((r) => !canVisit(null, r.href)));
 check(
   'an unknown path is not a permission question',
-  canVisit(WAITER, '/nope') && canVisit(null, '/nope'),
+  canVisit(STAFF, '/nope') && canVisit(null, '/nope'),
   'let the router 404 it',
 );
 
@@ -185,16 +102,16 @@ console.log('\n— last active superadmin —');
 
 const admin = { id: 'a', role: 'superadmin', active: true };
 const admin2 = { id: 'b', role: 'superadmin', active: true };
-const waiter = { id: 'w', role: 'waiter', active: true };
+const staff = { id: 's', role: 'staff', active: true };
 const retired = { id: 'r', role: 'superadmin', active: false };
 
-check('sole superadmin is protected', isLastActiveSuperadmin([admin, waiter], 'a'));
+check('sole superadmin is protected', isLastActiveSuperadmin([admin, staff], 'a'));
 check('two superadmins, neither is the last', !isLastActiveSuperadmin([admin, admin2], 'a'));
 check(
   'a deactivated superadmin does not count as cover',
-  isLastActiveSuperadmin([admin, retired, waiter], 'a'),
+  isLastActiveSuperadmin([admin, retired, staff], 'a'),
 );
-check('a waiter is never the last superadmin', !isLastActiveSuperadmin([admin, waiter], 'w'));
+check('staff are never the last superadmin', !isLastActiveSuperadmin([admin, staff], 's'));
 check('an unknown id is not the last superadmin', !isLastActiveSuperadmin([admin], 'zz'));
 
 // ── PIN hashing ────────────────────────────────────────────────────────

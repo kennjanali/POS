@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { Empty } from '@/components/ui/Empty';
 import { Modal } from '@/components/ui/Modal';
 import { Field } from '@/components/ui/Field';
+import { toast } from '@/components/ui/Toast';
 import { peso } from '@/lib/format';
 import { addC, cents, mulQty, type Centavos } from '@/lib/money';
 import { usePos } from '@/store/usePos';
@@ -24,8 +25,8 @@ export function OrderPanel({ order, onCheckout }: OrderPanelProps) {
   const changeQty = usePos((s) => s.changeQty);
   const serveAll = usePos((s) => s.serveAll);
   const voidLine = usePos((s) => s.voidLine);
-  // A waiter can put food on the table but cannot take it off the bill.
-  const canVoidLine = useAuth((s) => can(s.session, 'line.void'));
+  // Staff can put food on the table but cannot take it off the bill.
+  const canVoidLine = useAuth((s) => can(s.session, 'sale.cancel'));
 
   const [voidTarget, setVoidTarget] = useState<number | null>(null);
   const [voidReason, setVoidReason] = useState('');
@@ -41,7 +42,8 @@ export function OrderPanel({ order, onCheckout }: OrderPanelProps) {
   function confirmVoid() {
     const reason = voidReason.trim();
     if (voidTarget === null || !reason) return;
-    voidLine(order.id, voidTarget, reason);
+    const result = voidLine(order.id, voidTarget, reason);
+    if (!result.ok) toast(result.error, 'danger');
     setVoidTarget(null);
     setVoidReason('');
   }

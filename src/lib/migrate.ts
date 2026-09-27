@@ -6,7 +6,7 @@
  */
 
 import type { DiscountRequest } from './tax';
-import type { DataSnapshot, Order, SaleDiscount, Settings } from './types';
+import type { DataSnapshot, Order, SaleDiscount, Settings, User } from './types';
 
 /** What the tax engine gets for a sale's discount. A legacy discount is frozen
  *  history and takes nothing off a new bill. */
@@ -64,6 +64,14 @@ function migrateSettingsV7(settings: Settings): Settings {
   return next;
 }
 
+// ── users ────────────────────────────────────────────────────────────────
+
+/** Waiter and purchaser merged into one Staff role. The owner is unchanged. */
+function migrateUserV7(user: User): User {
+  const role: string = user.role;
+  return role === 'waiter' || role === 'purchaser' ? { ...user, role: 'staff' } : user;
+}
+
 // ── the persisted blob and backup files ──────────────────────────────────
 
 /**
@@ -72,8 +80,9 @@ function migrateSettingsV7(settings: Settings): Settings {
  * old blob that still holds them.
  */
 export function migrateBlobV7(blob: unknown): unknown {
-  const b = { ...(blob as { settings?: Settings }) };
+  const b = { ...(blob as { settings?: Settings; users?: User[] }) };
   if (b.settings) b.settings = migrateSettingsV7(b.settings);
+  if (b.users) b.users = b.users.map(migrateUserV7);
   return b;
 }
 
@@ -84,6 +93,7 @@ export function migrateSnapshot(s: DataSnapshot): DataSnapshot {
     ...s,
     version: 8,
     settings: s.settings && migrateSettingsV7(s.settings),
+    users: s.users?.map(migrateUserV7),
     orders: s.orders?.map(migrateOrderV7),
   };
 }

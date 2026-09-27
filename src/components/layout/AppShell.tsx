@@ -128,7 +128,7 @@ function NewOrderDialog() {
 }
 
 function Frame({ children }: { children: React.ReactNode }) {
-  const canOpenOrders = useAuth((s) => can(s.session, 'order.open'));
+  const canOpenOrders = useAuth((s) => can(s.session, 'sell'));
 
   return (
     <>

@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { Empty } from '@/components/ui/Empty';
 import { Field } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
+import { toast } from '@/components/ui/Toast';
 import { cn } from '@/components/ui/cn';
 import { ReceiptModal } from '@/components/pos/Receipt';
 import { businessDate, fmtTime, peso } from '@/lib/format';
@@ -37,9 +38,8 @@ export default function OrdersPage() {
   const users = usePos((s) => s.users);
   const currency = usePos((s) => s.settings.currency);
   const voidOrder = usePos((s) => s.voidOrder);
-  // Waiters read this page to check their service went through. Unmaking a
-  // sale is a different act and stays with the superadmin.
-  const canVoid = useAuth((s) => can(s.session, 'order.void'));
+  // Unmaking a sale stays with the owner.
+  const canVoid = useAuth((s) => can(s.session, 'sale.cancel'));
 
   const [filter, setFilter] = useState<OrderStatus | 'all'>('all');
   const [branchFilter, setBranchFilter] = useState<string | null>(null);
@@ -73,7 +73,8 @@ export default function OrdersPage() {
   function confirmVoid() {
     const reason = voidReason.trim();
     if (!voidTarget || !reason) return;
-    voidOrder(voidTarget, reason);
+    const result = voidOrder(voidTarget, reason);
+    if (!result.ok) toast(result.error, 'danger');
     setVoidTarget(null);
     setVoidReason('');
   }

@@ -34,7 +34,7 @@ export function Sidebar() {
   const { railCollapsed, toggleRail, theme, toggleTheme, openNewOrder } = useShell();
   const session = useAuth((s) => s.session);
   const nav = routesFor(session);
-  const canOpenOrders = can(session, 'order.open');
+  const canOpenOrders = can(session, 'sell');
   const openCount = usePos((s) =>
     s.orders.filter((o) => o.status === 'open' && o.branchId === s.activeBranchId)
       .length,

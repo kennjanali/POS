@@ -157,7 +157,7 @@ function AddUserModal({
   onCreate: (input: { name: string; role: Role; pin: string }) => Promise<Outcome>;
 }) {
   const [name, setName] = useState('');
-  const [role, setRole] = useState<Role>('waiter');
+  const [role, setRole] = useState<Role>('staff');
   const [step, setStep] = useState<'details' | 'pin'>('details');
   const [error, setError] = useState<string | null>(null);
 

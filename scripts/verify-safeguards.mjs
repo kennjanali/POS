@@ -40,6 +40,7 @@ for (const n of ['useAuth', 'usePos']) emit(n, `src/store/${n}.ts`);
 
 const load = (n) => import(pathToFileURL(join(process.cwd(), dir, `${n}.js`)).href);
 const { usePos, orderGross } = await load('usePos');
+const { useAuth } = await load('useAuth');
 const { computeBill } = await load('tax');
 const { SAMPLE_MENU, DEFAULT_BRANCH } = await load('seed');
 const { monthOf, orderMonth } = await load('archive');
@@ -100,6 +101,10 @@ console.log('\n— First run: no shipped account, the wizard sets the install up
   check('setup succeeds', done.ok === true, done.ok ? '' : done.error);
   const [owner] = S().users;
   check('exactly one account, a superadmin', S().users.length === 1 && owner.role === 'superadmin');
+  // The store refuses owner-only actions from nobody. From here on the owner is signed in.
+  useAuth.setState({
+    session: { userId: owner.id, name: owner.name, role: owner.role, signedInAt: Date.now() },
+  });
   check('the chosen PIN opens it', (await verifyPin(OWNER_PIN, owner.pin)) === true);
   check('the credential holds no plaintext PIN', !JSON.stringify(owner.pin).includes(OWNER_PIN));
   check('the recovery code is stored only as a hash',

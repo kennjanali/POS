@@ -40,7 +40,7 @@ export const ORDER_TYPE_LABELS: Record<OrderType, string> = {
   panda: 'FoodPanda',
 };
 
-export type Role = 'superadmin' | 'waiter' | 'purchaser';
+export type Role = 'superadmin' | 'staff';
 
 export interface User {
   id: string;

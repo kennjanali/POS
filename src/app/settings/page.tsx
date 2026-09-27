@@ -18,12 +18,16 @@ import { cents } from '@/lib/money';
 import { peso, fmtDate } from '@/lib/format';
 import { backupFileName, saveBackup } from '@/lib/backup';
 import { canShareFiles, SAVE_LOCATION, shareSavedFile } from '@/lib/files';
-import type { DataSnapshot } from '@/lib/types';
+import type { DataSnapshot, Settings } from '@/lib/types';
 import { usePos } from '@/store/usePos';
 
 export default function SettingsPage() {
   const settings = usePos((s) => s.settings);
-  const update = usePos((s) => s.updateSettings);
+  const updateSettings = usePos((s) => s.updateSettings);
+  const update = (patch: Partial<Settings>) => {
+    const result = updateSettings(patch);
+    if (!result.ok) toast(result.error, 'danger');
+  };
   const licensed = usePos((s) => s.licensed !== null);
   const exportSnapshot = usePos((s) => s.exportSnapshot);
   const importSnapshot = usePos((s) => s.importSnapshot);

@@ -83,7 +83,11 @@ export default function InventoryPage() {
       vatExempt: false,
       active: true,
     };
-    upsertProduct(product);
+    const result = upsertProduct(product);
+    if (!result.ok) {
+      toast(result.error, 'danger');
+      return;
+    }
     if (!draft.id) adjustStock(product.id, 0, 'opening', 'New item');
     setDraft(null);
     toast(`Saved ${name}`, 'success');
@@ -221,13 +225,14 @@ export default function InventoryPage() {
                         <button
                           key={delta}
                           type="button"
-                          onClick={() =>
-                            adjustStock(
+                          onClick={() => {
+                            const result = adjustStock(
                               product.id,
                               delta,
                               delta > 0 ? 'restock' : 'count',
-                            )
-                          }
+                            );
+                            if (!result.ok) toast(result.error, 'danger');
+                          }}
                           className="min-h-10 min-w-10 rounded border border-line bg-raised px-2 text-[12px] font-bold hover:border-accent"
                         >
                           {delta > 0 ? `+${delta}` : delta}

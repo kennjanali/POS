@@ -38,7 +38,10 @@ export function PrinterSettings() {
     );
   }
 
-  const save = (next: ReceiptPrinter | null) => updateSettings({ printer: next });
+  const save = (next: ReceiptPrinter | null) => {
+    const result = updateSettings({ printer: next });
+    if (!result.ok) toast(result.error, 'danger');
+  };
 
   async function run(task: () => Promise<void>) {
     setBusy(true);
