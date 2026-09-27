@@ -2,7 +2,7 @@
  * Daily close: the end-of-day summary. It gives the owner their day's count,
  * and it is what the technology fee's daily totals are checked against.
  *
- * Not a BIR Z-reading — POS@034 is not a BIR machine. It borrows the useful
+ * Not a BIR Z-reading — POS-034 is not a BIR machine. It borrows the useful
  * part: a close is never rewritten, and each one is chained to the previous
  * by hash, so a quietly edited or deleted day shows.
  */

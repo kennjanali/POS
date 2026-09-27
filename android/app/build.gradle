@@ -14,7 +14,7 @@ if (keystorePropertiesFile.exists()) {
 }
 
 android {
-    namespace = "dev.kennjanali.pos034"
+    namespace = "com.kennali.pos034"
     compileSdk = rootProject.ext.compileSdkVersion
     signingConfigs {
         release {
@@ -27,7 +27,7 @@ android {
         }
     }
     defaultConfig {
-        applicationId "dev.kennjanali.pos034"
+        applicationId "com.kennali.pos034"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode major * 10000 + minor * 100 + patch

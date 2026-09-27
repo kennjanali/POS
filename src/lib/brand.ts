@@ -6,7 +6,7 @@
  * deliberately do NOT derive from it: renaming the product must never move a
  * customer's data (see idb.ts, usePos.ts, useAuth.ts).
  */
-export const PRODUCT_NAME = 'POS@034';
+export const PRODUCT_NAME = 'POS-034';
 export const PRODUCT_SLUG = 'pos034';
 
 /** From package.json, inlined by next.config.ts at build time. Stamped on

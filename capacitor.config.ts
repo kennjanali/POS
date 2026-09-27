@@ -11,8 +11,8 @@ import type { CapacitorConfig } from '@capacitor/cli';
  * Changing either hides every sale already on the tablet.
  */
 const config: CapacitorConfig = {
-  appId: 'dev.kennjanali.pos034',
-  appName: 'POS@034',
+  appId: 'com.kennali.pos034',
+  appName: 'POS-034',
   webDir: 'out',
   server: { androidScheme: 'https' },
 };

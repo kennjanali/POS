@@ -1,4 +1,4 @@
-package dev.kennjanali.pos034;
+package com.kennali.pos034;
 
 import android.os.Bundle;
 

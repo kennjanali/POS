@@ -2,7 +2,7 @@
   "name": "pos034",
   "version": "0.1.0",
   "private": true,
-  "description": "Offline-first point of sale for small Philippine restaurants.",
+  "description": "Offline-first point of sale for small shops.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

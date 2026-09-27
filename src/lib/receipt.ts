@@ -109,7 +109,7 @@ export function renderReceipt(order: Order, settings: Settings, width: number = 
 
   out.push(rule);
   if (settings.receiptFooter) out.push(centre(settings.receiptFooter));
-  // POS@034 tracks sales; it is not a BIR-registered machine, so what it
+  // POS-034 tracks sales; it is not a BIR-registered machine, so what it
   // prints is never a receipt. The owner issues their own invoices.
   out.push('');
   out.push(centre('THIS IS NOT AN OFFICIAL'));
