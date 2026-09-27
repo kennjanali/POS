@@ -1,7 +1,6 @@
-import { cents } from './money';
 import { applyPreset } from './presets';
 import { qty } from './qty';
-import type { Branch, Product, Settings } from './types';
+import type { Branch, Settings } from './types';
 
 export const QUICK_LABELS = [
   'Table 1',
@@ -56,44 +55,3 @@ export const DEFAULT_BRANCH: Branch = {
   color: '#ff5c1a',
   active: true,
 };
-
-interface SeedProduct {
-  id: string;
-  name: string;
-  price: number;
-  cost: number;
-  unit: string;
-}
-
-const SEED_PRODUCTS: SeedProduct[] = [
-  { id: 'p1', name: 'Chicken Paa', price: 89, cost: 50, unit: 'pcs' },
-  { id: 'p2', name: 'Chicken Pecho', price: 99, cost: 55, unit: 'pcs' },
-  { id: 'p3', name: 'Half Chicken', price: 175, cost: 95, unit: 'pcs' },
-  { id: 'p4', name: 'Pork BBQ', price: 35, cost: 18, unit: 'pcs' },
-  { id: 'p5', name: 'Pork Chop BBQ', price: 120, cost: 65, unit: 'pcs' },
-  { id: 'p6', name: 'Liempo', price: 150, cost: 80, unit: 'pcs' },
-  { id: 'p7', name: 'Kanin (1 cup)', price: 15, cost: 6, unit: 'cup' },
-  { id: 'p8', name: 'Garlic Rice', price: 25, cost: 10, unit: 'cup' },
-  { id: 'p9', name: 'Coke 1.5L', price: 85, cost: 45, unit: 'btl' },
-  { id: 'p10', name: 'Softdrinks', price: 35, cost: 18, unit: 'pcs' },
-  { id: 'p11', name: 'Atchara', price: 20, cost: 8, unit: 'serving' },
-  { id: 'p12', name: 'Sawsawan Set', price: 15, cost: 5, unit: 'set' },
-];
-
-/** Offered by the setup wizard as a starting point. A fresh install has no
- *  menu of its own until the owner picks this or adds items. */
-export const SAMPLE_MENU: Product[] = SEED_PRODUCTS.map((p) => ({
-  id: p.id,
-  name: p.name,
-  kind: 'stock',
-  sku: null,
-  category: '',
-  unit: p.unit,
-  priceCents: cents(p.price * 100),
-  costCents: cents(p.cost * 100),
-  vatExempt: false,
-  active: true,
-  reorderLevel: null,
-}));
-
-export const OPENING_STOCK = qty(30);

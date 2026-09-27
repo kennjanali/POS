@@ -47,13 +47,14 @@ import {
   migrateOrderV7,
   migrateSnapshot,
 } from '@/lib/migrate';
-import { applyPreset, ticketWord } from '@/lib/presets';
+import { applyPreset, PRESETS, ticketWord, type ShopType } from '@/lib/presets';
 import { findUsablePromo, isValidCode, normalizeCode } from '@/lib/promo';
 import { addDays, nextQuoteNo, quoteStatus } from '@/lib/quotes';
 import { QTY_ONE, formatQty, lineTotal, type Qty } from '@/lib/qty';
 import { computeBill, type BillBreakdown } from '@/lib/tax';
 import { UPGRADE_RESET_NOTE } from '@/lib/stockHistory';
-import { DEFAULT_BRANCH, DEFAULT_SETTINGS, OPENING_STOCK, SAMPLE_MENU } from '@/lib/seed';
+import { DEFAULT_BRANCH, DEFAULT_SETTINGS } from '@/lib/seed';
+import { OPENING_STOCK, seedCatalog } from '@/lib/catalogs';
 import { actorId, useAuth } from './useAuth';
 import { REFERENCED_METHODS, TENDER_LABELS } from '@/lib/types';
 import type {
@@ -121,17 +122,18 @@ export interface OrderExtra {
   vehiclePlate?: string;
 }
 
-/** What the first-run wizard collects. */
+/** What the first-run wizard collects. Four questions, and the recovery code
+ *  it shows on the way out. The address and the VAT question are deliberately
+ *  not here: they are a new owner's to answer, on the Today checklist. */
 export interface SetupInput {
-  business: Pick<
-    Settings,
-    'businessName' | 'address' | 'vatRegistered'
-  >;
-  sampleMenu: boolean;
+  shopType: ShopType;
+  businessName: string;
   ownerName: string;
   pin: string;
   /** Generated and shown by the wizard; only its hash is kept. */
   recoveryCode: string;
+  /** 'sample' loads the shop type's catalog; 'none' starts empty. */
+  catalog: 'sample' | 'none';
 }
 
 interface PosState {
@@ -1894,7 +1896,7 @@ export const usePos = create<PosState>()(
         if (get().users.length > 0) {
           return { ok: false, error: 'This device is already set up.' };
         }
-        const businessName = input.business.businessName.trim();
+        const businessName = input.businessName.trim();
         const ownerName = input.ownerName.trim();
         if (!businessName) return { ok: false, error: 'Give the business a name.' };
         if (!ownerName) return { ok: false, error: 'Give the owner a name.' };
@@ -1916,26 +1918,52 @@ export const usePos = create<PosState>()(
           createdAt: Date.now(),
           lastLoginAt: null,
         };
-        const address = input.business.address.trim();
-        const products = input.sampleMenu ? SAMPLE_MENU : [];
+        // 'none' is a shop with nothing on the shelf yet: no products, and so
+        // no opening count to book.
+        const { products, opening } =
+          input.catalog === 'sample' ? seedCatalog(input.shopType) : { products: [], opening: {} };
+        const at = Date.now();
 
         set((state) => {
-          const branch: Branch = {
-            ...(state.branches[0] ?? DEFAULT_BRANCH),
-            address,
-          };
+          const branch: Branch = { ...(state.branches[0] ?? DEFAULT_BRANCH) };
           return {
             ...state,
             settings: {
               ...state.settings,
-              ...input.business,
               businessName,
-              address,
+              shopType: input.shopType,
+              features: applyPreset(input.shopType),
+              // A brand-new till is in practice until the owner turns it off.
+              trainingMode: true,
+              // The checklist is a new owner's to work through, not one carried
+              // over from a previous life on this device.
+              checklistDismissed: [],
             },
             branches: [branch],
             activeBranchId: branch.id,
             products,
-            stock: { [branch.id]: initialStock(products) },
+            stock: { [branch.id]: opening },
+            // The first count is on the record like any other: the stock ledger
+            // starts with what the shop says it already has, and every later
+            // number is a movement away from it. Nobody is signed in yet, so
+            // the wizard is the actor.
+            stockMoves: [
+              ...Object.entries(opening).map(([productId, delta]) => ({
+                id: uuidv7(),
+                branchId: branch.id,
+                productId,
+                delta,
+                reason: 'opening' as const,
+                refOrderId: null,
+                note: 'Opening stock from the sample catalog',
+                at,
+                actorUserId: null,
+                supplier: null,
+                docNo: null,
+                unitCostCents: null,
+              })),
+              ...state.stockMoves,
+            ],
             users: [owner],
             recovery,
             backupKey,
@@ -1943,7 +1971,8 @@ export const usePos = create<PosState>()(
             audit: log(
               state.audit,
               'install.setup',
-              `Set up ${businessName} with ${ownerName} as superadmin`,
+              `Set up ${businessName} as a ${PRESETS[input.shopType].label} shop, ` +
+                `with ${ownerName} as superadmin and ${products.length} items on the shelf`,
               'info',
               branch.id,
             ),
@@ -2132,9 +2161,10 @@ export const usePos = create<PosState>()(
         if (!state.settings.trainingMode) return 0;
 
         const mainBranch = state.branches[0] ?? DEFAULT_BRANCH;
-        // Demo sales need something to sell. An install that skipped the
-        // sample menu gets it along with the demo.
-        const products = state.products.length > 0 ? state.products : SAMPLE_MENU;
+        // Demo sales need something to sell. An install that turned the sample
+        // down gets the catalog for the shop type it is, along with the demo.
+        const products =
+          state.products.length > 0 ? state.products : seedCatalog(state.settings.shopType).products;
         const demo = buildDemoData({
           products,
           settings: state.settings,

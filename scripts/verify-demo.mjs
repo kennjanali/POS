@@ -22,7 +22,7 @@ function emit(name, file) {
   writeFileSync(join(dir, `${name}.js`), js);
 }
 
-for (const name of ['money', 'qty', 'tax', 'format', 'id', 'presets', 'seed', 'types', 'migrate', 'demo']) {
+for (const name of ['money', 'qty', 'tax', 'format', 'id', 'presets', 'seed', 'catalogs', 'types', 'migrate', 'demo']) {
   emit(name, `src/lib/${name}.ts`);
 }
 
@@ -31,9 +31,13 @@ const { buildDemoData } = await load('demo');
 const { computeBill } = await load('tax');
 const { lineTotal } = await load('qty');
 const { discountRequest } = await load('migrate');
-const { DEFAULT_BRANCH, SAMPLE_MENU, DEFAULT_SETTINGS, OPENING_STOCK } =
-  await load('seed');
+const { DEFAULT_BRANCH, DEFAULT_SETTINGS } = await load('seed');
+const { OPENING_STOCK, seedCatalog } = await load('catalogs');
 const { businessDate } = await load('format');
+
+// The restaurant catalog stands in for any install's products. Minted once,
+// because the checks look stock up by product id.
+const SAMPLE_MENU = seedCatalog('restaurant').products;
 
 // Today at 12:00, not the wall clock: the generator's "today" depends on the
 // hour it runs, and the checks must give the same answer at any hour.

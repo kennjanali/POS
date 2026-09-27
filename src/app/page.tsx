@@ -3,6 +3,7 @@
 import { useMemo } from 'react';
 
 import { DailyCloses } from '@/components/dashboard/DailyCloses';
+import { SetupChecklist } from '@/components/today/SetupChecklist';
 import { businessDate, peso } from '@/lib/format';
 import { formatQty } from '@/lib/qty';
 import { daySummary } from '@/lib/today';
@@ -29,6 +30,8 @@ export default function TodayPage() {
   return (
     <div className="scroll-y h-full">
       <div className="grid gap-3 p-4">
+        {isOwner && <SetupChecklist />}
+
         <div className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-2.5">
           <Tile label="Net sales" value={peso(s.net, settings.currency)} big />
           <Tile label="Sales" value={String(s.sales)} />

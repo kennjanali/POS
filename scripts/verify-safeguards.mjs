@@ -34,7 +34,7 @@ function emit(name, file) {
   writeFileSync(join(dir, `${name}.js`), js);
 }
 
-for (const n of ['brand', 'money', 'qty', 'tax', 'format', 'id', 'presets', 'seed', 'migrate', 'demo', 'crypto', 'idb', 'storage', 'printer', 'receipt', 'device', 'license', 'permissions', 'types', 'archive', 'files', 'backup', 'closes', 'cloudBackup', 'stockHistory', 'promo', 'quotes'])
+for (const n of ['brand', 'money', 'qty', 'tax', 'format', 'id', 'presets', 'seed', 'catalogs', 'checklist', 'migrate', 'demo', 'crypto', 'idb', 'storage', 'printer', 'receipt', 'device', 'license', 'permissions', 'types', 'archive', 'files', 'backup', 'closes', 'cloudBackup', 'stockHistory', 'promo', 'quotes'])
   emit(n, `src/lib/${n}.ts`);
 for (const n of ['useAuth', 'usePos']) emit(n, `src/store/${n}.ts`);
 
@@ -42,11 +42,17 @@ const load = (n) => import(pathToFileURL(join(process.cwd(), dir, `${n}.js`)).hr
 const { usePos, orderGross } = await load('usePos');
 const { useAuth } = await load('useAuth');
 const { computeBill } = await load('tax');
-const { SAMPLE_MENU, DEFAULT_BRANCH } = await load('seed');
+const { SAMPLE_CATALOGS, seedCatalog } = await load('catalogs');
+const { DEFAULT_BRANCH } = await load('seed');
+const { checklistItems } = await load('checklist');
 const { monthOf, orderMonth } = await load('archive');
 const { backupIsDue, backupFileName, endOfDayDue, CUTOFF_MINUTES } = await load('backup');
 const { verifyPin, generateRecoveryCode } = await load('crypto');
 const { qty } = await load('qty');
+
+// One restaurant catalog, minted once: product ids are what the checks below
+// look products up by, so every call would hand back a different set.
+const SAMPLE_PRODUCTS = seedCatalog('restaurant').products;
 
 let failures = 0;
 function check(name, ok, detail = '') {
@@ -72,20 +78,17 @@ function ringUp(product, units = 1) {
   return { id, due: bill.amountDue };
 }
 
-const product = SAMPLE_MENU[0];
+const product = SAMPLE_PRODUCTS[0];
 
 const OWNER_PIN = '481902';
 const RECOVERY = generateRecoveryCode();
 const setupInput = {
-  business: {
-    businessName: 'Test Carinderia',
-    address: 'Somewhere',
-    vatRegistered: false,
-  },
-  sampleMenu: true,
+  shopType: 'restaurant',
+  businessName: 'Test Carinderia',
   ownerName: 'Owner',
   pin: OWNER_PIN,
   recoveryCode: RECOVERY,
+  catalog: 'sample',
 };
 
 console.log('\n— First run: no shipped account, the wizard sets the install up —');
@@ -94,10 +97,7 @@ console.log('\n— First run: no shipped account, the wizard sets the install up
   check('and no menu of its own', S().products.length === 0);
   check('and no business name', S().settings.businessName === '');
 
-  const nameless = await S().setupInstall({
-    ...setupInput,
-    business: { ...setupInput.business, businessName: '  ' },
-  });
+  const nameless = await S().setupInstall({ ...setupInput, businessName: '  ' });
   check('setup refuses a business with no name', nameless.ok === false);
   check('and writes nothing', S().users.length === 0);
 
@@ -114,7 +114,20 @@ console.log('\n— First run: no shipped account, the wizard sets the install up
   check('the recovery code is stored only as a hash',
     S().recovery !== null && !JSON.stringify(S().recovery).includes(RECOVERY.replace(/-/g, '')));
   check('the business is named', S().settings.businessName === 'Test Carinderia');
-  check('the sample menu was loaded', S().products.length === SAMPLE_MENU.length);
+  check('the sample catalog was loaded', S().products.length === SAMPLE_CATALOGS.restaurant.length);
+  check('the shop type sets the switches', S().settings.shopType === 'restaurant');
+  check('a new install is in practice until the owner says otherwise',
+    S().settings.trainingMode === true);
+  check('its opening stock is on the ledger, not just in memory',
+    S().stockMoves.filter((m) => m.reason === 'opening').length ===
+      S().products.filter((p) => p.kind === 'stock').length);
+
+  const jobs = checklistItems(S());
+  check('the owner opens Today with five things left to do', jobs.length === 5);
+  check('and none of them is claimed done on a fresh install',
+    jobs.every((j) => j.done === false));
+  check('the address and the VAT question are left to the checklist',
+    S().settings.address === '' && S().settings.vatRegistered === false);
 
   const again = await S().setupInstall(setupInput);
   check('setup cannot run twice', again.ok === false && S().users.length === 1);
@@ -212,7 +225,7 @@ console.log('\n— B4: training mode is a one-way door —');
   const res = S().importSnapshot({
     version: 7,
     exportedAt: '2026-01-01T00:00:00.000Z',
-    products: SAMPLE_MENU,
+    products: SAMPLE_PRODUCTS,
     orders: [],
     settings: { trainingMode: true },
   });
@@ -358,7 +371,7 @@ console.log('\n— H4: a restore has to earn it —');
   const base = {
     version: 7,
     exportedAt: '2026-01-01T00:00:00.000Z',
-    products: SAMPLE_MENU,
+    products: SAMPLE_PRODUCTS,
     orders: [],
   };
   const cases = [

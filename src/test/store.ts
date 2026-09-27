@@ -9,11 +9,12 @@ import { useAuth } from '@/store/useAuth';
 import { usePos, type SetupInput } from '@/store/usePos';
 
 const SETUP: SetupInput = {
-  business: { businessName: 'Test Shop', address: 'Test Street', vatRegistered: false },
-  sampleMenu: true,
+  shopType: 'restaurant',
+  businessName: 'Test Shop',
   ownerName: 'Owner',
   pin: '481902',
   recoveryCode: 'ABCD-EFGH-JKLM',
+  catalog: 'sample',
 };
 
 /** Back to a fresh install, signed out. */

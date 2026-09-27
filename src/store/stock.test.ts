@@ -30,6 +30,15 @@ function preset(shopType: ShopType) {
   }));
 }
 
+/** The seeded catalog's first line, found by name: the setup wizard mints
+ *  product ids, so nothing outside it can know one. It stands in for "some
+ *  other stocked product the Widget is easy to tell apart from". */
+function seededId(): string {
+  const found = S().products.find((p) => p.name === 'Chicken Paa');
+  if (!found) throw new Error('the sample catalog was not loaded');
+  return found.id;
+}
+
 /** Pay exactly what `gross` comes to, in cash. */
 function payFor(id: string, gross = orderGross(S().order(id)!)) {
   const due = computeBill(gross, S().settings, { kind: 'none' }).amountDue;
@@ -146,25 +155,25 @@ describe('stock rules', () => {
     const id = S().openOrder('T1', 'dine-in');
     S().addLine(id, 'w');
     S().serveAll(id);
-    S().addLine(id, 'p1');
+    S().addLine(id, seededId());
     payFor(id, cents(10000));
 
     expect(S().closeOrder(id)).toEqual({ ok: true });
     expect(S().order(id)?.grossCents).toBe(10000);
     expect(S().stockOf('w')).toBe(qty(2));
-    expect(S().stockOf('p1')).toBe(qty(30));
+    expect(S().stockOf(seededId())).toBe(qty(30));
   });
 
   it('refuses the whole serve when a line is short', () => {
     preset('restaurant');
     const id = S().openOrder('T1', 'dine-in');
     S().addLine(id, 'w', qty(3));
-    S().addLine(id, 'p1');
+    S().addLine(id, seededId());
     S().countStock('w', qty(2));
 
     expect(S().serveAll(id)).toEqual({ ok: false, error: 'Widget: only 2 left.' });
     expect(S().order(id)?.lines.every((l) => !l.served)).toBe(true);
-    expect(S().stockOf('p1')).toBe(qty(30));
+    expect(S().stockOf(seededId())).toBe(qty(30));
   });
 
   it('numbers an open order with served lines when the owner cancels it', () => {

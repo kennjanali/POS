@@ -13,12 +13,13 @@
  *    are still open, so like any open order they have no number yet.
  */
 
+import { OPENING_STOCK } from './catalogs';
 import { businessDate } from './format';
 import { uuidv7 } from './id';
 import { discountRequest } from './migrate';
 import { type Centavos, addC, cents } from './money';
 import { lineTotal, qty, type Qty } from './qty';
-import { BRANCH_COLORS, OPENING_STOCK, QUICK_LABELS } from './seed';
+import { BRANCH_COLORS, QUICK_LABELS } from './seed';
 import { computeBill } from './tax';
 import type {
   Branch,
