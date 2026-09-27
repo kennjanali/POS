@@ -75,27 +75,27 @@
 <h1>POS-034 &mdash; Build Progress</h1>
 <p class="sub">
   Offline POS for small shops, by kennali.com. One tablet = one shop.<br>
-  Branch <code>pos-034-redesign</code> &middot; 36 commits ahead of <code>main</code> &middot; as of 2026-09-28.<br>
+  Branch <code>pos-034-redesign</code> &middot; 38 commits ahead of <code>main</code> &middot; as of 2026-09-28.<br>
   Spec: <code>docs/superpowers/specs/2026-09-27-pos-034-design.md</code> &middot;
   Plan: <code>docs/superpowers/plans/2026-09-27-pos-034-app.md</code> (18 tasks) &middot;
   Ledger: <code>.superpowers/sdd/2026-09-27-pos-034-app/progress.md</code>
 </p>
 
 <div class="grid">
-  <div class="stat"><b>13<span class="n">/18</span></b><span>Tasks complete</span></div>
+  <div class="stat"><b>14<span class="n">/18</span></b><span>Tasks complete</span></div>
   <div class="stat"><b>0</b><span>In progress</span></div>
-  <div class="stat"><b>5</b><span>Not started</span></div>
+  <div class="stat"><b>4</b><span>Not started</span></div>
   <div class="stat"><b class="yes">PASS</b><span><code>npm run check</code> — all 6 stages</span></div>
-  <div class="stat"><b>173</b><span>Tests passing (21 files)</span></div>
+  <div class="stat"><b>187</b><span>Tests passing (23 files)</span></div>
 </div>
 
-<div class="bar" role="img" aria-label="13 of 18 tasks complete, 0 in progress, 5 not started">
-  <i class="d" style="width:72.2%"></i><i class="w" style="width:0%"></i><i class="n" style="width:27.8%"></i>
+<div class="bar" role="img" aria-label="14 of 18 tasks complete, 0 in progress, 4 not started">
+  <i class="d" style="width:77.8%"></i><i class="w" style="width:0%"></i><i class="n" style="width:22.2%"></i>
 </div>
 <div class="legend">
-  <span><i class="dot" style="background:var(--ok)"></i>13 complete</span>
+  <span><i class="dot" style="background:var(--ok)"></i>14 complete</span>
   <span><i class="dot" style="background:var(--wait)"></i>0 in progress</span>
-  <span><i class="dot" style="background:var(--idle-soft);border:1px solid var(--line)"></i>5 not started</span>
+  <span><i class="dot" style="background:var(--idle-soft);border:1px solid var(--line)"></i>4 not started</span>
 </div>
 
 <h2>Quality gate</h2>
@@ -104,7 +104,7 @@
   <tr><th>Stage</th><th>Result</th><th>What it covers</th></tr>
   <tr><td><code>typecheck</code></td><td class="yes">PASS</td><td><code>tsc --noEmit</code></td></tr>
   <tr><td><code>lint</code></td><td class="yes">PASS</td><td><code>eslint src</code></td></tr>
-  <tr><td><code>test</code></td><td class="yes">PASS</td><td>173 tests, 21 files</td></tr>
+  <tr><td><code>test</code></td><td class="yes">PASS</td><td>187 tests, 23 files</td></tr>
   <tr><td><code>verify:auth</code></td><td class="yes">PASS</td><td>Route guard for every role, last-owner protection, PIN hashing</td></tr>
   <tr><td><code>verify:demo</code></td><td class="yes">PASS</td><td>Demo data: frozen totals, gapless numbers, stock sums to on hand</td></tr>
   <tr><td><code>verify:safeguards</code></td><td class="yes">PASS</td><td>First run, license offline binding, one-way practice door, daily close chain, backup encryption, receipt width, archive pruning</td></tr>
@@ -114,9 +114,9 @@
 <h2>Tasks</h2>
 <div class="chips" role="group" aria-label="Filter tasks by status">
   <button type="button" data-f="all" aria-pressed="true">All 18</button>
-  <button type="button" data-f="done" aria-pressed="false">Complete (13)</button>
+  <button type="button" data-f="done" aria-pressed="false">Complete (14)</button>
   <button type="button" data-f="wait" aria-pressed="false">In progress (0)</button>
-  <button type="button" data-f="idle" aria-pressed="false">Not started (5)</button>
+  <button type="button" data-f="idle" aria-pressed="false">Not started (4)</button>
 </div>
 <div class="scroll">
 <table id="tasks">
@@ -202,11 +202,11 @@
       <td class="mono">f9032a0</td>
       <td><code>quotes.ts</code>, <code>/quotes</code> page, save a cart as a quote, convert at quoted prices, re-quote, cancel</td>
     </tr>
-    <tr data-s="idle">
+    <tr data-s="done">
       <td>14</td><td>Today, This month, and Today's summary</td>
-      <td><span class="tag t-idle">Not started</span></td>
-      <td class="mono">&mdash;</td>
-      <td><code>/sell</code> and <code>/month</code> routes, <code>today.ts</code>, close format 2 (VAT, promo/owner split, expected vs counted cash)</td>
+      <td><span class="tag t-done">Complete</span></td>
+      <td class="mono">19ded5f</td>
+      <td><code>/</code> Today, <code>/sell</code>, <code>/month</code> for the owner, <code>today.ts</code>, close format 2 (VAT, promo/owner split, expected vs counted cash)</td>
     </tr>
     <tr data-s="idle">
       <td>15</td><td>Setup wizard (four questions) and the Finish-setting-up checklist</td>
@@ -236,31 +236,27 @@
 </table>
 </div>
 
-<h2>Task 13 in detail</h2>
-<p class="sub">Quotations. Committed as <code>Quotations: save, print, share, convert at quoted prices</code>.</p>
+<h2>Task 14 in detail</h2>
+<p class="sub">Today, This month, and Today&rsquo;s summary. Committed as <code>Today home screen, This month for the owner, and a richer Today's summary</code>.</p>
 <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr))">
   <div class="card">
     <h3 style="margin-top:0">Done and passing</h3>
     <ul class="tight">
-      <li><code>quotes.ts</code>: <code>nextQuoteNo</code> (Q-0001, grows past 9999), <code>quoteStatus</code> (open / expired / converted / cancelled), <code>addDays</code> for the expiry date</li>
-      <li><b>Save as quote</b> at payment, only where the shop type quotes. The cart becomes a numbered slip and is discarded, releasing the stock it held</li>
-      <li>Nothing is paid and nothing leaves the shelf: a quote never touches stock, and it never counts towards money collected</li>
-      <li>The slip is headed <b>QUOTATION &mdash; NOT A RECEIPT</b>, and says when the prices stop holding</li>
-      <li><b>Convert</b> opens a real order at the <i>quoted</i> price even after the owner has changed it; refused by name when an item is withdrawn or the shelf cannot cover it</li>
-      <li>An expired quote needs confirming before it converts &mdash; the store never does it quietly</li>
-      <li><b>Re-quote</b> copies it at today&rsquo;s prices under a new number; <b>Cancel</b> is the owner&rsquo;s alone and always asks why</li>
-      <li>Retail sends a converted quote to payment; ticket shops leave it on the floor</li>
-      <li>Print through the counter printer, or share a real <code>.txt</code> to the customer&rsquo;s phone</li>
+      <li><code>/</code> is <b>Today</b> for everyone; the counter moved to <code>/sell</code> and the report to <code>/month</code>. Both roles land on Today, so nobody signs in to a screen they cannot use</li>
+      <li>Today shows the day&rsquo;s net, sales count, and what was collected by method &mdash; a sale belongs to the day it was paid and a cancellation to the day it was cancelled, so a void never erases a day it did not happen on</li>
+      <li>The owner also gets the low-stock list, and <b>This month</b> adds gross profit on frozen cost, best sellers, the promo/owner discount split, promo-code use, and VAT for a registered shop</li>
+      <li><b>Close format 2</b> carries the discount split, VAT, the cash the till should hold, and what the owner counted. The slip then shows over or short, so a shortage needs no arithmetic on paper</li>
+      <li>A close already on the till still verifies: a format-1 close hashes over exactly the fields it had, so no day reads as tampered with. Editing <code>expectedCashCents</code> is caught</li>
+      <li>A <code>legacy</code> discount is in neither the promo nor the owner bucket, rather than in the wrong one</li>
     </ul>
   </div>
   <div class="card">
     <h3 style="margin-top:0">Decisions and still to do</h3>
     <ul class="tight">
-      <li>The plan&rsquo;s <code>QuoteLine</code> had no <code>unit</code>, but Task 8 made <code>unit</code> a frozen field on every printed line, and the slip has to say &ldquo;2.5 m Electrical wire&rdquo;. Added, so a converted order keeps the unit too.</li>
-      <li>Conversion writes the order&rsquo;s lines directly rather than through <code>addLine</code>: <code>addLine</code> re-prices from Inventory, which is the one thing a quote must not do. Cost is today&rsquo;s cost.</li>
-      <li>Quoting is refused on a sale that already moved stock or took payment &mdash; that is a sale, and the owner cancels those.</li>
-      <li><code>/quotes</code> and its nav link appear only where <code>features.quotes</code> is on. A hidden route stays a stranger: typing it does nothing.</li>
-      <li>Manual pass at 1280&times;800 on the <code>/quotes</code> list, the slip, and the Save-as-quote button. The page prerenders and the dev server serves it; the new UI has no test &mdash; the project has no component harness</li>
+      <li>The plan asks This month to show <code>promoUses</code>, which counts every sale that ever used a code. Under a &ldquo;Today&rdquo; or &ldquo;Last 7 days&rdquo; filter that number is not about the period on screen, so the codes are counted over the same rows as every other tile. <code>promoUses</code> stays the all-time count it already was.</li>
+      <li>The counted-cash box is left blank by default: the nightly close is taken by the app and has no count to record. It is not given an &ldquo;expected&rdquo; figure to compare against, because the close covers the window since the last close, not the calendar day</li>
+      <li><code>QuoteLine.unit</code> was carried in the counter move untouched</li>
+      <li>Manual pass at 1280&times;800: sign in as staff and confirm Today has no low-stock list and no <b>This month</b> link, then ring up a sale and close the day with a count. All eight routes serve; the new screens have no component test &mdash; the project has no component harness</li>
     </ul>
   </div>
 </div>
@@ -270,7 +266,7 @@
 <table>
   <tr><th>Item</th><th>State</th><th>Goes to</th></tr>
   <tr>
-    <td>36 commits ahead of <code>main</code> &mdash; pushed, but a single point of loss until a second remote exists</td>
+    <td>38 commits ahead of <code>main</code> &mdash; pushed, but a single point of loss until a second remote exists</td>
     <td class="no">Open</td>
     <td>Now</td>
   </tr>
