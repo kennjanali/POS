@@ -75,27 +75,27 @@
 <h1>POS-034 &mdash; Build Progress</h1>
 <p class="sub">
   Offline POS for small shops, by kennali.com. One tablet = one shop.<br>
-  Branch <code>pos-034-redesign</code> &middot; 38 commits ahead of <code>main</code> &middot; as of 2026-09-28.<br>
+  Branch <code>pos-034-redesign</code> &middot; 40 commits ahead of <code>main</code> &middot; as of 2026-09-28.<br>
   Spec: <code>docs/superpowers/specs/2026-09-27-pos-034-design.md</code> &middot;
   Plan: <code>docs/superpowers/plans/2026-09-27-pos-034-app.md</code> (18 tasks) &middot;
   Ledger: <code>.superpowers/sdd/2026-09-27-pos-034-app/progress.md</code>
 </p>
 
 <div class="grid">
-  <div class="stat"><b>14<span class="n">/18</span></b><span>Tasks complete</span></div>
+  <div class="stat"><b>15<span class="n">/18</span></b><span>Tasks complete</span></div>
   <div class="stat"><b>0</b><span>In progress</span></div>
-  <div class="stat"><b>4</b><span>Not started</span></div>
+  <div class="stat"><b>3</b><span>Not started</span></div>
   <div class="stat"><b class="yes">PASS</b><span><code>npm run check</code> — all 6 stages</span></div>
-  <div class="stat"><b>187</b><span>Tests passing (23 files)</span></div>
+  <div class="stat"><b>207</b><span>Tests passing (24 files)</span></div>
 </div>
 
-<div class="bar" role="img" aria-label="14 of 18 tasks complete, 0 in progress, 4 not started">
-  <i class="d" style="width:77.8%"></i><i class="w" style="width:0%"></i><i class="n" style="width:22.2%"></i>
+<div class="bar" role="img" aria-label="15 of 18 tasks complete, 0 in progress, 3 not started">
+  <i class="d" style="width:83.3%"></i><i class="w" style="width:0%"></i><i class="n" style="width:16.7%"></i>
 </div>
 <div class="legend">
-  <span><i class="dot" style="background:var(--ok)"></i>14 complete</span>
+  <span><i class="dot" style="background:var(--ok)"></i>15 complete</span>
   <span><i class="dot" style="background:var(--wait)"></i>0 in progress</span>
-  <span><i class="dot" style="background:var(--idle-soft);border:1px solid var(--line)"></i>4 not started</span>
+  <span><i class="dot" style="background:var(--idle-soft);border:1px solid var(--line)"></i>3 not started</span>
 </div>
 
 <h2>Quality gate</h2>
@@ -104,7 +104,7 @@
   <tr><th>Stage</th><th>Result</th><th>What it covers</th></tr>
   <tr><td><code>typecheck</code></td><td class="yes">PASS</td><td><code>tsc --noEmit</code></td></tr>
   <tr><td><code>lint</code></td><td class="yes">PASS</td><td><code>eslint src</code></td></tr>
-  <tr><td><code>test</code></td><td class="yes">PASS</td><td>187 tests, 23 files</td></tr>
+  <tr><td><code>test</code></td><td class="yes">PASS</td><td>207 tests, 24 files</td></tr>
   <tr><td><code>verify:auth</code></td><td class="yes">PASS</td><td>Route guard for every role, last-owner protection, PIN hashing</td></tr>
   <tr><td><code>verify:demo</code></td><td class="yes">PASS</td><td>Demo data: frozen totals, gapless numbers, stock sums to on hand</td></tr>
   <tr><td><code>verify:safeguards</code></td><td class="yes">PASS</td><td>First run, license offline binding, one-way practice door, daily close chain, backup encryption, receipt width, archive pruning</td></tr>
@@ -114,9 +114,9 @@
 <h2>Tasks</h2>
 <div class="chips" role="group" aria-label="Filter tasks by status">
   <button type="button" data-f="all" aria-pressed="true">All 18</button>
-  <button type="button" data-f="done" aria-pressed="false">Complete (14)</button>
+  <button type="button" data-f="done" aria-pressed="false">Complete (15)</button>
   <button type="button" data-f="wait" aria-pressed="false">In progress (0)</button>
-  <button type="button" data-f="idle" aria-pressed="false">Not started (4)</button>
+  <button type="button" data-f="idle" aria-pressed="false">Not started (3)</button>
 </div>
 <div class="scroll">
 <table id="tasks">
@@ -208,11 +208,11 @@
       <td class="mono">19ded5f</td>
       <td><code>/</code> Today, <code>/sell</code>, <code>/month</code> for the owner, <code>today.ts</code>, close format 2 (VAT, promo/owner split, expected vs counted cash)</td>
     </tr>
-    <tr data-s="idle">
+    <tr data-s="done">
       <td>15</td><td>Setup wizard (four questions) and the Finish-setting-up checklist</td>
-      <td><span class="tag t-idle">Not started</span></td>
-      <td class="mono">&mdash;</td>
-      <td><code>catalogs.ts</code> with 10&ndash;15 sample items per shop type, 4-step wizard, 5-item checklist</td>
+      <td><span class="tag t-done">Complete</span></td>
+      <td class="mono">8f9207a</td>
+      <td><code>catalogs.ts</code> with 10&ndash;15 sample items per shop type, 4-step wizard, <code>checklist.ts</code> and a 5-item checklist on Today</td>
     </tr>
     <tr data-s="idle">
       <td>16</td><td>Spreadsheet (CSV) import and export</td>
@@ -261,12 +261,38 @@
   </div>
 </div>
 
+<h2>Task 15 in detail</h2>
+<p class="sub">Setup wizard (four questions) and the Finish-setting-up checklist. Committed as <code>Four-question setup with a sample catalog per shop type, then a checklist</code>.</p>
+<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr))">
+  <div class="card">
+    <h3 style="margin-top:0">Done and passing</h3>
+    <ul class="tight">
+      <li>Four questions: what kind of shop, what it is called, who owns it and with what PIN, and what is on the shelf. The recovery code is shown on the way out, once, before anything is written</li>
+      <li>Each shop type gets its own 10&ndash;15 item catalog &mdash; the carinderia menu, a hardware shelf that sells by the metre and the kilogram, tires and mags and labour by the hour, and wash and wax sizes. <b>General</b> starts from the retail shelf</li>
+      <li>The shop type sets the switches up front, so the counter is not asking about tables or vehicle plates a hardware store will never use</li>
+      <li>Opening stock is counted, not assumed: every stocked line is booked as an <code>opening</code> movement, so the first number on the ledger is a real one</li>
+      <li>A new install starts in <b>practice mode</b> and the checklist is reset, so nothing carries over from a previous life on the device</li>
+      <li><b>Finish setting up</b> on Today names what is left &mdash; printer, address, VAT, license, staff &mdash; links straight to Settings, and stops asking once a job is done or the owner says not now</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Decisions and still to do</h3>
+    <ul class="tight">
+      <li>The wizard used to ask for the address and the VAT status. It does not any more: a new owner is not ready to be asked, and the checklist is a better place for a question that can wait. The <code>checklistDismissed</code> answer is what settles VAT</li>
+      <li>&ldquo;Import a spreadsheet&rdquo; is on the fourth step but <b>disabled</b>, because the import screen is Task 16 and does not exist yet. It is not offered as a choice that would set the shop up empty and then go nowhere</li>
+      <li>The checklist answers live behind Settings, which staff cannot open, so the card is owner-only &mdash; the same gate as Running low</li>
+      <li><code>checklistItems</code> sits in <code>src/lib/checklist.ts</code> rather than the component: <code>jsx: preserve</code> means a <code>.tsx</code> file cannot be imported into a node test at all, and this logic is testable</li>
+      <li>Manual pass at 1280&times;800: clear site data, walk the four steps, read the recovery code, and confirm the checklist appears on Today with five open jobs. All routes prerender and the export serves 200; the new screens have no component test &mdash; the project has no component harness</li>
+    </ul>
+  </div>
+</div>
+
 <h2>Carried decisions and open risks</h2>
 <div class="scroll">
 <table>
   <tr><th>Item</th><th>State</th><th>Goes to</th></tr>
   <tr>
-    <td>38 commits ahead of <code>main</code> &mdash; pushed, but a single point of loss until a second remote exists</td>
+    <td>40 commits ahead of <code>main</code> &mdash; pushed, but a single point of loss until a second remote exists</td>
     <td class="no">Open</td>
     <td>Now</td>
   </tr>
@@ -292,8 +318,8 @@
   </tr>
   <tr>
     <td><code>setupInput</code> in <code>verify-safeguards.mjs</code> and <code>verify-auth.mjs</code> must follow the new wizard shape</td>
-    <td class="n">Carried</td>
-    <td>Task 15</td>
+    <td class="yes">Done &mdash; both follow the new shape</td>
+    <td>Closed</td>
   </tr>
   <tr>
     <td><code>importSnapshot</code> of a v7 backup doesn't reset negative stock</td>
