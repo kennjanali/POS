@@ -8,6 +8,9 @@ next-env.d.ts
 # local tool artifacts
 .playwright-mcp/
 
+# personal editor settings
+.vscode/
+
 # wrangler local state
 .wrangler/
 

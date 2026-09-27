@@ -49,10 +49,11 @@ import {
 } from '@/lib/migrate';
 import { applyPreset } from '@/lib/presets';
 import { QTY_ONE, formatQty, lineTotal, type Qty } from '@/lib/qty';
-import { computeBill } from '@/lib/tax';
+import { computeBill, type BillBreakdown } from '@/lib/tax';
 import { UPGRADE_RESET_NOTE } from '@/lib/stockHistory';
 import { DEFAULT_BRANCH, DEFAULT_SETTINGS, OPENING_STOCK, SAMPLE_MENU } from '@/lib/seed';
 import { actorId, useAuth } from './useAuth';
+import { REFERENCED_METHODS, TENDER_LABELS } from '@/lib/types';
 import type {
   AuditEntry,
   Branch,
@@ -180,6 +181,8 @@ interface PosState {
   ) => void;
   removeTender: (orderId: string, tenderId: string) => void;
   closeOrder: (orderId: string) => UserResult;
+  /** One payment of whatever is still due, then close. GCash needs its reference. */
+  payExact: (orderId: string, method: 'cash' | 'gcash', refNo?: string) => UserResult;
   voidOrder: (orderId: string, reason: string) => UserResult;
 
   // ── inventory ───────────────────────────────────────────────────────
@@ -334,6 +337,29 @@ export function keptByTill(order: Order): Centavos {
  */
 export function billedLines(order: Order, serveStep: boolean): OrderLine[] {
   return activeLines(order).filter((l) => l.served || !serveStep);
+}
+
+/** The bill for an open order, from the current settings. */
+function billOf(order: Order, settings: Settings): BillBreakdown {
+  const gross = billedLines(order, settings.features.serveStep).reduce<Centavos>(
+    (sum, l) => addC(sum, lineTotal(l.unitCents, l.qty)),
+    cents(0),
+  );
+  return computeBill(gross, settings, discountRequest(order.discount));
+}
+
+/**
+ * An open order stays on the record once stock moved for it, a payment was
+ * taken, or it carries a number (opened before numbers waited for payment).
+ * Staff can't discard it; only the owner's cancel ends it, and that cancel
+ * numbers it. Served service lines move nothing, so they don't count.
+ */
+export function staysOnRecord(order: Order): boolean {
+  return (
+    order.invoiceNo !== null ||
+    order.tenders.length > 0 ||
+    order.lines.some((l) => l.served && l.kind === 'stock')
+  );
 }
 
 /** Stock lines on open orders in this branch that are not yet off the shelf,
@@ -655,6 +681,9 @@ export const usePos = create<PosState>()(
         if (!order || order.status !== 'open') {
           return { ok: false, error: 'That sale is no longer open.' };
         }
+        if (!Number.isSafeInteger(qty) || qty <= 0) {
+          return { ok: false, error: 'Enter a quantity greater than zero.' };
+        }
         const product = state.products.find((p) => p.id === productId);
         if (!product?.active) return { ok: false, error: 'That item is no longer sold.' };
         if (product.kind === 'stock') {
@@ -827,11 +856,7 @@ export const usePos = create<PosState>()(
         if (!order || order.status !== 'open') {
           return { ok: false, error: 'That sale is no longer open.' };
         }
-        // Once stock has moved, or the order carries a number (opened before
-        // numbers waited for payment), it has to stay on the record: only the
-        // owner's cancel may end it.
-        const moved = order.lines.some((l) => l.served && l.kind === 'stock');
-        if (moved || order.invoiceNo !== null) {
+        if (staysOnRecord(order)) {
           return { ok: false, error: 'Ask the owner to cancel this sale.' };
         }
         set((s) => ({
@@ -901,11 +926,7 @@ export const usePos = create<PosState>()(
           return { ok: false, error };
         }
 
-        const gross = billed.reduce<Centavos>(
-          (sum, l) => addC(sum, lineTotal(l.unitCents, l.qty)),
-          cents(0),
-        );
-        const bill = computeBill(gross, state.settings, discountRequest(order.discount));
+        const bill = billOf(order, state.settings);
 
         // Money kept has to equal the bill exactly. Checking the tender total
         // alone was not enough: applying a discount or voiding a line *after*
@@ -973,6 +994,42 @@ export const usePos = create<PosState>()(
         return { ok: true };
       },
 
+      payExact: (orderId, method, refNo) => {
+        const state = get();
+        const order = state.orders.find((o) => o.id === orderId);
+        if (!order || order.status !== 'open') {
+          return { ok: false, error: 'That sale is no longer open.' };
+        }
+        const ref = refNo?.trim() ?? '';
+        if (REFERENCED_METHODS.includes(method) && !ref) {
+          return { ok: false, error: `${TENDER_LABELS[method]} needs a reference number.` };
+        }
+        const due = cents(billOf(order, state.settings).amountDue - keptByTill(order));
+        if (due < 0) return { ok: false, error: 'Payment does not match the amount due.' };
+
+        const tender: Tender = {
+          id: uuidv7(),
+          method,
+          amountCents: due,
+          tenderedCents: method === 'cash' ? due : null,
+          changeCents: method === 'cash' ? cents(0) : null,
+          refNo: method === 'cash' ? null : ref,
+          takenAt: Date.now(),
+        };
+        const setTenders = (fn: (tenders: Tender[]) => Tender[]) =>
+          set((s) => ({
+            ...s,
+            orders: s.orders.map((o) => (o.id === orderId ? { ...o, tenders: fn(o.tenders) } : o)),
+          }));
+
+        // A ₱0.00 sale (a 100% promo) closes with no payment at all.
+        if (due > 0) setTenders((tenders) => [...tenders, tender]);
+        const closed = get().closeOrder(orderId);
+        // Saving waits for a microtask, so a payment taken back here is never written.
+        if (!closed.ok && due > 0) setTenders((tenders) => tenders.filter((t) => t.id !== tender.id));
+        return closed;
+      },
+
       /**
        * Void, never delete. v6's removeTable() spliced the order out of the
        * array — a deleted completed sale is indistinguishable from one that
@@ -1006,11 +1063,10 @@ export const usePos = create<PosState>()(
             });
           }
 
-          // An open order whose lines were served has stock moves pointing at
-          // it, so it is numbered like any sale. One that never served
-          // anything stays unnumbered.
+          // An open order that stays on the record is numbered like any sale.
+          // One that left no trace stays unnumbered.
           const numbered =
-            order.invoiceNo === null && order.lines.some((l) => l.served)
+            order.invoiceNo === null && staysOnRecord(order)
               ? numberFor(state, order)
               : { invoiceNo: order.invoiceNo, seq: state.invoiceSeq };
 
@@ -2358,12 +2414,7 @@ export function useBill(orderId: string | null) {
   const order = usePos((s) => (orderId ? s.orders.find((o) => o.id === orderId) : undefined));
   const settings = usePos((s) => s.settings);
   if (!order) return null;
-
-  const gross = billedLines(order, settings.features.serveStep).reduce<Centavos>(
-    (sum, l) => addC(sum, lineTotal(l.unitCents, l.qty)),
-    cents(0),
-  );
-  return computeBill(gross, settings, discountRequest(order.discount));
+  return billOf(order, settings);
 }
 
 export type { TenderMethod };

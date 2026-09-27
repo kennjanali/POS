@@ -34,7 +34,8 @@ export function OrderCard({ order, currency, onOpen }: OrderCardProps) {
     cents(0),
   );
 
-  const waiting = pending.length > 0;
+  // Only a shop that serves before payment has anything waiting.
+  const waiting = serveStep && pending.length > 0;
 
   return (
     <button
@@ -54,14 +55,16 @@ export function OrderCard({ order, currency, onOpen }: OrderCardProps) {
             {order.invoiceNo && ` · ${order.invoiceNo}`}
           </span>
         </span>
-        <span
-          className={cn(
-            'shrink-0 rounded px-1.5 py-0.5 text-[9.5px] font-bold tracking-wide uppercase',
-            waiting ? 'bg-warn/15 text-warn' : 'bg-cool/15 text-cool',
-          )}
-        >
-          {waiting ? `${pending.length} pending` : 'Served'}
-        </span>
+        {serveStep && (
+          <span
+            className={cn(
+              'shrink-0 rounded px-1.5 py-0.5 text-[9.5px] font-bold tracking-wide uppercase',
+              waiting ? 'bg-warn/15 text-warn' : 'bg-cool/15 text-cool',
+            )}
+          >
+            {waiting ? `${pending.length} pending` : 'Served'}
+          </span>
+        )}
       </div>
 
       <div className="flex items-end justify-between gap-2">

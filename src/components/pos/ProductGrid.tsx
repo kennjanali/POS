@@ -17,11 +17,12 @@ import { Field } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
 import { toast } from '@/components/ui/Toast';
 
-interface MenuGridProps {
-  orderId: string;
+interface ProductGridProps {
+  /** The order a tap adds to. Called at the tap, so a retail cart opens on the first one. */
+  getOrderId: () => string;
 }
 
-export function MenuGrid({ orderId }: MenuGridProps) {
+export function ProductGrid({ getOrderId }: ProductGridProps) {
   const products = usePos((s) => s.products);
   const stock = usePos((s) => s.stock);
   const orders = usePos((s) => s.orders);
@@ -31,6 +32,8 @@ export function MenuGrid({ orderId }: MenuGridProps) {
   const canManage = useAuth((s) => can(s.session, 'inventory.manage'));
 
   const [query, setQuery] = useState('');
+  /** Null shows every category. */
+  const [category, setCategory] = useState<string | null>(null);
   /** A measured item waiting for its quantity. */
   const [measuring, setMeasuring] = useState<Product | null>(null);
   const [quickAdding, setQuickAdding] = useState(false);
@@ -44,17 +47,29 @@ export function MenuGrid({ orderId }: MenuGridProps) {
   const held = useMemo(() => heldStock(orders, branchId), [orders, branchId]);
 
   function add(productId: string, q?: Qty): UserResult {
-    const result = addLine(orderId, productId, q);
+    const result = addLine(getOrderId(), productId, q);
     if (!result.ok) toast(result.error, 'danger');
     return result;
   }
 
+  const sold = useMemo(() => sortProducts(products).filter((p) => p.active), [products]);
+  const categories = useMemo(
+    () => [...new Set(sold.map((p) => p.category).filter(Boolean))],
+    [sold],
+  );
+  const tab = category !== null && categories.includes(category) ? category : null;
+
+  // A search looks through every category: a cashier typing a SKU should not
+  // have to know which tab it sits under.
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return sortProducts(products).filter(
-      (p) => p.active && (q === '' || p.name.toLowerCase().includes(q)),
-    );
-  }, [products, query]);
+    if (q !== '') {
+      return sold.filter(
+        (p) => p.name.toLowerCase().includes(q) || (p.sku ?? '').toLowerCase().includes(q),
+      );
+    }
+    return tab === null ? sold : sold.filter((p) => p.category === tab);
+  }, [sold, query, tab]);
 
   return (
     <div className="flex h-full flex-col gap-3 border-r border-line p-3">
@@ -68,11 +83,37 @@ export function MenuGrid({ orderId }: MenuGridProps) {
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search menu"
-          aria-label="Search menu"
+          placeholder="Search items"
+          aria-label="Search items"
           className="h-11 w-full rounded-md border border-line bg-raised pr-3 pl-9 text-[14px] placeholder:text-ink-3 focus:border-accent"
         />
       </div>
+
+      {categories.length > 0 && (
+        <div
+          role="tablist"
+          aria-label="Categories"
+          className="flex shrink-0 gap-1.5 overflow-x-auto pb-0.5"
+        >
+          {[null, ...categories].map((c) => (
+            <button
+              key={c ?? ''}
+              type="button"
+              role="tab"
+              aria-selected={tab === c}
+              onClick={() => setCategory(c)}
+              className={cn(
+                'min-h-10 shrink-0 rounded-md border px-3 text-[12px] font-semibold whitespace-nowrap transition-colors',
+                tab === c
+                  ? 'border-accent bg-accent text-white'
+                  : 'border-line bg-raised text-ink-2 hover:bg-ground',
+              )}
+            >
+              {c ?? 'All'}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="scroll-y grid flex-1 auto-rows-min grid-cols-[repeat(auto-fill,minmax(118px,1fr))] gap-2 pr-1">
         {visible.map((product) => {

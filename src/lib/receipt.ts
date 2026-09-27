@@ -57,6 +57,7 @@ export function renderReceipt(order: Order, settings: Settings, width: number = 
 
   out.push(row('Order no.', order.invoiceNo ?? '-'));
   out.push(row('Order', order.label));
+  if (order.vehiclePlate) out.push(row('Plate', order.vehiclePlate));
   out.push(row('Date', fmtDate(order.closedAt ?? order.openedAt)));
   out.push(row('Time', fmtTime(order.closedAt ?? order.openedAt)));
   out.push(rule);
@@ -71,24 +72,29 @@ export function renderReceipt(order: Order, settings: Settings, width: number = 
 
   out.push(row('Gross', amount(order.grossCents)));
 
-  if (order.vatExemptCents > 0) {
+  // VAT is frozen on the sale, so a sale closed while the shop was
+  // VAT-registered keeps its VAT line on a reprint.
+  const showVat = settings.vatRegistered || order.vatCents > 0;
+  if (showVat && order.vatExemptCents > 0) {
     out.push(row(`${settings.vatLabel}-exempt sale`, amount(order.vatExemptCents)));
   }
   if (order.discountCents > 0) {
     const d = order.discount;
-    const label = d.kind === 'promo' ? `Promo ${d.code} (${d.percent}%)` : 'Discount';
+    const label =
+      d.kind === 'promo'
+        ? `Promo ${d.code} (${d.percent}%)`
+        : d.kind === 'legacy'
+          ? 'Discount (legacy)'
+          : 'Discount';
     out.push(row(label, `-${amount(order.discountCents)}`));
-  }
-  if (settings.vatRegistered) {
-    if (order.vatableCents > 0) {
-      out.push(row('VATable sale', amount(order.vatableCents)));
-    }
-    if (order.vatCents > 0) {
-      out.push(row(settings.vatLabel, amount(order.vatCents)));
-    }
   }
 
   out.push(row('TOTAL', amount(order.netCents)));
+  // Prices include VAT: it is part of the total, never added to it.
+  if (showVat) {
+    const pct = Math.round(settings.vatRate * 100);
+    out.push(row(`${settings.vatLabel} (${pct}%) included`, amount(order.vatCents)));
+  }
   out.push(rule);
 
   for (const tender of order.tenders) {

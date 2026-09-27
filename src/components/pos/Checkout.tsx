@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { AlertTriangle, Trash2 } from 'lucide-react';
+import { AlertTriangle, Banknote, Smartphone, Split, Trash2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
@@ -11,6 +11,7 @@ import { cn } from '@/components/ui/cn';
 import { peso } from '@/lib/format';
 import { discountRequest } from '@/lib/migrate';
 import { addC, cents, parsePesos, type Centavos } from '@/lib/money';
+import { can } from '@/lib/permissions';
 import { formatQty, lineTotal } from '@/lib/qty';
 import { computeBill } from '@/lib/tax';
 import {
@@ -20,6 +21,7 @@ import {
   type Order,
   type TenderMethod,
 } from '@/lib/types';
+import { useAuth } from '@/store/useAuth';
 import { billedLines, usePos, type UserResult } from '@/store/usePos';
 
 const DISCOUNTS = [
@@ -41,10 +43,16 @@ export function Checkout({ order, open, onClose, onPaid }: CheckoutProps) {
   const addTender = usePos((s) => s.addTender);
   const removeTender = usePos((s) => s.removeTender);
   const closeOrder = usePos((s) => s.closeOrder);
+  const payExact = usePos((s) => s.payExact);
+  const canDiscount = useAuth((s) => can(s.session, 'discount.owner'));
 
   const [method, setMethod] = useState<TenderMethod>('cash');
   const [amountInput, setAmountInput] = useState('');
   const [refNo, setRefNo] = useState('');
+  /** Other / split: every method, part payments and change. */
+  const [splitPicked, setSplitPicked] = useState(false);
+  /** GCash picked: waiting for its reference number. */
+  const [gcash, setGcash] = useState(false);
 
   const { serveStep } = settings.features;
   const billed = billedLines(order, serveStep);
@@ -70,13 +78,34 @@ export function Checkout({ order, open, onClose, onPaid }: CheckoutProps) {
   );
   const balance = cents(bill.amountDue - kept);
   // Negative balance means a discount was applied or a line voided after the
-  // payment was recorded, leaving a tender that is now too large.
+  // payment was recorded, leaving a payment that is now too large.
   const overRecorded = kept > bill.amountDue;
   const needsRef = REFERENCED_METHODS.includes(method);
   const ownerPercent = order.discount.kind === 'owner' ? (order.discount.percent ?? 0) : null;
+  // A payment already taken is only visible, and removable, in the split view.
+  const split = splitPicked || order.tenders.length > 0;
 
   function showRefusal(result: UserResult) {
     if (!result.ok) toast(result.error, 'danger');
+  }
+
+  function close() {
+    setSplitPicked(false);
+    setGcash(false);
+    setRefNo('');
+    setAmountInput('');
+    onClose();
+  }
+
+  function paid() {
+    onPaid(order.id);
+    close();
+  }
+
+  function pay(how: 'cash' | 'gcash') {
+    const result = payExact(order.id, how, how === 'gcash' ? refNo : undefined);
+    if (result.ok) paid();
+    else toast(result.error, 'danger');
   }
 
   function recordTender() {
@@ -100,7 +129,7 @@ export function Checkout({ order, open, onClose, onPaid }: CheckoutProps) {
     if (method !== 'cash' && requested > balance) {
       toast(
         `That is more than the ${peso(balance, settings.currency)} due. ` +
-          `Record the exact amount.`,
+          `Enter the exact amount.`,
         'danger',
       );
       return;
@@ -137,43 +166,42 @@ export function Checkout({ order, open, onClose, onPaid }: CheckoutProps) {
   function finish() {
     if (overRecorded) {
       toast(
-        `The bill changed after payment was recorded. Remove the tender and ` +
+        `The bill changed after payment was taken. Remove the payment and ` +
           `take it again for ${peso(bill.amountDue, settings.currency)}.`,
         'danger',
       );
       return;
     }
     const result = closeOrder(order.id);
-    if (result.ok) {
-      onPaid(order.id);
-      onClose();
-    } else {
-      toast(result.error, 'danger');
-    }
+    if (result.ok) paid();
+    else toast(result.error, 'danger');
   }
 
   const totalChange = order.tenders.reduce((sum, t) => sum + (t.changeCents ?? 0), 0);
+  const due = peso(bill.amountDue, settings.currency);
 
   return (
     <Modal
       open={open}
-      onClose={onClose}
+      onClose={close}
       title={`Payment — ${order.label}`}
       width="lg"
       footer={
-        <Button
-          size="lg"
-          fullWidth
-          variant="success"
-          disabled={balance > 0 || overRecorded || billed.length === 0}
-          onClick={finish}
-        >
-          {balance > 0
-            ? `${peso(balance, settings.currency)} still due`
-            : overRecorded
-              ? `Over by ${peso(cents(-balance), settings.currency)} — re-record`
-              : `Complete — ${peso(bill.amountDue, settings.currency)}`}
-        </Button>
+        split ? (
+          <Button
+            size="lg"
+            fullWidth
+            variant="success"
+            disabled={balance > 0 || overRecorded || billed.length === 0}
+            onClick={finish}
+          >
+            {balance > 0
+              ? `${peso(balance, settings.currency)} still due`
+              : overRecorded
+                ? `Over by ${peso(cents(-balance), settings.currency)} — take it again`
+                : `Complete — ${due}`}
+          </Button>
+        ) : undefined
       }
     >
       <div className="grid gap-5 md:grid-cols-2">
@@ -218,57 +246,57 @@ export function Checkout({ order, open, onClose, onPaid }: CheckoutProps) {
                 tone="note"
               />
             )}
-            {settings.vatRegistered && bill.vat > 0 && (
-              <Row
-                label={`${settings.vatLabel} (${(settings.vatRate * 100).toFixed(0)}%)`}
-                value={peso(bill.vat, settings.currency)}
-              />
-            )}
 
             <div className="mt-1.5 flex items-baseline justify-between border-t border-line pt-2">
               <dt className="text-[11px] font-bold tracking-wide uppercase">
                 Amount due
               </dt>
-              <dd className="tnum text-[20px] leading-none font-extrabold">
-                {peso(bill.amountDue, settings.currency)}
-              </dd>
+              <dd className="tnum text-[20px] leading-none font-extrabold">{due}</dd>
             </div>
+            {settings.vatRegistered && (
+              <Row
+                label={`${settings.vatLabel} (${Math.round(settings.vatRate * 100)}%) included`}
+                value={peso(bill.vat, settings.currency)}
+              />
+            )}
           </dl>
         </section>
 
-        {/* ── Right: discount + tender ───────────────────────────── */}
+        {/* ── Right: discount + payment ──────────────────────────── */}
         <section className="flex flex-col gap-4">
-          <div>
-            <p className="mb-1.5 text-[10.5px] font-bold tracking-wide text-ink-2 uppercase">
-              Discount
-            </p>
-            <div className="grid grid-cols-2 gap-1.5">
-              {DISCOUNTS.map(({ kind, label }) => (
-                <button
-                  key={kind}
-                  type="button"
-                  aria-pressed={order.discount.kind === kind}
-                  onClick={() =>
-                    showRefusal(
-                      kind === 'none'
-                        ? clearDiscount(order.id)
-                        : setOwnerDiscountPercent(order.id, ownerPercent ?? 0),
-                    )
-                  }
-                  className={cn(
-                    'min-h-11 rounded-md border px-1 py-2 text-[12px] font-semibold transition-colors',
-                    order.discount.kind === kind
-                      ? 'border-note bg-note text-white'
-                      : 'border-line bg-raised text-ink-2 hover:bg-ground',
-                  )}
-                >
-                  {label}
-                </button>
-              ))}
+          {canDiscount && (
+            <div>
+              <p className="mb-1.5 text-[10.5px] font-bold tracking-wide text-ink-2 uppercase">
+                Discount
+              </p>
+              <div className="grid grid-cols-2 gap-1.5">
+                {DISCOUNTS.map(({ kind, label }) => (
+                  <button
+                    key={kind}
+                    type="button"
+                    aria-pressed={order.discount.kind === kind}
+                    onClick={() =>
+                      showRefusal(
+                        kind === 'none'
+                          ? clearDiscount(order.id)
+                          : setOwnerDiscountPercent(order.id, ownerPercent ?? 0),
+                      )
+                    }
+                    className={cn(
+                      'min-h-11 rounded-md border px-1 py-2 text-[12px] font-semibold transition-colors',
+                      order.discount.kind === kind
+                        ? 'border-note bg-note text-white'
+                        : 'border-line bg-raised text-ink-2 hover:bg-ground',
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
-          {ownerPercent !== null && (
+          {canDiscount && ownerPercent !== null && (
             <Field
               label="Percent off"
               type="number"
@@ -282,109 +310,177 @@ export function Checkout({ order, open, onClose, onPaid }: CheckoutProps) {
             />
           )}
 
-          <div>
-            <p className="mb-1.5 text-[10.5px] font-bold tracking-wide text-ink-2 uppercase">
-              Tender
-            </p>
-            <div className="grid grid-cols-3 gap-1.5">
-              {TENDER_METHODS.map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  aria-pressed={method === m}
-                  onClick={() => setMethod(m)}
-                  className={cn(
-                    'min-h-11 rounded-md border px-1 py-2 text-[12px] font-semibold transition-colors',
-                    method === m
-                      ? 'border-accent bg-accent text-white'
-                      : 'border-line bg-raised text-ink-2 hover:bg-ground',
-                  )}
-                >
-                  {TENDER_LABELS[m]}
-                </button>
-              ))}
-            </div>
-          </div>
+          {!split ? (
+            <div className="flex flex-col gap-2">
+              <p className="text-[10.5px] font-bold tracking-wide text-ink-2 uppercase">
+                Payment
+              </p>
+              <Button
+                size="lg"
+                fullWidth
+                variant="success"
+                disabled={billed.length === 0}
+                onClick={() => pay('cash')}
+              >
+                <Banknote size={17} aria-hidden />
+                Exact cash — {due}
+              </Button>
 
-          <Field
-            label={method === 'cash' ? 'Cash received' : 'Amount'}
-            type="text"
-            inputMode="decimal"
-            placeholder={peso(Math.max(balance, 0), '').trim()}
-            hint={
-              method === 'cash'
-                ? 'Leave blank to tender the exact balance.'
-                : 'Split the bill by recording more than one tender.'
-            }
-            value={amountInput}
-            onChange={(e) => setAmountInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') recordTender();
-            }}
-          />
-
-          {needsRef && (
-            <Field
-              label="Reference number"
-              placeholder="13-digit reference"
-              hint="Needed to reconcile against the wallet statement at close."
-              value={refNo}
-              onChange={(e) => setRefNo(e.target.value)}
-            />
-          )}
-
-          <Button variant="secondary" fullWidth onClick={recordTender}>
-            Record {TENDER_LABELS[method]}
-          </Button>
-
-          {order.tenders.length > 0 && (
-            <ul className="flex list-none flex-col gap-1 p-0">
-              {order.tenders.map((t) => (
-                <li
-                  key={t.id}
-                  className="flex items-center gap-2 rounded-md border border-line px-2.5 py-1.5 text-[12px]"
-                >
-                  <span className="font-semibold">{TENDER_LABELS[t.method]}</span>
-                  {t.refNo && (
-                    <span className="truncate font-mono text-[10.5px] text-ink-3">
-                      {t.refNo}
-                    </span>
-                  )}
-                  <span className="flex-1" />
-                  <span className="tnum font-bold">
-                    {peso(t.amountCents, settings.currency)}
-                  </span>
-                  <button
-                    type="button"
-                    aria-label="Remove tender"
-                    onClick={() => removeTender(order.id, t.id)}
-                    className="rounded p-0.5 text-ink-3 hover:text-bad"
+              {gcash ? (
+                <div className="flex flex-col gap-2 rounded-md border border-line p-2.5">
+                  <Field
+                    label="GCash reference number"
+                    placeholder="13-digit reference"
+                    inputMode="numeric"
+                    autoFocus
+                    value={refNo}
+                    onChange={(e) => setRefNo(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && refNo.trim()) pay('gcash');
+                    }}
+                  />
+                  <Button
+                    fullWidth
+                    disabled={!refNo.trim() || billed.length === 0}
+                    onClick={() => pay('gcash')}
                   >
-                    <Trash2 size={12} aria-hidden />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
+                    Paid by GCash — {due}
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  size="lg"
+                  fullWidth
+                  variant="secondary"
+                  disabled={billed.length === 0}
+                  onClick={() => setGcash(true)}
+                >
+                  <Smartphone size={17} aria-hidden />
+                  GCash
+                </Button>
+              )}
 
-          {overRecorded && (
-            <p className="rounded-md border border-bad/40 bg-bad/5 px-2.5 py-2 text-[11.5px] leading-relaxed text-ink-2">
-              <strong className="text-bad">
-                Recorded payment is {peso(cents(-balance), settings.currency)} over
-                the total.
-              </strong>{' '}
-              The bill changed after this was taken. Remove the tender above and
-              record {peso(bill.amountDue, settings.currency)} instead.
-            </p>
-          )}
+              <Button
+                fullWidth
+                variant="ghost"
+                disabled={billed.length === 0}
+                onClick={() => {
+                  setGcash(false);
+                  setRefNo('');
+                  setSplitPicked(true);
+                }}
+              >
+                <Split size={15} aria-hidden />
+                Other / split
+              </Button>
+            </div>
+          ) : (
+            <>
+              <div>
+                <p className="mb-1.5 text-[10.5px] font-bold tracking-wide text-ink-2 uppercase">
+                  Payment
+                </p>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {TENDER_METHODS.map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      aria-pressed={method === m}
+                      onClick={() => setMethod(m)}
+                      className={cn(
+                        'min-h-11 rounded-md border px-1 py-2 text-[12px] font-semibold transition-colors',
+                        method === m
+                          ? 'border-accent bg-accent text-white'
+                          : 'border-line bg-raised text-ink-2 hover:bg-ground',
+                      )}
+                    >
+                      {TENDER_LABELS[m]}
+                    </button>
+                  ))}
+                </div>
+              </div>
 
-          {/* Hidden while the tender is over-recorded: the change was worked out
-              against the previous total, and a cashier reading it would hand
-              back the wrong money. The block above says what to do instead. */}
-          {totalChange > 0 && !overRecorded && (
-            <p className="rounded-md bg-good/10 px-2.5 py-2 text-[13px] font-bold text-good">
-              Change due {peso(totalChange, settings.currency)}
-            </p>
+              <Field
+                label={method === 'cash' ? 'Cash received' : 'Amount'}
+                type="text"
+                inputMode="decimal"
+                placeholder={peso(Math.max(balance, 0), '').trim()}
+                hint={
+                  method === 'cash'
+                    ? 'Leave blank for the exact balance.'
+                    : 'Split the bill by adding more than one payment.'
+                }
+                value={amountInput}
+                onChange={(e) => setAmountInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') recordTender();
+                }}
+              />
+
+              {needsRef && (
+                <Field
+                  label="Reference number"
+                  placeholder="13-digit reference"
+                  hint="Needed to check against the wallet statement at the end of the day."
+                  value={refNo}
+                  onChange={(e) => setRefNo(e.target.value)}
+                />
+              )}
+
+              <Button variant="secondary" fullWidth onClick={recordTender}>
+                Add {TENDER_LABELS[method]} payment
+              </Button>
+
+              {order.tenders.length > 0 && (
+                <ul className="flex list-none flex-col gap-1 p-0">
+                  {order.tenders.map((t) => (
+                    <li
+                      key={t.id}
+                      className="flex items-center gap-2 rounded-md border border-line px-2.5 py-1.5 text-[12px]"
+                    >
+                      <span className="font-semibold">{TENDER_LABELS[t.method]}</span>
+                      {t.refNo && (
+                        <span className="truncate font-mono text-[10.5px] text-ink-3">
+                          {t.refNo}
+                        </span>
+                      )}
+                      <span className="flex-1" />
+                      <span className="tnum font-bold">
+                        {peso(t.amountCents, settings.currency)}
+                      </span>
+                      <button
+                        type="button"
+                        aria-label="Remove payment"
+                        onClick={() => removeTender(order.id, t.id)}
+                        className="grid size-10 place-items-center rounded text-ink-3 hover:text-bad"
+                      >
+                        <Trash2 size={12} aria-hidden />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {overRecorded && (
+                <p className="rounded-md border border-bad/40 bg-bad/5 px-2.5 py-2 text-[11.5px] leading-relaxed text-ink-2">
+                  <strong className="text-bad">
+                    The payment is {peso(cents(-balance), settings.currency)} over the
+                    total.
+                  </strong>{' '}
+                  The bill changed after it was taken. Remove the payment above and take{' '}
+                  {due} instead.
+                </p>
+              )}
+
+              {/* Hidden while the payment is over: the change was worked out
+                  against the previous total, and a cashier reading it would hand
+                  back the wrong money. The block above says what to do instead. */}
+              {totalChange > 0 && !overRecorded && (
+                <p className="rounded-md bg-good/10 px-2.5 py-2 text-[13px] font-bold text-good">
+                  Change due {peso(totalChange, settings.currency)}
+                </p>
+              )}
+            </>
           )}
         </section>
       </div>

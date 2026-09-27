@@ -98,3 +98,8 @@ export const PRESETS: Record<ShopType, Preset> = {
 export function applyPreset(t: ShopType): Features {
   return { ...PRESETS[t].features };
 }
+
+/** What an open order is called on screen: the preset's word, or "Order". */
+export function ticketWord(t: ShopType): string {
+  return PRESETS[t].ticketLabel ?? 'Order';
+}
