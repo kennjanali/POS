@@ -30,17 +30,17 @@ auto parts and service shops, tire and mags shops, car washes) who are price-sen
 internet and aren't technical.
 
 **The problem:** monthly-fee cloud POS apps stop when the internet drops. Stock counts drift.
-Utang lives in a notebook.
+Staff can change prices or give discounts without the owner knowing.
 
 **Promise (headline):** **"Pay once. Works offline. Stock that adds up."**
 
 **Three proof points, used everywhere:**
 1. **One-time license.** No monthly fee; yearly maintenance is optional.
-2. **Works offline.** Selling, stock, utang and reports run on the tablet.
+2. **Works offline.** Selling, stock, quotes and reports run on the tablet.
 3. **Stock can't go below zero.** Low-stock alerts before you run out.
 
-**Supporting points:** utang list with balances and payment slips; quotations that turn into sales
-at the quoted price; staff PINs with who-did-what on every sale; void-never-delete; encrypted
+**Supporting points:** only the owner can change prices, stock or discounts, while staff just take
+orders and payments; quotations that turn into sales at the quoted price; staff PINs with who-did-what on every sale; void-never-delete; encrypted
 nightly backup and restore onto a new tablet.
 
 ---
@@ -75,11 +75,11 @@ Set the prices after the pilots (§6). Use these packages:
 
 ## 5. Channels (in order: cheapest first)
 
-1. **Walk-in visits in your city.** Carry a tablet with the demo business matching the shop in front of you. Keep the demo to 3 minutes: a sale, a utang entry, a low-stock alert. Leave a printed card with `pos-034.kennali.com` and your Messenger link.
+1. **Walk-in visits in your city.** Carry a tablet with the demo business matching the shop in front of you. Keep the demo to 3 minutes: a sale, a quotation, a low-stock alert. Leave a printed card with `pos-034.kennali.com` and your Messenger link.
 2. **Facebook page + Messenger.** The main contact button on every page, ad and card.
 3. **Short videos** (Facebook Reels, TikTok): one problem per video, filmed on the real app. Ideas:
    - "Internet down at lunch rush? Keep selling."
-   - "Who owes you? Utang list in two taps."
+   - "Only you can change prices. Staff just take orders."
    - "The last tire can't be sold twice."
    - "Quote today, sell next week at the same price."
 4. **Local Facebook groups** (city business and buy-and-sell groups, hardware and automotive groups). Post useful content and demo videos, follow each group's rules, no spam.
