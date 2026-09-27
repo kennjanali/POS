@@ -39,9 +39,16 @@ import {
   type MonthlyArchive,
 } from '@/lib/archive';
 import { can, isLastActiveSuperadmin, type Permission } from '@/lib/permissions';
-import { type Centavos, addC, cents, mulQty } from '@/lib/money';
-import { discountRequest, migrateBlobV7, migrateOrderV7, migrateSnapshot } from '@/lib/migrate';
+import { type Centavos, addC, cents } from '@/lib/money';
+import {
+  discountRequest,
+  migrateBlobV7,
+  migrateMoveV7,
+  migrateOrderV7,
+  migrateSnapshot,
+} from '@/lib/migrate';
 import { applyPreset } from '@/lib/presets';
+import { QTY_ONE, formatQty, lineTotal, type Qty } from '@/lib/qty';
 import { computeBill } from '@/lib/tax';
 import { DEFAULT_BRANCH, DEFAULT_SETTINGS, OPENING_STOCK, SAMPLE_MENU } from '@/lib/seed';
 import { actorId, useAuth } from './useAuth';
@@ -99,7 +106,7 @@ interface PosState {
   products: Product[];
   orders: Order[];
   /** branchId -> productId -> on hand */
-  stock: Record<string, Record<string, number>>;
+  stock: Record<string, Record<string, Qty>>;
   stockMoves: StockMove[];
   /** Daily closes, oldest first. Written once, never changed. */
   closes: DailyClose[];
@@ -129,20 +136,23 @@ interface PosState {
   lastBackupAt: number | null;
   hydrated: boolean;
   persistError: string | null;
+  /** Set by the v7 migration: the order and stock-move rows still count whole
+   *  units. `loadRows` brings them to thousandths and clears it. */
+  rowsNeedV8: boolean;
 
   // ── selectors ───────────────────────────────────────────────────────
   branch: (id?: string) => Branch | undefined;
   user: (id: string | null) => User | undefined;
   order: (id: string | null) => Order | undefined;
   product: (id: string) => Product | undefined;
-  stockOf: (productId: string, branchId?: string) => number;
+  stockOf: (productId: string, branchId?: string) => Qty;
   openOrders: () => Order[];
 
   // ── order lifecycle ─────────────────────────────────────────────────
   openOrder: (label: string, type: OrderType) => string;
   setActiveOrder: (id: string | null) => void;
-  addLine: (orderId: string, productId: string, qty?: number) => void;
-  changeQty: (orderId: string, lineNo: number, delta: number) => void;
+  addLine: (orderId: string, productId: string, qty?: Qty) => void;
+  changeQty: (orderId: string, lineNo: number, delta: Qty) => void;
   voidLine: (orderId: string, lineNo: number, reason: string) => UserResult;
   serveAll: (orderId: string) => void;
   serveLine: (orderId: string, lineNo: number) => void;
@@ -162,7 +172,7 @@ interface PosState {
   // ── inventory ───────────────────────────────────────────────────────
   adjustStock: (
     productId: string,
-    delta: number,
+    delta: Qty,
     reason: StockReason,
     note?: string,
     branchId?: string,
@@ -270,7 +280,7 @@ function activeLines(order: Order): OrderLine[] {
 
 export function orderGross(order: Order): Centavos {
   return activeLines(order).reduce<Centavos>(
-    (sum, line) => addC(sum, mulQty(line.unitCents, line.qty)),
+    (sum, line) => addC(sum, lineTotal(line.unitCents, line.qty)),
     cents(0),
   );
 }
@@ -398,8 +408,11 @@ function unclosedTimes({ orders, closes }: Pick<PosState, 'orders' | 'closes'>):
   return times;
 }
 
-function initialStock(products: Product[]): Record<string, number> {
-  return Object.fromEntries(products.map((p) => [p.id, OPENING_STOCK]));
+/** Services are never stocked. */
+function initialStock(products: Product[]): Record<string, Qty> {
+  return Object.fromEntries(
+    products.filter((p) => p.kind === 'stock').map((p) => [p.id, OPENING_STOCK]),
+  );
 }
 
 export const usePos = create<PosState>()(
@@ -428,6 +441,7 @@ export const usePos = create<PosState>()(
       lastBackupAt: null,
       hydrated: false,
       persistError: null,
+      rowsNeedV8: false,
 
       // ── selectors ─────────────────────────────────────────────────
       branch: (id) => {
@@ -439,7 +453,7 @@ export const usePos = create<PosState>()(
       product: (id) => get().products.find((p) => p.id === id),
       stockOf: (productId, branchId) => {
         const bid = branchId ?? get().activeBranchId;
-        return get().stock[bid]?.[productId] ?? 0;
+        return get().stock[bid]?.[productId] ?? (0 as Qty);
       },
       openOrders: () =>
         get()
@@ -476,7 +490,7 @@ export const usePos = create<PosState>()(
 
       setActiveOrder: (id) => set({ activeOrderId: id }),
 
-      addLine: (orderId, productId, qty = 1) =>
+      addLine: (orderId, productId, qty = QTY_ONE) =>
         set((state) => {
           const product = state.products.find((p) => p.id === productId);
           if (!product) return state;
@@ -492,7 +506,7 @@ export const usePos = create<PosState>()(
               return {
                 ...o,
                 lines: o.lines.map((l) =>
-                  l.lineNo === existing.lineNo ? { ...l, qty: l.qty + qty } : l,
+                  l.lineNo === existing.lineNo ? { ...l, qty: (l.qty + qty) as Qty } : l,
                 ),
               };
             }
@@ -503,6 +517,8 @@ export const usePos = create<PosState>()(
               name: product.name,
               unitCents: product.priceCents,
               costCents: product.costCents,
+              kind: product.kind,
+              unit: product.unit,
               qty,
               served: false,
               servedAt: null,
@@ -524,7 +540,7 @@ export const usePos = create<PosState>()(
               lines: o.lines
                 .map((l) =>
                   l.lineNo === lineNo && !l.served
-                    ? { ...l, qty: Math.max(0, l.qty + delta) }
+                    ? { ...l, qty: Math.max(0, l.qty + delta) as Qty }
                     : l,
                 )
                 .filter((l) => l.qty > 0 || l.served || l.voided),
@@ -544,13 +560,13 @@ export const usePos = create<PosState>()(
           // step; corrections to a settled sale go through voidOrder.
           if (order.status !== 'open') return state;
 
-          // Voiding a served line returns its stock.
+          // Voiding a served stock line returns its stock.
           const moves: StockMove[] = [];
           let stock = state.stock;
-          if (line.served) {
+          if (line.served && line.kind === 'stock') {
             const branchStock = { ...(stock[order.branchId] ?? {}) };
             branchStock[line.productId] =
-              (branchStock[line.productId] ?? 0) + line.qty;
+              ((branchStock[line.productId] ?? 0) + line.qty) as Qty;
             stock = { ...stock, [order.branchId]: branchStock };
             moves.push({
               id: uuidv7(),
@@ -584,7 +600,7 @@ export const usePos = create<PosState>()(
             audit: log(
               state.audit,
               'line.void',
-              `Voided ${line.qty}x ${line.name} on ${order.invoiceNo} — ${reason}`,
+              `Voided ${formatQty(line.qty)}x ${line.name} on ${order.invoiceNo} — ${reason}`,
               'warn',
               order.branchId,
             ),
@@ -662,7 +678,7 @@ export const usePos = create<PosState>()(
         if (served.length === 0) return false;
 
         const gross = served.reduce<Centavos>(
-          (sum, l) => addC(sum, mulQty(l.unitCents, l.qty)),
+          (sum, l) => addC(sum, lineTotal(l.unitCents, l.qty)),
           cents(0),
         );
         const bill = computeBill(gross, state.settings, discountRequest(order.discount));
@@ -718,13 +734,13 @@ export const usePos = create<PosState>()(
           const order = state.orders.find((o) => o.id === orderId);
           if (!order || order.status === 'voided') return state;
 
-          // Return stock for every served line.
+          // Return stock for every served stock line.
           const branchStock = { ...(state.stock[order.branchId] ?? {}) };
           const moves: StockMove[] = [];
           for (const line of order.lines) {
-            if (!line.served || line.voided) continue;
+            if (!line.served || line.voided || line.kind !== 'stock') continue;
             branchStock[line.productId] =
-              (branchStock[line.productId] ?? 0) + line.qty;
+              ((branchStock[line.productId] ?? 0) + line.qty) as Qty;
             moves.push({
               id: uuidv7(),
               branchId: order.branchId,
@@ -774,7 +790,7 @@ export const usePos = create<PosState>()(
         set((state) => {
           const bid = branchId ?? state.activeBranchId;
           const branchStock = { ...(state.stock[bid] ?? {}) };
-          branchStock[productId] = (branchStock[productId] ?? 0) + delta;
+          branchStock[productId] = ((branchStock[productId] ?? 0) + delta) as Qty;
           const move: StockMove = {
             id: uuidv7(),
             branchId: bid,
@@ -798,6 +814,11 @@ export const usePos = create<PosState>()(
       upsertProduct: (product) => {
         const refused = guard('inventory.manage');
         if (refused) return refused;
+        // A SKU names one item, or a spreadsheet import could not tell them apart.
+        const { sku } = product;
+        if (sku !== null && get().products.some((p) => p.id !== product.id && p.sku === sku)) {
+          return { ok: false, error: `Another item already has SKU ${sku}.` };
+        }
         set((state) => {
           const exists = state.products.some((p) => p.id === product.id);
           return {
@@ -1509,6 +1530,7 @@ export const usePos = create<PosState>()(
         branches: state.branches,
         users: state.users,
         stock: state.stock,
+        rowsNeedV8: state.rowsNeedV8,
         settings: state.settings,
         invoiceSeq: state.invoiceSeq,
         recovery: state.recovery,
@@ -1701,15 +1723,24 @@ async function loadRows(rehydrated: PosState | undefined): Promise<void> {
     }
 
     const loaded = rows.length > 0 ? rows : (rehydrated?.orders ?? []);
-    usePos.setState({
+    const loadedMoves = moves.length > 0 ? moves : (rehydrated?.stockMoves ?? []);
+    // A v7 install counted whole units. Its rows come up to thousandths here,
+    // once: the first save writes them with the flag cleared, in one batch.
+    const upgrade = rehydrated?.rowsNeedV8 === true;
+    const next = {
       // v7 orders carry no `discount`; they come up to v8 on the way in.
-      orders: loaded.map((o) => ('discount' in o ? o : migrateOrderV7(o))),
-      stockMoves: moves.length > 0 ? moves : (rehydrated?.stockMoves ?? []),
+      orders: loaded.map((o) => (upgrade || !('discount' in o) ? migrateOrderV7(o) : o)),
+      stockMoves: upgrade ? loadedMoves.map(migrateMoveV7) : loadedMoves,
       closes,
       products: products.length > 0 ? products : (rehydrated?.products ?? []),
       // The log is kept newest first. Rows come back in id order, which is not
       // quite time order, so sort by time and break ties by id.
       audit: audit.length > 0 ? [...audit].sort(newestFirst) : (rehydrated?.audit ?? []),
+    };
+    usePos.setState({
+      ...next,
+      ...(upgrade ? resetNegativeStock({ ...next, stock: usePos.getState().stock }) : {}),
+      rowsNeedV8: false,
       hydrated: true,
     });
     void usePos.getState().checkLicense();
@@ -1720,6 +1751,44 @@ async function loadRows(rehydrated: PosState | undefined): Promise<void> {
         'Could not read saved sales. Work in this session may not be saved.',
     });
   }
+}
+
+/**
+ * v7 recorded overselling as a negative balance; v8 never lets stock go below
+ * zero. At the upgrade each negative balance is counted back to zero, with a
+ * count move and an audit entry, so the correction is on the record.
+ */
+function resetNegativeStock(
+  s: Pick<PosState, 'stock' | 'stockMoves' | 'audit' | 'products'>,
+): Pick<PosState, 'stock' | 'stockMoves' | 'audit'> {
+  let { stock, stockMoves, audit } = s;
+  for (const [branchId, onHand] of Object.entries(s.stock)) {
+    for (const [productId, q] of Object.entries(onHand)) {
+      if (q >= 0) continue;
+      stock = { ...stock, [branchId]: { ...stock[branchId], [productId]: 0 as Qty } };
+      const move: StockMove = {
+        id: uuidv7(),
+        branchId,
+        productId,
+        delta: -q as Qty,
+        reason: 'count',
+        refOrderId: null,
+        note: "Reset at upgrade: stock can't be negative",
+        at: Date.now(),
+        actorUserId: actorId(),
+      };
+      stockMoves = [move, ...stockMoves];
+      const name = s.products.find((p) => p.id === productId)?.name ?? productId;
+      audit = log(
+        audit,
+        'stock.reset',
+        `${name} was at ${formatQty(q)}; counted back to 0 at upgrade`,
+        'warn',
+        branchId,
+      );
+    }
+  }
+  return { stock, stockMoves, audit };
 }
 
 /**
@@ -1738,15 +1807,16 @@ function serveLines(set: SetState, order: Order, lines: OrderLine[]) {
     const oversold: string[] = [];
 
     for (const line of lines) {
+      if (line.kind !== 'stock') continue;
       const before = branchStock[line.productId] ?? 0;
-      const after = before - line.qty;
+      const after = (before - line.qty) as Qty;
       branchStock[line.productId] = after;
-      if (after < 0) oversold.push(`${line.name} (${after})`);
+      if (after < 0) oversold.push(`${line.name} (${formatQty(after)})`);
       moves.push({
         id: uuidv7(),
         branchId: order.branchId,
         productId: line.productId,
-        delta: -line.qty,
+        delta: -line.qty as Qty,
         reason: 'sale',
         refOrderId: order.id,
         note: null,
@@ -1850,7 +1920,7 @@ export function useBill(orderId: string | null) {
 
   const served = order.lines.filter((l) => l.served && !l.voided);
   const gross = served.reduce<Centavos>(
-    (sum, l) => addC(sum, mulQty(l.unitCents, l.qty)),
+    (sum, l) => addC(sum, lineTotal(l.unitCents, l.qty)),
     cents(0),
   );
   return computeBill(gross, settings, discountRequest(order.discount));

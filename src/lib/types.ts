@@ -2,6 +2,7 @@ import type { PinCredential } from './crypto';
 import type { Centavos } from './money';
 import type { Features, ShopType } from './presets';
 import type { ReceiptPrinter } from './printer';
+import type { Qty } from './qty';
 import type { TaxProfile } from './tax';
 
 export type OrderStatus = 'open' | 'closed' | 'voided';
@@ -66,15 +67,28 @@ export interface Branch {
   active: boolean;
 }
 
+/** The units Inventory offers. Items from before v8 may carry another. */
+export const UNITS = ['pcs', 'set', 'm', 'kg', 'box', 'hour', 'job', 'serving', 'cup', 'btl'] as const;
+
+/** Stock items are counted on the shelf; services never touch stock. */
+export type ProductKind = 'stock' | 'service';
+
 export interface Product {
   id: string;
   name: string;
+  kind: ProductKind;
+  /** Optional; unique when present. */
+  sku: string | null;
+  /** '' when the owner has not given one. */
+  category: string;
   unit: string;
   priceCents: Centavos;
   costCents: Centavos;
   /** Some agricultural goods are VAT-exempt regardless of the buyer. */
   vatExempt: boolean;
   active: boolean;
+  /** Stock items only. Null falls back to `settings.lowStockAt`. */
+  reorderLevel: Qty | null;
 }
 
 export interface OrderLine {
@@ -87,7 +101,11 @@ export interface OrderLine {
    *  Optional: lines written before this field existed fall back to the
    *  product's current cost, which is the best the old data can do. */
   costCents?: Centavos;
-  qty: number;
+  /** Copied from the product. A service line never moves stock. */
+  kind: ProductKind;
+  /** Copied from the product, for the slip. '' on lines sold before v8. */
+  unit: string;
+  qty: Qty;
   served: boolean;
   servedAt: number | null;
   voided: boolean;
@@ -168,7 +186,7 @@ export interface StockMove {
   id: string;
   branchId: string;
   productId: string;
-  delta: number;
+  delta: Qty;
   reason: StockReason;
   refOrderId: string | null;
   note: string | null;
@@ -192,7 +210,8 @@ export interface Settings extends TaxProfile {
   currency: string;
   receiptFooter: string;
   showStock: boolean;
-  lowStockAt: number;
+  /** The reorder level of any stock item that has none of its own. */
+  lowStockAt: Qty;
   /**
    * Once an install goes live it may not be switched back into training mode.
    * Flip this off for a registered deployment and the seed/reset paths lock.
@@ -250,7 +269,7 @@ export interface DataSnapshot {
   users: User[];
   products: Product[];
   orders: Order[];
-  stock: Record<string, Record<string, number>>;
+  stock: Record<string, Record<string, Qty>>;
   stockMoves: StockMove[];
   audit: AuditEntry[];
   settings: Settings;

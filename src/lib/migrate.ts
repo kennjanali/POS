@@ -6,8 +6,19 @@
  */
 
 import { applyPreset } from './presets';
+import { qty, type Qty } from './qty';
 import type { DiscountRequest } from './tax';
-import type { DataSnapshot, Order, OrderType, SaleDiscount, Settings, User } from './types';
+import type {
+  DataSnapshot,
+  Order,
+  OrderLine,
+  OrderType,
+  Product,
+  SaleDiscount,
+  Settings,
+  StockMove,
+  User,
+} from './types';
 
 /** What the tax engine gets for a sale's discount. A legacy discount is frozen
  *  history and takes nothing off a new bill. */
@@ -51,15 +62,47 @@ function orderTypeV7(type: string): OrderType {
   return type === 'grab' || type === 'panda' ? 'delivery' : (type as OrderType);
 }
 
+/** Every v7 line was a stock item, counted in whole units, and carried no unit. */
+function migrateLineV7(line: { qty: number }): OrderLine {
+  return { ...line, kind: 'stock', unit: '', qty: qty(line.qty) } as OrderLine;
+}
+
 /** A v7 order as v8 stores it. Frozen totals are untouched. */
 export function migrateOrderV7(o: unknown): Order {
+  const v7 = o as { type: string; lines?: { qty: number }[] };
   const order: Record<string, unknown> = {
     ...(o as Record<string, unknown>),
-    type: orderTypeV7((o as { type: string }).type),
+    type: orderTypeV7(v7.type),
     discount: discountV7(o as OrderDiscountV7),
+    lines: v7.lines?.map(migrateLineV7),
   };
   for (const field of ORDER_FIELDS_V7) delete order[field];
   return order as unknown as Order;
+}
+
+// ── stock ────────────────────────────────────────────────────────────────
+
+/** A v7 stock move, counted in thousandths. */
+export function migrateMoveV7(m: unknown): StockMove {
+  const move = m as StockMove;
+  return { ...move, delta: qty(move.delta) };
+}
+
+/** On hand per branch, counted in thousandths. */
+function migrateStockV7(
+  stock: Record<string, Record<string, number>>,
+): Record<string, Record<string, Qty>> {
+  return Object.fromEntries(
+    Object.entries(stock).map(([branchId, onHand]) => [
+      branchId,
+      Object.fromEntries(Object.entries(onHand).map(([id, units]) => [id, qty(units)])),
+    ]),
+  );
+}
+
+/** Every v7 product was a stock item, with no SKU, category or level of its own. */
+function migrateProductV7(product: Product): Product {
+  return { ...product, kind: 'stock', sku: null, category: '', reorderLevel: null };
 }
 
 // ── settings ─────────────────────────────────────────────────────────────
@@ -78,6 +121,8 @@ function migrateSettingsV7(settings: Settings): Settings {
     quoteValidDays: 7,
     checklistDismissed: [],
   };
+  // A partial backup may leave it out; the current setting then stands.
+  if (settings.lowStockAt !== undefined) next.lowStockAt = qty(settings.lowStockAt);
   delete next.pricesIncludeVat;
   return next;
 }
@@ -93,14 +138,26 @@ function migrateUserV7(user: User): User {
 // ── the persisted blob and backup files ──────────────────────────────────
 
 /**
- * The persisted blob (see `partialize` in usePos.ts). Orders are not migrated
- * here: `loadRows` migrates them as they load, from the row store or from an
- * old blob that still holds them.
+ * The persisted blob (see `partialize` in usePos.ts). Orders and stock moves
+ * are not migrated here: they live in row stores, which the blob cannot see.
+ * `rowsNeedV8` tells `loadRows` to migrate them as they load, from the row
+ * store or from an old blob that still holds them. A v7 blob also held the
+ * products.
  */
 export function migrateBlobV7(blob: unknown): unknown {
-  const b = { ...(blob as { settings?: Settings; users?: User[] }) };
+  const b = {
+    ...(blob as {
+      settings?: Settings;
+      users?: User[];
+      products?: Product[];
+      stock?: Record<string, Record<string, number>>;
+    }),
+    rowsNeedV8: true,
+  };
   if (b.settings) b.settings = migrateSettingsV7(b.settings);
   if (b.users) b.users = b.users.map(migrateUserV7);
+  if (b.products) b.products = b.products.map(migrateProductV7);
+  if (b.stock) b.stock = migrateStockV7(b.stock);
   return b;
 }
 
@@ -112,6 +169,9 @@ export function migrateSnapshot(s: DataSnapshot): DataSnapshot {
     version: 8,
     settings: s.settings && migrateSettingsV7(s.settings),
     users: s.users?.map(migrateUserV7),
+    products: s.products?.map(migrateProductV7),
     orders: s.orders?.map(migrateOrderV7),
+    stock: s.stock && migrateStockV7(s.stock),
+    stockMoves: s.stockMoves?.map(migrateMoveV7),
   };
 }

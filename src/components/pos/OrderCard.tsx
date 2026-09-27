@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 
 import { elapsed } from '@/lib/format';
 import { peso } from '@/lib/format';
-import { addC, cents, mulQty, type Centavos } from '@/lib/money';
+import { addC, cents, type Centavos } from '@/lib/money';
+import { lineTotal } from '@/lib/qty';
 import { ORDER_TYPE_LABELS, type Order } from '@/lib/types';
 import { cn } from '@/components/ui/cn';
 
@@ -28,7 +29,7 @@ export function OrderCard({ order, currency, onOpen }: OrderCardProps) {
   const served = live.filter((l) => l.served);
 
   const runningTotal = served.reduce<Centavos>(
-    (sum, l) => addC(sum, mulQty(l.unitCents, l.qty)),
+    (sum, l) => addC(sum, lineTotal(l.unitCents, l.qty)),
     cents(0),
   );
 

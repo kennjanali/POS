@@ -6,6 +6,7 @@ import { DailyCloses } from '@/components/dashboard/DailyCloses';
 import { cn } from '@/components/ui/cn';
 import { businessDate, peso } from '@/lib/format';
 import { cents } from '@/lib/money';
+import { formatQty, lineTotal, type Qty } from '@/lib/qty';
 import { TENDER_LABELS, TENDER_METHODS, type TenderMethod } from '@/lib/types';
 import { usePos } from '@/store/usePos';
 
@@ -54,7 +55,7 @@ export default function DashboardPage() {
       bank: 0,
       other: 0,
     };
-    const byProduct = new Map<string, { qty: number; revenue: number }>();
+    const byProduct = new Map<string, { qty: Qty; revenue: number }>();
 
     for (const order of scoped) {
       net += order.netCents;
@@ -70,12 +71,13 @@ export default function DashboardPage() {
         // existed — for anything since, re-pricing the menu must not rewrite
         // last month's margin.
         const historic = line.costCents;
-        cost +=
-          (historic ?? products.find((p) => p.id === line.productId)?.costCents ?? 0) *
-          line.qty;
-        const entry = byProduct.get(line.productId) ?? { qty: 0, revenue: 0 };
-        entry.qty += line.qty;
-        entry.revenue += line.unitCents * line.qty;
+        cost += lineTotal(
+          historic ?? products.find((p) => p.id === line.productId)?.costCents ?? cents(0),
+          line.qty,
+        );
+        const entry = byProduct.get(line.productId) ?? { qty: 0 as Qty, revenue: 0 };
+        entry.qty = (entry.qty + line.qty) as Qty;
+        entry.revenue += lineTotal(line.unitCents, line.qty);
         byProduct.set(line.productId, entry);
       }
     }
@@ -273,7 +275,7 @@ export default function DashboardPage() {
                     <span className="flex items-baseline justify-between gap-2 text-[12.5px]">
                       <span className="min-w-0 truncate font-semibold">{item.name}</span>
                       <span className="tnum shrink-0 text-ink-2">
-                        {item.qty} · {peso(cents(item.revenue), settings.currency)}
+                        {formatQty(item.qty)} · {peso(cents(item.revenue), settings.currency)}
                       </span>
                     </span>
                     <span

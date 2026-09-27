@@ -10,7 +10,8 @@ import { toast } from '@/components/ui/Toast';
 import { cn } from '@/components/ui/cn';
 import { peso } from '@/lib/format';
 import { discountRequest } from '@/lib/migrate';
-import { cents, parsePesos, type Centavos } from '@/lib/money';
+import { addC, cents, parsePesos, type Centavos } from '@/lib/money';
+import { formatQty, lineTotal } from '@/lib/qty';
 import { computeBill } from '@/lib/tax';
 import {
   REFERENCED_METHODS,
@@ -52,7 +53,7 @@ export function Checkout({ order, open, onClose, onPaid }: CheckoutProps) {
 
   const bill = useMemo(() => {
     const gross = served.reduce<Centavos>(
-      (sum, l) => cents(sum + l.unitCents * l.qty),
+      (sum, l) => addC(sum, lineTotal(l.unitCents, l.qty)),
       cents(0),
     );
     return computeBill(gross, settings, discountRequest(order.discount));
@@ -182,7 +183,7 @@ export function Checkout({ order, open, onClose, onPaid }: CheckoutProps) {
                 <strong className="text-warn">
                   {pending.length} item{pending.length > 1 ? 's' : ''} still pending
                 </strong>{' '}
-                — {pending.map((l) => `${l.qty}x ${l.name}`).join(', ')}. Pending items
+                — {pending.map((l) => `${formatQty(l.qty)}x ${l.name}`).join(', ')}. Pending items
                 are not on this bill. Close the sale now and they go out unpaid for.
               </p>
             </div>
@@ -195,10 +196,10 @@ export function Checkout({ order, open, onClose, onPaid }: CheckoutProps) {
                 className="flex items-baseline justify-between gap-3 text-[12.5px]"
               >
                 <span className="min-w-0 truncate">
-                  {line.qty}× {line.name}
+                  {formatQty(line.qty)}× {line.name}
                 </span>
                 <span className="tnum shrink-0 font-semibold">
-                  {peso(cents(line.unitCents * line.qty), settings.currency)}
+                  {peso(lineTotal(line.unitCents, line.qty), settings.currency)}
                 </span>
               </li>
             ))}

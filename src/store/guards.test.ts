@@ -11,11 +11,15 @@ const S = () => usePos.getState();
 const PRODUCT: Product = {
   id: 'p-new',
   name: 'New item',
-  unit: 'pc',
+  kind: 'stock',
+  sku: null,
+  category: '',
+  unit: 'pcs',
   priceCents: cents(10000),
   costCents: cents(4000),
   vatExempt: false,
   active: true,
+  reorderLevel: null,
 };
 
 function user(role: string): User {
@@ -55,6 +59,24 @@ describe('store guards', () => {
     const id = S().openOrder('T1', 'dine-in');
     expect(S().voidOrder(id, 'wrong table')).toEqual({ ok: true });
     expect(S().order(id)?.status).toBe('voided');
+  });
+});
+
+describe('product SKU', () => {
+  beforeEach(async () => {
+    resetStore();
+    await ownerShop();
+  });
+
+  it('refuses a SKU another item already has, and allows it once that item frees it', () => {
+    expect(S().upsertProduct({ ...PRODUCT, sku: 'W-12' })).toEqual({ ok: true });
+    const other = { ...PRODUCT, id: 'p-other', name: 'Other', sku: 'W-12' };
+    expect(S().upsertProduct(other)).toEqual({ ok: false, error: 'Another item already has SKU W-12.' });
+    expect(S().product('p-other')).toBeUndefined();
+    // Saving the same item with its own SKU is fine.
+    expect(S().upsertProduct({ ...PRODUCT, sku: 'W-12', name: 'Renamed' })).toEqual({ ok: true });
+    expect(S().upsertProduct({ ...PRODUCT, sku: null })).toEqual({ ok: true });
+    expect(S().upsertProduct(other)).toEqual({ ok: true });
   });
 });
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { AlertTriangle, Plus } from 'lucide-react';
 
 import { Button } from '@/components/ui/Button';
@@ -12,18 +12,36 @@ import { uuidv7 } from '@/lib/id';
 import { peso } from '@/lib/format';
 import { cents, parsePesos } from '@/lib/money';
 import { sortProducts } from '@/lib/products';
-import type { Product } from '@/lib/types';
+import { decimalsAllowed, formatQty, parseQty, qty } from '@/lib/qty';
+import { UNITS, type Product, type ProductKind } from '@/lib/types';
 import { usePos } from '@/store/usePos';
 
 interface Draft {
   id: string | null;
   name: string;
+  kind: ProductKind;
+  sku: string;
+  category: string;
   unit: string;
   price: string;
   cost: string;
+  /** Blank means the shop default. */
+  reorderLevel: string;
 }
 
-const EMPTY: Draft = { id: null, name: '', unit: 'pc', price: '', cost: '' };
+const EMPTY: Draft = {
+  id: null,
+  name: '',
+  kind: 'stock',
+  sku: '',
+  category: '',
+  unit: 'pcs',
+  price: '',
+  cost: '',
+  reorderLevel: '',
+};
+
+const KIND_LABELS: Record<ProductKind, string> = { stock: 'Product', service: 'Service' };
 
 export default function InventoryPage() {
   const products = usePos((s) => s.products);
@@ -41,21 +59,30 @@ export default function InventoryPage() {
     () =>
       sortProducts(products)
         .filter((p) => p.active)
-        .map((p) => ({ product: p, onHand: stock[branchId]?.[p.id] ?? 0 })),
-    [products, stock, branchId],
+        .map((p) => ({
+          product: p,
+          onHand: stock[branchId]?.[p.id] ?? qty(0),
+          level: p.reorderLevel ?? settings.lowStockAt,
+        })),
+    [products, stock, branchId, settings.lowStockAt],
   );
+  const stocked = rows.filter((r) => r.product.kind === 'stock');
 
   const openBranches = branches.filter((b) => b.active);
-  const negative = rows.filter((r) => r.onHand < 0);
-  const low = rows.filter((r) => r.onHand >= 0 && r.onHand <= settings.lowStockAt);
+  const negative = stocked.filter((r) => r.onHand < 0);
+  const low = stocked.filter((r) => r.onHand >= 0 && r.onHand <= r.level);
 
   function edit(product: Product) {
     setDraft({
       id: product.id,
       name: product.name,
+      kind: product.kind,
+      sku: product.sku ?? '',
+      category: product.category,
       unit: product.unit,
       price: (product.priceCents / 100).toFixed(2),
       cost: (product.costCents / 100).toFixed(2),
+      reorderLevel: product.reorderLevel === null ? '' : formatQty(product.reorderLevel),
     });
   }
 
@@ -75,21 +102,34 @@ export default function InventoryPage() {
       return;
     }
 
+    // Services are never stocked, so they have no reorder level.
+    const levelInput = draft.kind === 'stock' ? draft.reorderLevel.trim() : '';
+    const reorderLevel =
+      levelInput === '' ? null : parseQty(levelInput, decimalsAllowed(draft.unit, settings.features));
+    if (levelInput !== '' && reorderLevel === null) {
+      toast('Enter a reorder level above 0, or leave it blank for the shop default', 'danger');
+      return;
+    }
+
     const product: Product = {
       id: draft.id ?? uuidv7(),
       name,
-      unit: draft.unit.trim() || 'pc',
+      kind: draft.kind,
+      sku: draft.sku.trim() || null,
+      category: draft.category.trim(),
+      unit: draft.unit,
       priceCents,
       costCents,
       vatExempt: false,
       active: true,
+      reorderLevel,
     };
     const result = upsertProduct(product);
     if (!result.ok) {
       toast(result.error, 'danger');
       return;
     }
-    if (!draft.id) adjustStock(product.id, 0, 'opening', 'New item');
+    if (!draft.id && product.kind === 'stock') adjustStock(product.id, qty(0), 'opening', 'New item');
     setDraft(null);
     toast(`Saved ${name}`, 'success');
   }
@@ -146,7 +186,7 @@ export default function InventoryPage() {
                 stock
               </p>
               <p className="text-ink-2">
-                {negative.map((r) => `${r.product.name} (${r.onHand})`).join(', ')}. Count
+                {negative.map((r) => `${r.product.name} (${formatQty(r.onHand)})`).join(', ')}. Count
                 the shelf and record the correction so the variance is traceable.
               </p>
             </div>
@@ -157,7 +197,7 @@ export default function InventoryPage() {
           <div className="mb-3 rounded-md border border-warn/40 bg-warn/5 p-3 text-[12px]">
             <p className="font-bold text-warn">Running low</p>
             <p className="text-ink-2">
-              {low.map((r) => `${r.product.name} (${r.onHand})`).join(', ')}
+              {low.map((r) => `${r.product.name} (${formatQty(r.onHand)})`).join(', ')}
             </p>
           </div>
         )}
@@ -174,8 +214,9 @@ export default function InventoryPage() {
             </tr>
           </thead>
           <tbody>
-            {rows.map(({ product, onHand }) => {
+            {rows.map(({ product, onHand, level }) => {
               const margin = product.priceCents - product.costCents;
+              const stockedItem = product.kind === 'stock';
               return (
                 <tr
                   key={product.id}
@@ -192,7 +233,13 @@ export default function InventoryPage() {
                 >
                   <td className="py-2 pr-3">
                     <span className="font-semibold">{product.name}</span>
-                    <span className="ml-1.5 text-[11px] text-ink-3">/{product.unit}</span>
+                    <span className="ml-1.5 text-[11px] text-ink-3">
+                      /{product.unit}
+                      {[product.category, product.sku, stockedItem ? '' : 'Service']
+                        .filter(Boolean)
+                        .map((tag) => ` · ${tag}`)
+                        .join('')}
+                    </span>
                   </td>
                   <td className="tnum py-2 pr-3 text-right">
                     {peso(product.priceCents, settings.currency)}
@@ -211,35 +258,39 @@ export default function InventoryPage() {
                   <td
                     className={cn(
                       'tnum py-2 pr-3 text-right font-bold',
-                      onHand < 0
-                        ? 'text-bad'
-                        : onHand <= settings.lowStockAt
-                          ? 'text-warn'
-                          : '',
+                      !stockedItem
+                        ? 'text-ink-3'
+                        : onHand < 0
+                          ? 'text-bad'
+                          : onHand <= level
+                            ? 'text-warn'
+                            : '',
                     )}
                   >
-                    {onHand}
+                    {stockedItem ? formatQty(onHand) : '—'}
                   </td>
                   <td className="py-2">
-                    <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
-                      {[-1, +1, +10].map((delta) => (
-                        <button
-                          key={delta}
-                          type="button"
-                          onClick={() => {
-                            const result = adjustStock(
-                              product.id,
-                              delta,
-                              delta > 0 ? 'restock' : 'count',
-                            );
-                            if (!result.ok) toast(result.error, 'danger');
-                          }}
-                          className="min-h-10 min-w-10 rounded border border-line bg-raised px-2 text-[12px] font-bold hover:border-accent"
-                        >
-                          {delta > 0 ? `+${delta}` : delta}
-                        </button>
-                      ))}
-                    </div>
+                    {stockedItem && (
+                      <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                        {[-1, +1, +10].map((units) => (
+                          <button
+                            key={units}
+                            type="button"
+                            onClick={() => {
+                              const result = adjustStock(
+                                product.id,
+                                qty(units),
+                                units > 0 ? 'restock' : 'count',
+                              );
+                              if (!result.ok) toast(result.error, 'danger');
+                            }}
+                            className="min-h-10 min-w-10 rounded border border-line bg-raised px-2 text-[12px] font-bold hover:border-accent"
+                          >
+                            {units > 0 ? `+${units}` : units}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </td>
                 </tr>
               );
@@ -266,11 +317,34 @@ export default function InventoryPage() {
               value={draft.name}
               onChange={(e) => setDraft({ ...draft, name: e.target.value })}
             />
-            <Field
+            {(settings.features.services || draft.kind === 'service') && (
+              <Select
+                label="Kind"
+                value={draft.kind}
+                options={Object.entries(KIND_LABELS)}
+                onChange={(kind) => setDraft({ ...draft, kind: kind as ProductKind })}
+              />
+            )}
+            <div className="grid grid-cols-2 gap-3">
+              <Field
+                label="SKU"
+                placeholder="Optional"
+                value={draft.sku}
+                onChange={(e) => setDraft({ ...draft, sku: e.target.value })}
+              />
+              <Field
+                label="Category"
+                placeholder="Optional"
+                value={draft.category}
+                onChange={(e) => setDraft({ ...draft, category: e.target.value })}
+              />
+            </div>
+            <Select
               label="Unit"
-              placeholder="pc, cup, stick"
               value={draft.unit}
-              onChange={(e) => setDraft({ ...draft, unit: e.target.value })}
+              // An item from before v8 may use a unit outside the list; it stays offered.
+              options={[...new Set<string>([...UNITS, draft.unit])].map((u) => [u, u])}
+              onChange={(unit) => setDraft({ ...draft, unit })}
             />
             <div className="grid grid-cols-2 gap-3">
               <Field
@@ -288,9 +362,52 @@ export default function InventoryPage() {
                 onChange={(e) => setDraft({ ...draft, cost: e.target.value })}
               />
             </div>
+            {draft.kind === 'stock' && (
+              <Field
+                label="Reorder level"
+                inputMode="decimal"
+                placeholder={`Shop default (${formatQty(settings.lowStockAt)})`}
+                suffix={draft.unit}
+                value={draft.reorderLevel}
+                onChange={(e) => setDraft({ ...draft, reorderLevel: e.target.value })}
+              />
+            )}
           </div>
         )}
       </Modal>
+    </div>
+  );
+}
+
+function Select({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: [value: string, label: string][];
+  onChange: (value: string) => void;
+}) {
+  const id = useId();
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label htmlFor={id} className="text-[11px] font-bold tracking-wide text-ink-2 uppercase">
+        {label}
+      </label>
+      <select
+        id={id}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="h-11 w-full rounded-md border border-line bg-raised px-3 text-[13px] text-ink focus:border-accent"
+      >
+        {options.map(([v, text]) => (
+          <option key={v} value={v}>
+            {text}
+          </option>
+        ))}
+      </select>
     </div>
   );
 }

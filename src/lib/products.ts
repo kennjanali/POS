@@ -1,6 +1,6 @@
 import type { Product } from './types';
 
-/** What the sort reads. `category` is optional until products carry one. */
+/** What the sort reads. Every product has a category; a list without one sorts it as ''. */
 type Sortable = Pick<Product, 'name'> & { category?: string };
 
 const compare = (a: string, b: string) => a.localeCompare(b, undefined, { sensitivity: 'base' });

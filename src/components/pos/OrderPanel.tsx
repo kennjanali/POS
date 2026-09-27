@@ -9,7 +9,8 @@ import { Modal } from '@/components/ui/Modal';
 import { Field } from '@/components/ui/Field';
 import { toast } from '@/components/ui/Toast';
 import { peso } from '@/lib/format';
-import { addC, cents, mulQty, type Centavos } from '@/lib/money';
+import { addC, cents, type Centavos } from '@/lib/money';
+import { QTY_ONE, formatQty, lineTotal, type Qty } from '@/lib/qty';
 import { usePos } from '@/store/usePos';
 import { useAuth } from '@/store/useAuth';
 import { can } from '@/lib/permissions';
@@ -35,7 +36,7 @@ export function OrderPanel({ order, onCheckout }: OrderPanelProps) {
   const served = order.lines.filter((l) => l.served && !l.voided);
 
   const servedTotal = served.reduce<Centavos>(
-    (sum, l) => addC(sum, mulQty(l.unitCents, l.qty)),
+    (sum, l) => addC(sum, lineTotal(l.unitCents, l.qty)),
     cents(0),
   );
 
@@ -88,18 +89,18 @@ export function OrderPanel({ order, onCheckout }: OrderPanelProps) {
                   <button
                     type="button"
                     aria-label={`Reduce ${line.name}`}
-                    onClick={() => changeQty(order.id, line.lineNo, -1)}
+                    onClick={() => changeQty(order.id, line.lineNo, -QTY_ONE as Qty)}
                     className="grid size-10 place-items-center rounded-md border border-line bg-surface hover:border-accent"
                   >
                     <Minus size={12} aria-hidden />
                   </button>
-                  <span className="tnum w-6 text-center text-[13px] font-bold">
-                    {line.qty}
+                  <span className="tnum min-w-6 text-center text-[13px] font-bold">
+                    {formatQty(line.qty)}
                   </span>
                   <button
                     type="button"
                     aria-label={`Add ${line.name}`}
-                    onClick={() => changeQty(order.id, line.lineNo, 1)}
+                    onClick={() => changeQty(order.id, line.lineNo, QTY_ONE)}
                     className="grid size-10 place-items-center rounded-md border border-line bg-surface hover:border-accent"
                   >
                     <Plus size={12} aria-hidden />
@@ -107,7 +108,7 @@ export function OrderPanel({ order, onCheckout }: OrderPanelProps) {
                 </span>
 
                 <span className="tnum w-[72px] shrink-0 text-right text-[13px] font-bold">
-                  {peso(mulQty(line.unitCents, line.qty), currency)}
+                  {peso(lineTotal(line.unitCents, line.qty), currency)}
                 </span>
               </li>
             ))}
@@ -133,10 +134,10 @@ export function OrderPanel({ order, onCheckout }: OrderPanelProps) {
                 className="flex items-center gap-2 rounded-md border border-line px-2.5 py-2"
               >
                 <Check size={13} className="shrink-0 text-good" aria-hidden />
-                <span className="tnum shrink-0 text-[13px] font-bold">{line.qty}×</span>
+                <span className="tnum shrink-0 text-[13px] font-bold">{formatQty(line.qty)}×</span>
                 <span className="min-w-0 flex-1 truncate text-[13px]">{line.name}</span>
                 <span className="tnum shrink-0 text-[13px] font-semibold">
-                  {peso(mulQty(line.unitCents, line.qty), currency)}
+                  {peso(lineTotal(line.unitCents, line.qty), currency)}
                 </span>
                 {canVoidLine && (
                   <button

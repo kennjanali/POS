@@ -191,6 +191,65 @@ describe('saving', () => {
     expect(S().settings.features).toEqual(PRESETS.auto.features);
   });
 
+  it('upgrades a v7 install: thousandths, negative stock counted back to 0, all in one batch', async () => {
+    const saved = usePos.persist.getOptions().partialize!(S()) as Record<string, unknown>;
+    const branchId = S().activeBranchId;
+    // What the v7 build kept in the blob: whole units, and products without a kind.
+    const products = S().products.slice(0, 2).map(({ id, name, unit, priceCents, costCents }) =>
+      ({ id, name, unit, priceCents, costCents, vatExempt: false, active: true }));
+    const [short, stocked] = products.map((p) => p.id) as [string, string];
+    const blob = {
+      state: {
+        ...saved,
+        rowsNeedV8: undefined,
+        settings: { ...S().settings, lowStockAt: 10 },
+        stock: { [branchId]: { [short]: -3, [stocked]: 4 } },
+        products,
+      },
+      version: 7,
+    };
+    const v7Order = {
+      id: 'o-v7', invoiceNo: '00000-0000001', branchId, label: 'T1', type: 'dine-in', status: 'closed',
+      openedAt: 1, closedAt: 2, tenders: [], discountKind: 'none',
+      lines: [{ lineNo: 1, productId: stocked, name: 'x', unitCents: 100, qty: 2, served: true,
+        servedAt: 2, voided: false, voidReason: null }],
+    };
+    const v7Move = { id: 'm-v7', branchId, productId: stocked, delta: -2, reason: 'sale',
+      refOrderId: 'o-v7', note: null, at: 2, actorUserId: null };
+    setStorageBackend({
+      ...recording,
+      getItem: async () => JSON.stringify(blob),
+      readRows: async <T,>(store: string) =>
+        (store === ROWS.orders ? [v7Order] : store === ROWS.stockMoves ? [v7Move] : []) as T[],
+    });
+    usePos.setState({ hydrated: false });
+    await settle();
+    batches.length = 0;
+
+    await usePos.persist.rehydrate();
+    await settle();
+
+    expect(S().stock[branchId]).toEqual({ [short]: 0, [stocked]: 4000 });
+    expect(S().settings.lowStockAt).toBe(10000);
+    expect(S().products[0]).toMatchObject({ kind: 'stock', sku: null, category: '', reorderLevel: null });
+    // Migrated once, by shape and by the flag together.
+    expect(S().order('o-v7')?.lines[0]?.qty).toBe(2000);
+    const counts = S().stockMoves.filter((m) => m.reason === 'count');
+    expect(counts).toEqual([
+      expect.objectContaining({ productId: short, delta: 3000, note: "Reset at upgrade: stock can't be negative" }),
+    ]);
+    expect(S().stockMoves.find((m) => m.id === 'm-v7')?.delta).toBe(-2000);
+    expect(S().audit[0]?.kind).toBe('stock.reset');
+
+    const first = batches[0];
+    expect(rowsIn(first, ROWS.orders).map((o) => o.id)).toEqual(['o-v7']);
+    expect(rowsIn(first, ROWS.stockMoves).map((m) => m.id).sort()).toEqual([counts[0]!.id, 'm-v7'].sort());
+    expect(kinds(rowsIn(first, ROWS.audit))).toContain('stock.reset');
+    const written = JSON.parse(first!.kv[0]!.value);
+    expect(written.state.rowsNeedV8).toBe(false);
+    expect(written.state.stock[branchId][short]).toBe(0);
+  });
+
   it('reads the audit rows back newest first, by time and then by id', async () => {
     // Id order says z-old is newest; its time says it is the oldest.
     const rows = [entry('b-tie', 5), entry('a-tie', 5), entry('a-new', 9), entry('z-old', 1)];

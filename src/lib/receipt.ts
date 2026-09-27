@@ -1,5 +1,6 @@
 import { amount, fmtDate, fmtTime } from './format';
 import { COLUMNS } from './printer';
+import { formatQty, lineTotal } from './qty';
 import { TENDER_LABELS, TENDER_METHODS, type DailyClose, type Order, type Settings } from './types';
 
 /**
@@ -62,7 +63,9 @@ export function renderReceipt(order: Order, settings: Settings, width: number = 
 
   for (const line of order.lines) {
     if (line.voided || !line.served) continue;
-    out.push(row(`${line.qty}x ${line.name}`, amount(line.unitCents * line.qty)));
+    // "2.5 m Electrical wire". Lines sold before v8 carry no unit.
+    const item = [formatQty(line.qty), line.unit, line.name].filter(Boolean).join(' ');
+    out.push(row(item, amount(lineTotal(line.unitCents, line.qty))));
   }
   out.push(rule);
 

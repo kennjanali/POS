@@ -15,6 +15,7 @@
 import { APP_VERSION, PRODUCT_SLUG } from './brand';
 import { businessDate } from './format';
 import { addC, cents, type Centavos } from './money';
+import { lineTotal, type Qty } from './qty';
 import {
   TENDER_METHODS,
   type Branch,
@@ -25,7 +26,8 @@ import {
   type User,
 } from './types';
 
-export const ARCHIVE_VERSION = 1;
+/** 2: quantities are thousandths (`Qty`). */
+export const ARCHIVE_VERSION = 2;
 
 /** Staff are reduced to what a receipt or report needs. PINs never go in. */
 export interface ArchivedStaff {
@@ -45,7 +47,7 @@ export interface MonthTotals {
   grossProfit: Centavos;
   byTender: Record<TenderMethod, Centavos>;
   byBranch: { branchId: string; name: string; orders: number; net: Centavos }[];
-  byProduct: { productId: string; name: string; qty: number; revenue: Centavos }[];
+  byProduct: { productId: string; name: string; qty: Qty; revenue: Centavos }[];
   busiestDay: { date: string; net: Centavos } | null;
 }
 
@@ -128,7 +130,7 @@ export function summarise(
 ): MonthTotals {
   const byTender = emptyTenders();
   const byBranch = new Map<string, { orders: number; net: number }>();
-  const byProduct = new Map<string, { name: string; qty: number; revenue: number }>();
+  const byProduct = new Map<string, { name: string; qty: Qty; revenue: number }>();
   const byDay = new Map<string, number>();
 
   let gross = 0;
@@ -168,16 +170,16 @@ export function summarise(
       if (!line.served || line.voided) continue;
       // Cost frozen on the line; older lines fall back to the product.
       const unitCost =
-        line.costCents ?? products.find((p) => p.id === line.productId)?.costCents ?? 0;
-      cost += unitCost * line.qty;
+        line.costCents ?? products.find((p) => p.id === line.productId)?.costCents ?? cents(0);
+      cost += lineTotal(unitCost, line.qty);
 
       const entry = byProduct.get(line.productId) ?? {
         name: line.name,
-        qty: 0,
+        qty: 0 as Qty,
         revenue: 0,
       };
-      entry.qty += line.qty;
-      entry.revenue += line.unitCents * line.qty;
+      entry.qty = (entry.qty + line.qty) as Qty;
+      entry.revenue += lineTotal(line.unitCents, line.qty);
       byProduct.set(line.productId, entry);
     }
   }

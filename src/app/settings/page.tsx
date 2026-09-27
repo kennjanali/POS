@@ -19,6 +19,7 @@ import { peso, fmtDate } from '@/lib/format';
 import { backupFileName, saveBackup } from '@/lib/backup';
 import { canShareFiles, SAVE_LOCATION, shareSavedFile } from '@/lib/files';
 import { PRESETS, type Features } from '@/lib/presets';
+import { formatQty, qty } from '@/lib/qty';
 import type { DataSnapshot, Settings } from '@/lib/types';
 import { usePos } from '@/store/usePos';
 
@@ -201,8 +202,8 @@ export default function SettingsPage() {
             type="number"
             min={0}
             suffix="units"
-            value={settings.lowStockAt}
-            onChange={(e) => update({ lowStockAt: Number(e.target.value) || 0 })}
+            value={formatQty(settings.lowStockAt)}
+            onChange={(e) => update({ lowStockAt: qty(Number(e.target.value) || 0) })}
           />
           <Toggle
             label="Training mode"

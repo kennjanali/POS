@@ -34,7 +34,7 @@ function emit(name, file) {
   writeFileSync(join(dir, `${name}.js`), js);
 }
 
-for (const n of ['brand', 'money', 'tax', 'format', 'id', 'presets', 'seed', 'migrate', 'demo', 'crypto', 'idb', 'storage', 'printer', 'receipt', 'device', 'license', 'permissions', 'types', 'archive', 'files', 'backup', 'closes', 'cloudBackup'])
+for (const n of ['brand', 'money', 'qty', 'tax', 'format', 'id', 'presets', 'seed', 'migrate', 'demo', 'crypto', 'idb', 'storage', 'printer', 'receipt', 'device', 'license', 'permissions', 'types', 'archive', 'files', 'backup', 'closes', 'cloudBackup'])
   emit(n, `src/lib/${n}.ts`);
 for (const n of ['useAuth', 'usePos']) emit(n, `src/store/${n}.ts`);
 
@@ -46,6 +46,7 @@ const { SAMPLE_MENU, DEFAULT_BRANCH } = await load('seed');
 const { monthOf, orderMonth } = await load('archive');
 const { backupIsDue, backupFileName, endOfDayDue, CUTOFF_MINUTES } = await load('backup');
 const { verifyPin, generateRecoveryCode } = await load('crypto');
+const { qty } = await load('qty');
 
 let failures = 0;
 function check(name, ok, detail = '') {
@@ -58,10 +59,10 @@ const S = () => usePos.getState();
 const setTraining = (on) =>
   usePos.setState((s) => ({ settings: { ...s.settings, trainingMode: on } }));
 
-/** Open an order, put one line on it, serve it. Returns id and the bill due. */
-function ringUp(product, qty = 1) {
+/** Open an order, put one line of `units` on it, serve it. Returns id and the bill due. */
+function ringUp(product, units = 1) {
   const id = S().openOrder(`T${Math.random().toString(36).slice(2, 7)}`, 'dine-in');
-  S().addLine(id, product.id, qty);
+  S().addLine(id, product.id, qty(units));
   S().serveAll(id);
   const order = S().order(id);
   const bill = computeBill(orderGross(order), S().settings, { kind: 'none' });
@@ -371,16 +372,31 @@ console.log('\n— Migration: a backup from the KRAMGEN v7 build still restores 
 
   // What the v7 build wrote: the same shape, minus everything added since.
   const v7 = S().exportSnapshot();
+  const before = {
+    orders: v7.orders.length,
+    seq: JSON.stringify(v7.invoiceSeq),
+    users: v7.users.length,
+    stock: JSON.stringify(v7.stock),
+    lowStockAt: v7.settings.lowStockAt,
+  };
   delete v7.installId;
   delete v7.appVersion;
   delete v7.recovery;
-  // v7 orders carried discountKind/customPercent where v8 has `discount`.
+  // v7 orders carried discountKind/customPercent where v8 has `discount`, and
+  // v7 counted whole units where v8 counts thousandths.
   v7.version = 7;
-  v7.orders = v7.orders.map(({ discount, ...o }) =>
-    discount.kind === 'owner'
-      ? { ...o, discountKind: 'custom', customPercent: discount.percent }
-      : { ...o, discountKind: 'none', customPercent: 20 });
-  const before = { orders: v7.orders.length, seq: JSON.stringify(v7.invoiceSeq), users: v7.users.length };
+  v7.orders = v7.orders.map(({ discount, ...o }) => ({
+    ...o,
+    lines: o.lines.map(({ kind, unit, ...l }) => ({ ...l, qty: l.qty / 1000 })),
+    ...(discount.kind === 'owner'
+      ? { discountKind: 'custom', customPercent: discount.percent }
+      : { discountKind: 'none', customPercent: 20 }),
+  }));
+  v7.stock = Object.fromEntries(Object.entries(v7.stock).map(([b, onHand]) =>
+    [b, Object.fromEntries(Object.entries(onHand).map(([p, q]) => [p, q / 1000]))]));
+  v7.stockMoves = v7.stockMoves.map((m) => ({ ...m, delta: m.delta / 1000 }));
+  v7.products = v7.products.map(({ kind, sku, category, reorderLevel, ...p }) => p);
+  v7.settings = { ...v7.settings, lowStockAt: v7.settings.lowStockAt / 1000 };
   const keptRecovery = S().recovery;
   const keptInstall = S().installId;
 
@@ -390,6 +406,11 @@ console.log('\n— Migration: a backup from the KRAMGEN v7 build still restores 
   check('the invoice sequence comes back', JSON.stringify(S().invoiceSeq) === before.seq);
   check('the staff come back', S().users.length === before.users);
   check('the closed sale keeps its frozen total', S().order(id)?.netCents === due);
+  check('its quantity comes back in thousandths', S().order(id)?.lines[0]?.qty === 2000,
+    `qty ${S().order(id)?.lines[0]?.qty}`);
+  check('on hand comes back in thousandths', JSON.stringify(S().stock) === before.stock);
+  check('so does the low-stock level', S().settings.lowStockAt === before.lowStockAt);
+  check('its products come back as stock items', S().products.every((p) => p.kind === 'stock'));
   check('every sale comes up to v8',
     S().orders.every((o) => o.discount && !('discountKind' in o)) &&
       S().order(id)?.discount.kind === 'none');
@@ -491,7 +512,7 @@ console.log('\n— Thermal receipt: never wider than the paper —');
   setTraining(true);
   const long = { ...product, id: 'long-name', name: 'Extra Special Chicken Inasal Family Platter with Java Rice' };
   S().upsertProduct(long);
-  S().adjustStock(long.id, 5, 'restock');
+  S().adjustStock(long.id, qty(5), 'restock');
   const { id, due } = ringUp(long, 3);
   S().addTender(id, { method: 'gcash', amountCents: due, tenderedCents: null, changeCents: null, refNo: '1234567890123' });
   S().closeOrder(id);
@@ -530,7 +551,7 @@ console.log('\n— Monthly archive: nothing leaves without a verified file —')
     id, invoiceNo: 'BR001-' + id, branchId, label: id, type: 'dine-in', status,
     openedAt: at, closedAt: status === 'open' ? null : at,
     lines: [{ lineNo: 1, productId: product.id, name: product.name,
-              unitCents: net, costCents: 1000, qty: 1, served: true,
+              unitCents: net, costCents: 1000, kind: 'stock', unit: 'pcs', qty: 1000, served: true,
               servedAt: at, voided: false, voidReason: null }],
     tenders: status === 'closed'
       ? [{ id: 't' + id, method: 'cash', amountCents: net, tenderedCents: net,
@@ -551,11 +572,11 @@ console.log('\n— Monthly archive: nothing leaves without a verified file —')
     mkOrder('this1', now,                'closed', 40000, B),
   ];
   const moves = [
-    { id: 'm1', branchId: B, productId: product.id, delta: -1, reason: 'sale',
+    { id: 'm1', branchId: B, productId: product.id, delta: -1000, reason: 'sale',
       refOrderId: 'last1', note: null, at: monthAgo.getTime(), actorUserId: null },
-    { id: 'm2', branchId: B, productId: product.id, delta: 50, reason: 'restock',
+    { id: 'm2', branchId: B, productId: product.id, delta: 50000, reason: 'restock',
       refOrderId: null, note: 'delivery', at: monthAgo.getTime(), actorUserId: null },
-    { id: 'm3', branchId: B, productId: product.id, delta: -1, reason: 'sale',
+    { id: 'm3', branchId: B, productId: product.id, delta: -1000, reason: 'sale',
       refOrderId: 'this1', note: null, at: now, actorUserId: null },
   ];
   usePos.setState({ orders: planted, stockMoves: moves });

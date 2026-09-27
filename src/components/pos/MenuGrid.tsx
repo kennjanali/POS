@@ -5,8 +5,13 @@ import { Search } from 'lucide-react';
 
 import { peso } from '@/lib/format';
 import { sortProducts } from '@/lib/products';
+import { decimalsAllowed, formatQty, parseQty, type Qty } from '@/lib/qty';
+import type { Product } from '@/lib/types';
 import { usePos } from '@/store/usePos';
+import { Button } from '@/components/ui/Button';
 import { cn } from '@/components/ui/cn';
+import { Field } from '@/components/ui/Field';
+import { Modal } from '@/components/ui/Modal';
 
 interface MenuGridProps {
   orderId: string;
@@ -20,6 +25,8 @@ export function MenuGrid({ orderId }: MenuGridProps) {
   const addLine = usePos((s) => s.addLine);
 
   const [query, setQuery] = useState('');
+  /** A measured item waiting for its quantity. */
+  const [measuring, setMeasuring] = useState<Product | null>(null);
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -48,15 +55,20 @@ export function MenuGrid({ orderId }: MenuGridProps) {
 
       <div className="scroll-y grid flex-1 auto-rows-min grid-cols-[repeat(auto-fill,minmax(118px,1fr))] gap-2 pr-1">
         {visible.map((product) => {
-          const onHand = stock[branchId]?.[product.id] ?? 0;
-          const out = onHand <= 0;
-          const low = !out && onHand <= settings.lowStockAt;
+          const stocked = product.kind === 'stock';
+          const onHand = stock[branchId]?.[product.id] ?? (0 as Qty);
+          const out = stocked && onHand <= 0;
+          const low = stocked && !out && onHand <= (product.reorderLevel ?? settings.lowStockAt);
 
           return (
             <button
               key={product.id}
               type="button"
-              onClick={() => addLine(orderId, product.id)}
+              onClick={() =>
+                decimalsAllowed(product.unit, settings.features)
+                  ? setMeasuring(product)
+                  : addLine(orderId, product.id)
+              }
               className={cn(
                 'flex min-h-[76px] flex-col justify-between gap-1 rounded-lg border p-2.5 text-left',
                 'transition-[border-color,transform] active:scale-[0.98]',
@@ -72,14 +84,14 @@ export function MenuGrid({ orderId }: MenuGridProps) {
                 <span className="tnum text-[13px] font-bold text-accent">
                   {peso(product.priceCents, settings.currency)}
                 </span>
-                {settings.showStock && (
+                {settings.showStock && stocked && (
                   <span
                     className={cn(
                       'tnum text-[10px] font-bold',
                       out ? 'text-bad' : low ? 'text-warn' : 'text-ink-3',
                     )}
                   >
-                    {onHand}
+                    {formatQty(onHand)}
                   </span>
                 )}
               </span>
@@ -93,6 +105,70 @@ export function MenuGrid({ orderId }: MenuGridProps) {
           </p>
         )}
       </div>
+
+      {measuring && (
+        <QtyPad
+          product={measuring}
+          onAdd={(q) => {
+            addLine(orderId, measuring.id, q);
+            setMeasuring(null);
+          }}
+          onClose={() => setMeasuring(null)}
+        />
+      )}
     </div>
+  );
+}
+
+/** How much of a measured item: "2.5" m, "0.75" kg. Nothing is added until it reads. */
+function QtyPad({
+  product,
+  onAdd,
+  onClose,
+}: {
+  product: Product;
+  onAdd: (q: Qty) => void;
+  onClose: () => void;
+}) {
+  const [input, setInput] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  function add() {
+    const q = parseQty(input, true);
+    if (q === null) {
+      setError('Enter up to 3 decimals, e.g. 2.5');
+      return;
+    }
+    onAdd(q);
+  }
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={product.name}
+      width="sm"
+      footer={
+        <Button fullWidth onClick={add} disabled={!input.trim()}>
+          Add
+        </Button>
+      }
+    >
+      <Field
+        label="Quantity"
+        inputMode="decimal"
+        autoFocus
+        suffix={product.unit}
+        value={input}
+        error={error ?? undefined}
+        onChange={(e) => {
+          setInput(e.target.value);
+          setError(null);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') add();
+        }}
+      />
+    </Modal>
   );
 }

@@ -33,6 +33,3 @@ export const addC = (...values: Centavos[]): Centavos =>
   values.reduce<number>((a, b) => a + b, 0) as Centavos;
 
 export const subC = (a: Centavos, b: Centavos): Centavos => (a - b) as Centavos;
-
-export const mulQty = (unit: Centavos, qty: number): Centavos =>
-  (unit * qty) as Centavos;

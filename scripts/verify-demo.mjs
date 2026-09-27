@@ -22,13 +22,14 @@ function emit(name, file) {
   writeFileSync(join(dir, `${name}.js`), js);
 }
 
-for (const name of ['money', 'tax', 'format', 'id', 'presets', 'seed', 'types', 'migrate', 'demo']) {
+for (const name of ['money', 'qty', 'tax', 'format', 'id', 'presets', 'seed', 'types', 'migrate', 'demo']) {
   emit(name, `src/lib/${name}.ts`);
 }
 
 const load = (name) => import(pathToFileURL(join(dir, `${name}.js`)).href);
 const { buildDemoData } = await load('demo');
 const { computeBill } = await load('tax');
+const { lineTotal } = await load('qty');
 const { discountRequest } = await load('migrate');
 const { DEFAULT_BRANCH, SAMPLE_MENU, DEFAULT_SETTINGS, OPENING_STOCK } =
   await load('seed');
@@ -90,7 +91,7 @@ for (const settings of [
   for (const order of data.orders) {
     if (order.status === 'open') continue;
     const served = order.lines.filter((l) => l.served && !l.voided);
-    const gross = served.reduce((sum, l) => sum + l.unitCents * l.qty, 0);
+    const gross = served.reduce((sum, l) => sum + lineTotal(l.unitCents, l.qty), 0);
     const bill = computeBill(gross, settings, discountRequest(order.discount));
     kinds.add(order.discount.kind);
     if (

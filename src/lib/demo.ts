@@ -15,7 +15,8 @@
 import { businessDate } from './format';
 import { uuidv7 } from './id';
 import { discountRequest } from './migrate';
-import { type Centavos, addC, cents, mulQty } from './money';
+import { type Centavos, addC, cents } from './money';
+import { lineTotal, qty, type Qty } from './qty';
 import { BRANCH_COLORS, OPENING_STOCK, QUICK_LABELS } from './seed';
 import { computeBill } from './tax';
 import type {
@@ -44,7 +45,7 @@ export interface DemoOptions {
 export interface DemoDataset {
   branches: Branch[];
   orders: Order[];
-  stock: Record<string, Record<string, number>>;
+  stock: Record<string, Record<string, Qty>>;
   stockMoves: StockMove[];
   invoiceSeq: Record<string, number>;
 }
@@ -144,6 +145,8 @@ export function buildDemoData(options: DemoOptions): DemoDataset {
   } = options;
 
   const sellable = products.filter((p) => p.active);
+  // Services are sold like anything else but never counted on a shelf.
+  const stocked = sellable.filter((p) => p.kind === 'stock');
   if (sellable.length === 0) {
     return {
       branches: [mainBranch],
@@ -167,14 +170,14 @@ export function buildDemoData(options: DemoOptions): DemoDataset {
   const orders: Order[] = [];
   const stockMoves: StockMove[] = [];
   const invoiceSeq: Record<string, number> = {};
-  const stock: Record<string, Record<string, number>> = {};
+  const stock: Record<string, Record<string, Qty>> = {};
 
   // Opening count, one move per product per branch, dated before the window.
   const windowStart = startOfDay(now - (days - 1) * 86_400_000);
   for (const branch of branches) {
-    const branchStock: Record<string, number> = {};
+    const branchStock: Record<string, Qty> = {};
     stock[branch.id] = branchStock;
-    for (const product of sellable) {
+    for (const product of stocked) {
       branchStock[product.id] = OPENING_STOCK;
       stockMoves.push({
         id: uuidv7(),
@@ -229,10 +232,10 @@ export function buildDemoData(options: DemoOptions): DemoDataset {
       const count = Math.round(ordersPerDay * busy * (0.85 + rand() * 0.3) * traded);
 
       const built: Order[] = [];
-      const demand = new Map<string, number>();
+      const demand = new Map<string, Qty>();
       const record = (order: Order) => {
         for (const line of order.lines) {
-          demand.set(line.productId, (demand.get(line.productId) ?? 0) + line.qty);
+          demand.set(line.productId, ((demand.get(line.productId) ?? 0) + line.qty) as Qty);
         }
         built.push(order);
       };
@@ -271,13 +274,13 @@ export function buildDemoData(options: DemoOptions): DemoDataset {
       // close. Done after generating the day because that is the only way to
       // know demand. The closing buffer clears the low-stock threshold so the
       // warning means something when it does fire.
-      for (const product of sellable) {
-        const closing = settings.lowStockAt + 5 + Math.floor(rand() * 25);
+      for (const product of stocked) {
+        const closing = settings.lowStockAt + qty(5 + Math.floor(rand() * 25));
         const onHand = branchStock[product.id] ?? 0;
         const needed = (demand.get(product.id) ?? 0) + closing;
-        const delta = Math.max(0, needed - onHand);
+        const delta = Math.max(0, needed - onHand) as Qty;
         if (delta === 0) continue;
-        branchStock[product.id] = onHand + delta;
+        branchStock[product.id] = (onHand + delta) as Qty;
         stockMoves.push({
           id: uuidv7(),
           branchId: branch.id,
@@ -294,13 +297,13 @@ export function buildDemoData(options: DemoOptions): DemoDataset {
       // Serving deducts, voiding returns — the same bookkeeping the store does.
       for (const order of built) {
         for (const line of order.lines) {
-          if (!line.served) continue;
-          branchStock[line.productId] = (branchStock[line.productId] ?? 0) - line.qty;
+          if (!line.served || line.kind !== 'stock') continue;
+          branchStock[line.productId] = ((branchStock[line.productId] ?? 0) - line.qty) as Qty;
           stockMoves.push({
             id: uuidv7(),
             branchId: order.branchId,
             productId: line.productId,
-            delta: -line.qty,
+            delta: -line.qty as Qty,
             reason: 'sale',
             refOrderId: order.id,
             note: null,
@@ -308,7 +311,7 @@ export function buildDemoData(options: DemoOptions): DemoDataset {
             actorUserId: null,
           });
           if (order.status !== 'voided') continue;
-          branchStock[line.productId] = (branchStock[line.productId] ?? 0) + line.qty;
+          branchStock[line.productId] = ((branchStock[line.productId] ?? 0) + line.qty) as Qty;
           stockMoves.push({
             id: uuidv7(),
             branchId: order.branchId,
@@ -332,19 +335,19 @@ export function buildDemoData(options: DemoOptions): DemoDataset {
   for (const branch of branches) {
     const branchStock = stock[branch.id]!;
     const short = new Set<string>();
-    while (short.size < Math.min(2, sellable.length)) {
-      short.add(pick(rand, sellable).id);
+    while (short.size < Math.min(2, stocked.length)) {
+      short.add(pick(rand, stocked).id);
     }
     for (const productId of short) {
       const onHand = branchStock[productId] ?? 0;
-      const counted = Math.floor(rand() * 4);
+      const counted = qty(Math.floor(rand() * 4));
       if (onHand <= counted) continue;
       branchStock[productId] = counted;
       stockMoves.push({
         id: uuidv7(),
         branchId: branch.id,
         productId,
-        delta: counted - onHand,
+        delta: (counted - onHand) as Qty,
         reason: 'count',
         refOrderId: null,
         note: 'Short on closing count',
@@ -429,7 +432,9 @@ function buildLines(rand: () => number, products: Product[]): OrderLine[] {
     name: product.name,
     unitCents: product.priceCents,
     costCents: product.costCents,
-    qty: 1 + Math.floor(rand() * 3),
+    kind: product.kind,
+    unit: product.unit,
+    qty: qty(1 + Math.floor(rand() * 3)),
     served: true,
     servedAt: null,
     voided: false,
@@ -461,7 +466,7 @@ function settleOrder(rand: () => number, order: Order, settings: Settings) {
   }
 
   const gross = order.lines.reduce<Centavos>(
-    (sum, line) => addC(sum, mulQty(line.unitCents, line.qty)),
+    (sum, line) => addC(sum, lineTotal(line.unitCents, line.qty)),
     cents(0),
   );
   const bill = computeBill(gross, settings, discountRequest(order.discount));

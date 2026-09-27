@@ -16,6 +16,7 @@ import {
   monthLabel,
   type MonthlyArchive as Archived,
 } from '@/lib/archive';
+import { formatQty } from '@/lib/qty';
 import { TENDER_LABELS, TENDER_METHODS } from '@/lib/types';
 import { usePos } from '@/store/usePos';
 
@@ -285,7 +286,7 @@ function Summary({
                 <span className="flex justify-between gap-2 text-[12.5px]">
                   <span className="min-w-0 truncate">{p.name}</span>
                   <span className="tnum shrink-0 text-ink-2">
-                    {p.qty} · {peso(p.revenue, currency)}
+                    {formatQty(p.qty)} · {peso(p.revenue, currency)}
                   </span>
                 </span>
                 <span

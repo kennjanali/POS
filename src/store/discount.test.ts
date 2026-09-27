@@ -12,11 +12,15 @@ function ringUp500(): string {
   S().upsertProduct({
     id: 'p500',
     name: 'Item 500',
-    unit: 'pc',
+    kind: 'stock',
+    sku: null,
+    category: '',
+    unit: 'pcs',
     priceCents: cents(50000),
     costCents: cents(20000),
     vatExempt: false,
     active: true,
+    reorderLevel: null,
   });
   const id = S().openOrder('T1', 'dine-in');
   S().addLine(id, 'p500');
