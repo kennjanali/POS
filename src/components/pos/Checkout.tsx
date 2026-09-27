@@ -24,11 +24,6 @@ import {
 import { useAuth } from '@/store/useAuth';
 import { billedLines, usePos, type UserResult } from '@/store/usePos';
 
-const DISCOUNTS = [
-  { kind: 'none', label: 'No discount' },
-  { kind: 'owner', label: 'Discount %' },
-] as const;
-
 interface CheckoutProps {
   order: Order;
   open: boolean;
@@ -39,7 +34,8 @@ interface CheckoutProps {
 export function Checkout({ order, open, onClose, onPaid }: CheckoutProps) {
   const settings = usePos((s) => s.settings);
   const clearDiscount = usePos((s) => s.clearDiscount);
-  const setOwnerDiscountPercent = usePos((s) => s.setOwnerDiscountPercent);
+  const applyPromo = usePos((s) => s.applyPromo);
+  const applyOwnerDiscount = usePos((s) => s.applyOwnerDiscount);
   const addTender = usePos((s) => s.addTender);
   const removeTender = usePos((s) => s.removeTender);
   const closeOrder = usePos((s) => s.closeOrder);
@@ -49,6 +45,11 @@ export function Checkout({ order, open, onClose, onPaid }: CheckoutProps) {
   const [method, setMethod] = useState<TenderMethod>('cash');
   const [amountInput, setAmountInput] = useState('');
   const [refNo, setRefNo] = useState('');
+  /** The Discount sheet: anyone may type a code, only the owner sees the rest. */
+  const [discountOpen, setDiscountOpen] = useState(false);
+  const [codeInput, setCodeInput] = useState('');
+  const [ownerPercentInput, setOwnerPercentInput] = useState('');
+  const [ownerAmountInput, setOwnerAmountInput] = useState('');
   /** Other / split: every method, part payments and change. */
   const [splitPicked, setSplitPicked] = useState(false);
   /** GCash picked: waiting for its reference number. */
@@ -81,12 +82,22 @@ export function Checkout({ order, open, onClose, onPaid }: CheckoutProps) {
   // payment was recorded, leaving a payment that is now too large.
   const overRecorded = kept > bill.amountDue;
   const needsRef = REFERENCED_METHODS.includes(method);
-  const ownerPercent = order.discount.kind === 'owner' ? (order.discount.percent ?? 0) : null;
   // A payment already taken is only visible, and removable, in the split view.
   const split = splitPicked || order.tenders.length > 0;
+  // What is on the sale right now, in the cashier's words.
+  const discountLabel =
+    order.discount.kind === 'promo'
+      ? `Promo ${order.discount.code} (${order.discount.percent}%)`
+      : order.discount.kind === 'owner'
+        ? order.discount.percent !== null
+          ? `Owner discount ${order.discount.percent}%`
+          : `Owner discount ${settings.currency}${(order.discount.fixedCents ?? 0) / 100}`
+        : 'None';
 
   function showRefusal(result: UserResult) {
     if (!result.ok) toast(result.error, 'danger');
+    else if (result.notice) toast(result.notice);
+    return result;
   }
 
   function close() {
@@ -181,6 +192,7 @@ export function Checkout({ order, open, onClose, onPaid }: CheckoutProps) {
   const due = peso(bill.amountDue, settings.currency);
 
   return (
+    <>
     <Modal
       open={open}
       onClose={close}
@@ -264,51 +276,26 @@ export function Checkout({ order, open, onClose, onPaid }: CheckoutProps) {
 
         {/* ── Right: discount + payment ──────────────────────────── */}
         <section className="flex flex-col gap-4">
-          {canDiscount && (
-            <div>
-              <p className="mb-1.5 text-[10.5px] font-bold tracking-wide text-ink-2 uppercase">
-                Discount
-              </p>
-              <div className="grid grid-cols-2 gap-1.5">
-                {DISCOUNTS.map(({ kind, label }) => (
-                  <button
-                    key={kind}
-                    type="button"
-                    aria-pressed={order.discount.kind === kind}
-                    onClick={() =>
-                      showRefusal(
-                        kind === 'none'
-                          ? clearDiscount(order.id)
-                          : setOwnerDiscountPercent(order.id, ownerPercent ?? 0),
-                      )
-                    }
-                    className={cn(
-                      'min-h-11 rounded-md border px-1 py-2 text-[12px] font-semibold transition-colors',
-                      order.discount.kind === kind
-                        ? 'border-note bg-note text-white'
-                        : 'border-line bg-raised text-ink-2 hover:bg-ground',
-                    )}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
+          {/* One Discount button for everyone: anyone may type a promo code,
+              only the owner sees the manual % and ₱. */}
+          <div>
+            <p className="mb-1.5 text-[10.5px] font-bold tracking-wide text-ink-2 uppercase">
+              Discount
+            </p>
+            <button
+              type="button"
+              onClick={() => setDiscountOpen(true)}
+              className={cn(
+                'min-h-11 w-full rounded-md border px-3 py-2 text-[12px] font-semibold transition-colors',
+                order.discount.kind === 'none'
+                  ? 'border-line bg-raised text-ink-2 hover:bg-ground'
+                  : 'border-note bg-note text-white',
+              )}
+            >
+              {discountLabel}
+            </button>
+          </div>
 
-          {canDiscount && ownerPercent !== null && (
-            <Field
-              label="Percent off"
-              type="number"
-              min={0}
-              max={100}
-              suffix="%"
-              value={ownerPercent}
-              onChange={(e) =>
-                showRefusal(setOwnerDiscountPercent(order.id, Number(e.target.value) || 0))
-              }
-            />
-          )}
 
           {!split ? (
             <div className="flex flex-col gap-2">
@@ -485,6 +472,124 @@ export function Checkout({ order, open, onClose, onPaid }: CheckoutProps) {
         </section>
       </div>
     </Modal>
+
+    {/* The Discount sheet. One discount per sale, so entering a code replaces an
+        owner discount and the other way round. */}
+    <Modal
+      open={discountOpen}
+      onClose={() => setDiscountOpen(false)}
+      title="Discount"
+      width="md"
+      footer={
+        <div className="flex gap-2">
+          {order.discount.kind !== 'none' && (
+            <Button
+              variant="secondary"
+              onClick={() => {
+                showRefusal(clearDiscount(order.id));
+                setDiscountOpen(false);
+              }}
+            >
+              Remove discount
+            </Button>
+          )}
+          <Button variant="secondary" onClick={() => setDiscountOpen(false)}>
+            Done
+          </Button>
+        </div>
+      }
+    >
+      <div className="flex flex-col gap-4">
+        <p className="text-[12px] text-ink-2">
+          On this sale now: <span className="font-semibold text-ink">{discountLabel}</span>
+        </p>
+
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            const result = showRefusal(applyPromo(order.id, codeInput));
+            if (result.ok) {
+              setCodeInput('');
+              setDiscountOpen(false);
+            }
+          }}
+        >
+          <Field
+            label="Promo code"
+            placeholder="GRAND10"
+            autoCapitalize="characters"
+            autoComplete="off"
+            value={codeInput}
+            onChange={(e) => setCodeInput(e.target.value)}
+            hint="Anyone can enter a code. It is checked on this tablet, so it works offline."
+          />
+          <Button type="submit" className="mt-2" disabled={codeInput.trim() === ''}>
+            Apply code
+          </Button>
+        </form>
+
+        {canDiscount && (
+          <>
+            <hr className="border-line" />
+            <p className="text-[11px] text-ink-3">
+              Owner discount. This replaces a promo code, and the other way round.
+            </p>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const result = showRefusal(
+                  applyOwnerDiscount(order.id, { percent: Number(ownerPercentInput) || 0 }),
+                );
+                if (result.ok) {
+                  setOwnerPercentInput('');
+                  setDiscountOpen(false);
+                }
+              }}
+            >
+              <Field
+                label="Owner discount"
+                type="number"
+                min={0}
+                max={100}
+                suffix="%"
+                placeholder="10"
+                value={ownerPercentInput}
+                onChange={(e) => setOwnerPercentInput(e.target.value)}
+              />
+              <Button type="submit" className="mt-2" disabled={ownerPercentInput.trim() === ''}>
+                Apply percent
+              </Button>
+            </form>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const result = showRefusal(
+                  applyOwnerDiscount(order.id, { fixedCents: parsePesos(ownerAmountInput) }),
+                );
+                if (result.ok) {
+                  setOwnerAmountInput('');
+                  setDiscountOpen(false);
+                }
+              }}
+            >
+              <Field
+                label={`Owner discount (${settings.currency})`}
+                type="number"
+                min={0}
+                step="0.01"
+                placeholder="50.00"
+                value={ownerAmountInput}
+                onChange={(e) => setOwnerAmountInput(e.target.value)}
+              />
+              <Button type="submit" className="mt-2" disabled={ownerAmountInput.trim() === ''}>
+                Apply amount
+              </Button>
+            </form>
+          </>
+        )}
+      </div>
+    </Modal>
+    </>
   );
 }
 

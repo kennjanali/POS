@@ -48,6 +48,7 @@ import {
   migrateSnapshot,
 } from '@/lib/migrate';
 import { applyPreset } from '@/lib/presets';
+import { findUsablePromo, isValidCode, normalizeCode } from '@/lib/promo';
 import { QTY_ONE, formatQty, lineTotal, type Qty } from '@/lib/qty';
 import { computeBill, type BillBreakdown } from '@/lib/tax';
 import { UPGRADE_RESET_NOTE } from '@/lib/stockHistory';
@@ -63,6 +64,7 @@ import type {
   OrderType,
   Product,
   ProductKind,
+  Promo,
   SaleDiscount,
   Settings,
   StockMove,
@@ -74,7 +76,19 @@ import type {
 } from '@/lib/types';
 
 /** Every user mutation can fail on a rule the UI has to explain. */
-export type UserResult = { ok: true } | { ok: false; error: string };
+export type UserResult =
+  | { ok: true; /** Something the screen should say, e.g. a cleared payment. */
+      notice?: string }
+  | { ok: false; error: string };
+
+/** What the owner types to make or change a promo code. */
+export interface PromoInput {
+  code: string;
+  percent: number;
+  note?: string;
+  startsOn?: string | null;
+  endsOn?: string | null;
+}
 
 /**
  * The store's own permission check. Screens hide what staff may not do; this
@@ -113,6 +127,7 @@ interface PosState {
    *  the *session* is separate and never persists past the tab. */
   users: User[];
   products: Product[];
+  promos: Promo[];
   orders: Order[];
   /** branchId -> productId -> on hand */
   stock: Record<string, Record<string, Qty>>;
@@ -172,8 +187,13 @@ interface PosState {
   discardOpenOrder: (orderId: string) => UserResult;
 
   clearDiscount: (orderId: string) => UserResult;
-  /** Temporary, for Checkout's "Discount %" until Task 12's owner and promo setters. */
-  setOwnerDiscountPercent: (orderId: string, percent: number) => UserResult;
+  /** Anyone may type a promo code; an unusable one is refused and changes nothing. */
+  applyPromo: (orderId: string, input: string) => UserResult;
+  /** Owner only. A percent or a fixed amount; replaces any promo. */
+  applyOwnerDiscount: (
+    orderId: string,
+    d: { percent: number } | { fixedCents: Centavos },
+  ) => UserResult;
 
   addTender: (
     orderId: string,
@@ -211,6 +231,14 @@ interface PosState {
   dismissLowStockAlert: (productId: string) => void;
   upsertProduct: (product: Product) => UserResult;
   removeProduct: (productId: string) => UserResult;
+
+  // ── promo codes ──────────────────────────────────────────────────────
+  createPromo: (input: PromoInput) => UserResult;
+  /** Refused once the code has been used on a closed sale. */
+  updatePromo: (id: string, input: PromoInput) => UserResult;
+  setPromoActive: (id: string, active: boolean) => UserResult;
+  /** How many closed sales used this code. */
+  promoUses: (id: string) => number;
 
   // ── users ───────────────────────────────────────────────────────────
   /** The PIN is the identity, so it has to be unique. Hashing is async, and
@@ -616,6 +644,7 @@ export const usePos = create<PosState>()(
       // wizard while this list is empty. No account ships with the app.
       users: [],
       products: [],
+      promos: [],
       orders: [],
       stock: { [DEFAULT_BRANCH.id]: {} },
       stockMoves: [],
@@ -870,19 +899,125 @@ export const usePos = create<PosState>()(
 
       clearDiscount: (orderId) => setOpenDiscount(set, get, orderId, { kind: 'none' }),
 
-      setOwnerDiscountPercent: (orderId, percent) => {
-        const refused = guard('discount.owner');
-        if (refused) return refused;
-        if (!Number.isFinite(percent) || percent < 0 || percent > 100) {
-          return { ok: false, error: 'Enter a percent from 0 to 100.' };
-        }
+      applyPromo: (orderId, input) => {
+        const promo = findUsablePromo(get().promos, input, businessDate(Date.now()));
+        if (!promo) return { ok: false, error: 'That code is not valid today.' };
         return setOpenDiscount(set, get, orderId, {
-          kind: 'owner',
-          percent,
-          fixedCents: null,
-          by: actorId(),
+          kind: 'promo',
+          promoId: promo.id,
+          code: promo.code,
+          percent: promo.percent,
         });
       },
+
+      applyOwnerDiscount: (orderId, d) => {
+        const refused = guard('discount.owner');
+        if (refused) return refused;
+        const discount: SaleDiscount = {
+          kind: 'owner',
+          percent: 'percent' in d ? d.percent : null,
+          fixedCents: 'percent' in d ? null : d.fixedCents,
+          by: actorId(),
+        };
+        if (discount.percent !== null && (!Number.isFinite(discount.percent) || discount.percent < 0 || discount.percent > 100)) {
+          return { ok: false, error: 'Enter a percent from 0 to 100.' };
+        }
+        if (discount.fixedCents !== null && (!Number.isFinite(discount.fixedCents) || discount.fixedCents < 0)) {
+          return { ok: false, error: 'Enter an amount of 0 or more.' };
+        }
+        return setOpenDiscount(set, get, orderId, discount);
+      },
+
+      createPromo: (input) => {
+        const refused = guard('inventory.manage');
+        if (refused) return refused;
+        const invalid = badPromoInput(get().promos, input);
+        if (invalid) return { ok: false, error: invalid };
+        const promo: Promo = {
+          id: uuidv7(),
+          code: normalizeCode(input.code),
+          percent: input.percent,
+          note: input.note ?? '',
+          active: true,
+          startsOn: input.startsOn ?? null,
+          endsOn: input.endsOn ?? null,
+          createdAt: Date.now(),
+          firstUsedAt: null,
+        };
+        set((s) => ({
+          ...s,
+          promos: [...s.promos, promo],
+          audit: log(
+            s.audit,
+            'promo.create',
+            `Created promo ${promo.code} (${promo.percent}%)`,
+            'info',
+            null,
+          ),
+        }));
+        return { ok: true };
+      },
+
+      updatePromo: (id, input) => {
+        const refused = guard('inventory.manage');
+        if (refused) return refused;
+        const current = get().promos.find((p) => p.id === id);
+        if (!current) return { ok: false, error: 'That code no longer exists.' };
+        if (current.firstUsedAt !== null) {
+          return { ok: false, error: 'This code has been used. Turn it off and make a new one.' };
+        }
+        const invalid = badPromoInput(
+          get().promos.filter((p) => p.id !== id),
+          input,
+        );
+        if (invalid) return { ok: false, error: invalid };
+        const code = normalizeCode(input.code);
+        set((s) => ({
+          ...s,
+          promos: s.promos.map((p) =>
+            p.id === id
+              ? {
+                  ...p,
+                  code,
+                  percent: input.percent,
+                  note: input.note ?? '',
+                  startsOn: input.startsOn ?? null,
+                  endsOn: input.endsOn ?? null,
+                }
+              : p,
+          ),
+          audit: log(
+            s.audit,
+            'promo.update',
+            `Changed promo ${code} to ${input.percent}%`,
+            'info',
+            null,
+          ),
+        }));
+        return { ok: true };
+      },
+
+      setPromoActive: (id, active) => {
+        const refused = guard('inventory.manage');
+        if (refused) return refused;
+        const current = get().promos.find((p) => p.id === id);
+        if (!current) return { ok: false, error: 'That code no longer exists.' };
+        set((s) => ({
+          ...s,
+          promos: s.promos.map((p) => (p.id === id ? { ...p, active } : p)),
+          audit: log(
+            s.audit,
+            'promo.toggle',
+            `${active ? 'Turned on' : 'Turned off'} promo ${current.code}`,
+            active ? 'success' : 'warn',
+            null,
+          ),
+        }));
+        return { ok: true };
+      },
+
+      promoUses: (id) =>
+        get().orders.filter((o) => o.discount.kind === 'promo' && o.discount.promoId === id).length,
 
       addTender: (orderId, tender) =>
         set((state) => ({
@@ -951,6 +1086,10 @@ export const usePos = create<PosState>()(
         const taken = deduct(onHand, leaving, order, now, actor);
         const paying = new Set(leaving.map((l) => l.lineNo));
         const { invoiceNo, seq } = numberFor(state, order);
+        // The first closed sale on a code freezes it: the owner can turn it off
+        // and make another, but never rewrite the percent these sales carry.
+        const promoId = order.discount.kind === 'promo' ? order.discount.promoId : null;
+        const firstUse = Date.now();
 
         set((s) => ({
           ...s,
@@ -959,6 +1098,9 @@ export const usePos = create<PosState>()(
           lowStockAlerts: alertCrossings(s, onHand, taken.onHand),
           stockMoves: [...taken.moves, ...s.stockMoves],
           invoiceSeq: seq,
+          promos: s.promos.map((p) =>
+            p.id === promoId && p.firstUsedAt === null ? { ...p, firstUsedAt: firstUse } : p,
+          ),
           orders: s.orders.map((o) =>
             o.id !== orderId
               ? o
@@ -1861,6 +2003,7 @@ export const usePos = create<PosState>()(
           branches: s.branches,
           users: s.users,
           products: s.products,
+          promos: s.promos,
           orders: s.orders,
           stock: s.stock,
           stockMoves: s.stockMoves,
@@ -1894,6 +2037,8 @@ export const usePos = create<PosState>()(
             // one — a pre-logins backup would leave nobody able to sign in.
             users: snapshot.users?.length ? snapshot.users : state.users,
             products: snapshot.products,
+            // Absent in backups made before promo codes existed.
+            promos: snapshot.promos ?? [],
             orders: snapshot.orders ?? [],
             stock: snapshot.stock ?? {},
             stockMoves: snapshot.stockMoves ?? [],
@@ -2112,7 +2257,14 @@ onPersistWrite((error) => {
 // the error stays on screen until a batch that carries them lands.
 
 /** The row stores this store fills. Each is named after its state field. */
-const SAVED = [ROWS.orders, ROWS.stockMoves, ROWS.closes, ROWS.products, ROWS.audit] as const;
+const SAVED = [
+  ROWS.orders,
+  ROWS.stockMoves,
+  ROWS.closes,
+  ROWS.products,
+  ROWS.promos,
+  ROWS.audit,
+] as const;
 type Saved = (typeof SAVED)[number];
 type Row = { id: string };
 type SavedRows = { store: Saved; changed: Row[]; removed: string[] };
@@ -2232,15 +2384,23 @@ function newestFirst(a: AuditEntry, b: AuditEntry): number {
  */
 async function loadRows(rehydrated: PosState | undefined): Promise<void> {
   try {
-    const [rows, moves, closes, products, audit] = await Promise.all([
+    const [rows, moves, closes, products, promos, audit] = await Promise.all([
       readRows<Order>(ROWS.orders),
       readRows<StockMove>(ROWS.stockMoves),
       readRows<DailyClose>(ROWS.closes),
       readRows<Product>(ROWS.products),
+      readRows<Promo>(ROWS.promos),
       readRows<AuditEntry>(ROWS.audit),
     ]);
 
-    const stored: Record<Saved, Row[]> = { orders: rows, stockMoves: moves, closes, products, audit };
+    const stored: Record<Saved, Row[]> = {
+      orders: rows,
+      stockMoves: moves,
+      closes,
+      products,
+      promos,
+      audit,
+    };
     for (const store of SAVED) {
       written[store] = new Map(stored[store].map((row) => [row.id, row] as const));
       // The first save diffs every store against what was just read.
@@ -2258,6 +2418,7 @@ async function loadRows(rehydrated: PosState | undefined): Promise<void> {
       stockMoves: upgrade ? loadedMoves.map(migrateMoveV7) : loadedMoves,
       closes,
       products: products.length > 0 ? products : (rehydrated?.products ?? []),
+      promos,
       // The log is kept newest first. Rows come back in id order, which is not
       // quite time order, so sort by time and break ties by id.
       audit: audit.length > 0 ? [...audit].sort(newestFirst) : (rehydrated?.audit ?? []),
@@ -2392,6 +2553,29 @@ async function writePin(
 }
 
 /** One discount per sale, and only while it is open: a closed sale's totals are frozen. */
+/** Why a promo cannot be saved in this shape, or null when it is fine. */
+function badPromoInput(existing: readonly Promo[], input: PromoInput): string | null {
+  const code = normalizeCode(input.code);
+  if (!isValidCode(code)) return 'Use 3 to 12 letters or digits, no spaces or symbols.';
+  if (existing.some((p) => p.code === code)) return 'That code is already in use.';
+  if (!Number.isInteger(input.percent) || input.percent < 1 || input.percent > 100) {
+    return 'Enter a whole percent from 1 to 100.';
+  }
+  if (input.startsOn && input.endsOn && input.startsOn > input.endsOn) {
+    return 'The last day cannot be before the first day.';
+  }
+  return null;
+}
+
+/**
+ * Put one discount on an open sale. A sale carries at most one, so a code and
+ * an owner discount replace each other.
+ *
+ * Changing the discount after a payment was entered clears the payment. The
+ * amount it was taken against no longer exists, and cash change worked out on
+ * the old total is money the drawer will not balance. Wiping it is safer than
+ * letting a stale tender sit there waiting to be refused at close.
+ */
 function setOpenDiscount(
   set: SetState,
   get: () => PosState,
@@ -2402,11 +2586,16 @@ function setOpenDiscount(
   if (!order || order.status !== 'open') {
     return { ok: false, error: 'That sale is no longer open.' };
   }
+  const clearedPayments = order.tenders.length > 0;
   set((state) => ({
     ...state,
-    orders: state.orders.map((o) => (o.id === orderId ? { ...o, discount } : o)),
+    orders: state.orders.map((o) =>
+      o.id === orderId ? { ...o, discount, tenders: clearedPayments ? [] : o.tenders } : o,
+    ),
   }));
-  return { ok: true };
+  return clearedPayments
+    ? { ok: true, notice: 'Discount changed — enter the payment again.' }
+    : { ok: true };
 }
 
 /** Live bill for an open order, recomputed from current settings. */

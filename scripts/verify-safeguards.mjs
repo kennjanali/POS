@@ -34,7 +34,7 @@ function emit(name, file) {
   writeFileSync(join(dir, `${name}.js`), js);
 }
 
-for (const n of ['brand', 'money', 'qty', 'tax', 'format', 'id', 'presets', 'seed', 'migrate', 'demo', 'crypto', 'idb', 'storage', 'printer', 'receipt', 'device', 'license', 'permissions', 'types', 'archive', 'files', 'backup', 'closes', 'cloudBackup', 'stockHistory'])
+for (const n of ['brand', 'money', 'qty', 'tax', 'format', 'id', 'presets', 'seed', 'migrate', 'demo', 'crypto', 'idb', 'storage', 'printer', 'receipt', 'device', 'license', 'permissions', 'types', 'archive', 'files', 'backup', 'closes', 'cloudBackup', 'stockHistory', 'promo'])
   emit(n, `src/lib/${n}.ts`);
 for (const n of ['useAuth', 'usePos']) emit(n, `src/store/${n}.ts`);
 
@@ -276,7 +276,9 @@ console.log('\n— H1: payment must match the bill it was taken against —');
     check('underpayment is refused', S().closeOrder(id).ok === false);
   }
   {
-    // The audit's H1: pay in full, then apply a discount.
+    // The audit's H1: pay in full, then apply a discount. The payment was taken
+    // against a total that no longer exists, so it is wiped rather than left to
+    // be refused at close — an e-wallet transfer cannot give change back.
     const { id, due } = ringUp(product);
     S().addTender(id, {
       method: 'gcash',
@@ -285,8 +287,17 @@ console.log('\n— H1: payment must match the bill it was taken against —');
       changeCents: null,
       refNo: 'X2',
     });
-    S().setOwnerDiscountPercent(id, 20);
-    check('e-wallet over-recorded by a later discount is refused', S().closeOrder(id).ok === false);
+    const applied = S().applyOwnerDiscount(id, { percent: 20 });
+    check(
+      'changing the discount after an e-wallet payment says so',
+      applied.ok === true && typeof applied.notice === 'string',
+    );
+    check(
+      'the e-wallet payment is cleared, not left stale',
+      S().order(id).tenders.length === 0,
+      `${S().order(id).tenders.length} left`,
+    );
+    check('the sale cannot close on a cleared payment', S().closeOrder(id).ok === false);
     check('the order stays open for correction', S().order(id).status === 'open');
   }
   {
@@ -299,12 +310,15 @@ console.log('\n— H1: payment must match the bill it was taken against —');
       changeCents: 0,
       refNo: null,
     });
-    S().setOwnerDiscountPercent(id, 20);
-    check('cash with stale change is refused', S().closeOrder(id).ok === false);
+    S().applyOwnerDiscount(id, { percent: 20 });
+    check(
+      'cash with stale change is cleared too',
+      S().order(id).tenders.length === 0,
+      `${S().order(id).tenders.length} left`,
+    );
+    check('and it cannot close on it', S().closeOrder(id).ok === false);
 
-    // Remove it, take the right amount, and the sale settles.
-    const stale = S().order(id).tenders[0];
-    S().removeTender(id, stale.id);
+    // Take the right amount, and the sale settles.
     const after = computeBill(orderGross(S().order(id)), S().settings, {
       kind: 'percent',
       percent: 20,

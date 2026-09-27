@@ -112,6 +112,24 @@ export interface OrderLine {
   voidReason: string | null;
 }
 
+/**
+ * A promo code the owner made. `code` and `percent` are frozen once the code
+ * has been used on a closed sale (`firstUsedAt`), so the owner deactivates it
+ * and creates a new one rather than rewriting history. `startsOn` / `endsOn`
+ * are `YYYY-MM-DD` business dates in Asia/Manila, and `endsOn` is inclusive.
+ */
+export interface Promo {
+  id: string;
+  code: string;
+  percent: number;
+  note: string;
+  active: boolean;
+  startsOn: string | null;
+  endsOn: string | null;
+  createdAt: number;
+  firstUsedAt: number | null;
+}
+
 export interface Tender {
   id: string;
   method: TenderMethod;
@@ -281,6 +299,8 @@ export interface DataSnapshot {
   branches: Branch[];
   users: User[];
   products: Product[];
+  /** Absent in backups made before promo codes existed. */
+  promos?: Promo[];
   orders: Order[];
   stock: Record<string, Record<string, Qty>>;
   stockMoves: StockMove[];

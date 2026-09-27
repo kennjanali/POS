@@ -7,6 +7,7 @@ import { AddStockModal } from '@/components/inventory/AddStockModal';
 import { CountModal } from '@/components/inventory/CountModal';
 import { DamageModal } from '@/components/inventory/DamageModal';
 import { ProductForm } from '@/components/inventory/ProductForm';
+import { PromoCodes } from '@/components/inventory/PromoCodes';
 import { StockHistory } from '@/components/inventory/StockHistory';
 import { Button } from '@/components/ui/Button';
 import { cn } from '@/components/ui/cn';
@@ -285,9 +286,7 @@ export default function InventoryPage() {
           </table>
         )}
 
-        {tab === 'promos' && (
-          <p className="py-8 text-center text-[13px] text-ink-3">Promo codes arrive soon.</p>
-        )}
+        {tab === 'promos' && <PromoCodes />}
       </div>
 
       {dialog?.kind === 'form' && (
