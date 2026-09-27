@@ -1548,25 +1548,32 @@ onPersistWrite((error) => {
 // transaction. persist hands the blob to `blobStorage` right after `set()`,
 // once subscribers have run; the subscriber below only schedules `flush` for
 // the end of the tick, which then diffs the rows and takes that blob.
+//
+// A row counts as saved only once its batch has landed, and batches go one at
+// a time, so each is diffed against what the last one really saved. A batch
+// that fails leaves its rows unsaved: the next batch carries them again, and
+// the error stays on screen until a batch that carries them lands.
 
 /** The row stores this store fills. Each is named after its state field. */
 const SAVED = [ROWS.orders, ROWS.stockMoves, ROWS.closes, ROWS.products, ROWS.audit] as const;
 type Saved = (typeof SAVED)[number];
 type Row = { id: string };
+type SavedRows = { store: Saved; changed: Row[]; removed: string[] };
 
-/** What each row store already holds, so a change can be spotted by identity. */
+/** What each row store holds on disk, so a change can be spotted by identity. */
 const written = Object.fromEntries(SAVED.map((store) => [store, new Map<string, Row>()])) as Record<
   Saved,
   Map<string, Row>
 >;
-/** The array each store was last diffed at. An untouched array is skipped. */
-const lastDiffed: Partial<Record<Saved, Row[]>> = {};
+/** The array each store held when a batch last saved it. An untouched array is skipped. */
+const lastSaved: Partial<Record<Saved, Row[]>> = {};
 
 /**
- * Rows whose object identity changed since the last write. Every mutation in
- * this store rebuilds changed rows with a spread and leaves the rest alone, so
- * a reference comparison is an exact and very cheap change detector — no
- * serialising, no deep equality.
+ * Rows whose object identity differs from what the store holds on disk. Every
+ * mutation in this store rebuilds changed rows with a spread and leaves the
+ * rest alone, so a reference comparison is an exact and very cheap change
+ * detector — no serialising, no deep equality. Pure: `written` is only
+ * updated once the batch carrying these rows has landed.
  */
 function diffRows<T extends { id: string }>(
   current: T[],
@@ -1592,27 +1599,55 @@ function diffRows<T extends { id: string }>(
       ? []
       : [...written.keys()].filter((id) => !seen.has(id));
 
-  for (const row of changed) written.set(row.id, row);
-  for (const id of removed) written.delete(id);
   return { changed, removed };
 }
 
 let flushScheduled = false;
+/** A batch is on its way to disk. */
+let saving = false;
+/** Something changed while it was; save again once it lands or fails. */
+let changedWhileSaving = false;
 
-/** Save everything this tick changed: the blob and every changed row, as one batch. */
+/** Save everything not yet on disk: the blob and every changed row, as one batch. */
 function flush(): void {
   flushScheduled = false;
+  if (saving) {
+    changedWhileSaving = true;
+    return;
+  }
+
   const state = usePos.getState();
-  const rows: WriteBatch['rows'] = [];
+  const rows: SavedRows[] = [];
+  const diffed: Partial<Record<Saved, Row[]>> = {};
   for (const store of SAVED) {
     const current: Row[] = state[store];
-    if (current === lastDiffed[store]) continue;
-    lastDiffed[store] = current;
+    if (current === lastSaved[store]) continue;
+    diffed[store] = current;
     const { changed, removed } = diffRows(current, written[store]);
     if (changed.length > 0 || removed.length > 0) rows.push({ store, changed, removed });
   }
   const blob = takePendingBlob();
-  if (blob || rows.length > 0) void writeBatch({ kv: blob ? [blob] : [], rows });
+  if (!blob && rows.length === 0) {
+    // Nothing differs from disk, so these arrays are as good as saved.
+    Object.assign(lastSaved, diffed);
+    return;
+  }
+
+  saving = true;
+  void writeBatch({ kv: blob ? [blob] : [], rows } satisfies WriteBatch).then((landed) => {
+    saving = false;
+    if (landed) {
+      for (const { store, changed, removed } of rows) {
+        for (const row of changed) written[store].set(row.id, row);
+        for (const id of removed) written[store].delete(id);
+      }
+      Object.assign(lastSaved, diffed);
+    }
+    if (changedWhileSaving) {
+      changedWhileSaving = false;
+      flush();
+    }
+  });
 }
 
 // Nothing is saved until the rows are back, or an empty till could be written
@@ -1623,6 +1658,11 @@ usePos.subscribe((state) => {
   flushScheduled = true;
   queueMicrotask(flush);
 });
+
+/** Audit order: latest `at` first, then the higher id. */
+function newestFirst(a: AuditEntry, b: AuditEntry): number {
+  return b.at - a.at || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0);
+}
 
 /**
  * Read the rows back and open the till. Installs written before a row store
@@ -1646,7 +1686,7 @@ async function loadRows(rehydrated: PosState | undefined): Promise<void> {
     for (const store of SAVED) {
       written[store] = new Map(stored[store].map((row) => [row.id, row] as const));
       // The first save diffs every store against what was just read.
-      delete lastDiffed[store];
+      delete lastSaved[store];
     }
 
     const loaded = rows.length > 0 ? rows : (rehydrated?.orders ?? []);
@@ -1656,8 +1696,9 @@ async function loadRows(rehydrated: PosState | undefined): Promise<void> {
       stockMoves: moves.length > 0 ? moves : (rehydrated?.stockMoves ?? []),
       closes,
       products: products.length > 0 ? products : (rehydrated?.products ?? []),
-      // Rows come back oldest first; the log is kept newest first.
-      audit: audit.length > 0 ? [...audit].reverse() : (rehydrated?.audit ?? []),
+      // The log is kept newest first. Rows come back in id order, which is not
+      // quite time order, so sort by time and break ties by id.
+      audit: audit.length > 0 ? [...audit].sort(newestFirst) : (rehydrated?.audit ?? []),
       hydrated: true,
     });
     void usePos.getState().checkLicense();

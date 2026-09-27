@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { Search } from 'lucide-react';
 
 import { peso } from '@/lib/format';
+import { sortProducts } from '@/lib/products';
 import { usePos } from '@/store/usePos';
 import { cn } from '@/components/ui/cn';
 
@@ -22,7 +23,7 @@ export function MenuGrid({ orderId }: MenuGridProps) {
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return products.filter(
+    return sortProducts(products).filter(
       (p) => p.active && (q === '' || p.name.toLowerCase().includes(q)),
     );
   }, [products, query]);

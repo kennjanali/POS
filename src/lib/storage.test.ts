@@ -36,20 +36,20 @@ describe('storage', () => {
     expect(await blobStorage.getItem('pos034-v7')).toBe('stored');
   });
 
-  it('reports every batch, and never rejects', async () => {
+  it('reports every batch, and resolves whether it landed instead of rejecting', async () => {
     const outcomes: (string | null)[] = [];
     onPersistWrite((error) => outcomes.push(error));
 
     setStorageBackend(fake());
-    await writeBatch(BATCH);
+    await expect(writeBatch(BATCH)).resolves.toBe(true);
     setStorageBackend(fake({ writeBatch: () => Promise.reject(new Error('boom')) }));
-    await writeBatch(BATCH);
+    await expect(writeBatch(BATCH)).resolves.toBe(false);
 
     expect(outcomes).toEqual([null, expect.stringContaining('Could not save')]);
   });
 
   it('stores nothing with neither a window nor a backend', async () => {
     expect(await blobStorage.getItem('pos034-v7')).toBeNull();
-    await expect(writeBatch(BATCH)).resolves.toBeUndefined();
+    await expect(writeBatch(BATCH)).resolves.toBe(true);
   });
 });

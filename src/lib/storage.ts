@@ -105,10 +105,16 @@ function describeWriteFailure(error: unknown): string {
  * so a rethrow is an unhandled rejection the cashier never sees — exactly how
  * v6 lost a day of sales. The topbar is where a failed write has to show up.
  */
-function reported(write: Promise<void>): Promise<void> {
+function reported(write: Promise<void>): Promise<boolean> {
   return write.then(
-    () => onWrite?.(null),
-    (error: unknown) => onWrite?.(describeWriteFailure(error)),
+    () => {
+      onWrite?.(null);
+      return true;
+    },
+    (error: unknown) => {
+      onWrite?.(describeWriteFailure(error));
+      return false;
+    },
   );
 }
 
@@ -153,7 +159,11 @@ export async function readRows<T>(name: RowStore): Promise<T[]> {
   return canStore() ? withBackend((b) => b.readRows<T>(name)) : [];
 }
 
-export function writeBatch(batch: WriteBatch): Promise<void> {
-  if (!canStore()) return Promise.resolve();
+/**
+ * Save one batch. Resolves true once it has landed, or when there is nowhere
+ * to store it, and false when it failed. The failure is already on screen by then.
+ */
+export function writeBatch(batch: WriteBatch): Promise<boolean> {
+  if (!canStore()) return Promise.resolve(true);
   return reported(withBackend((b) => b.writeBatch(batch)));
 }

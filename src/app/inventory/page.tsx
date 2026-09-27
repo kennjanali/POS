@@ -11,6 +11,7 @@ import { cn } from '@/components/ui/cn';
 import { uuidv7 } from '@/lib/id';
 import { peso } from '@/lib/format';
 import { cents, parsePesos } from '@/lib/money';
+import { sortProducts } from '@/lib/products';
 import type { Product } from '@/lib/types';
 import { usePos } from '@/store/usePos';
 
@@ -38,7 +39,7 @@ export default function InventoryPage() {
 
   const rows = useMemo(
     () =>
-      products
+      sortProducts(products)
         .filter((p) => p.active)
         .map((p) => ({ product: p, onHand: stock[branchId]?.[p.id] ?? 0 })),
     [products, stock, branchId],
