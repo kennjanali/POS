@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>POS-034 Build Brief</title>
+<style>
+  :root {
+    --bg: #f0ede9; --panel: #ffffff; --ink: #1a1a1a; --ink-2: #555; --line: #d9d4ce;
+    --accent: #ff5c1a; --accent-soft: #ffe6da; --ok: #16794a; --no: #b42318; --code: #f6f3ef;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f0f0f; --panel: #1a1a1a; --ink: #eeeeee; --ink-2: #a8a8a8; --line: #333;
+      --accent: #ff7a42; --accent-soft: #3a2116; --ok: #4ade80; --no: #f87171; --code: #232323;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f0f0f; --panel: #1a1a1a; --ink: #eeeeee; --ink-2: #a8a8a8; --line: #333;
+    --accent: #ff7a42; --accent-soft: #3a2116; --ok: #4ade80; --no: #f87171; --code: #232323;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 980px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 28px; margin: 0 0 4px; }
+  h2 { font-size: 19px; margin: 36px 0 10px; padding-bottom: 6px; border-bottom: 2px solid var(--accent); }
+  h3 { font-size: 15px; margin: 18px 0 6px; }
+  p, li { color: var(--ink); }
+  .sub { color: var(--ink-2); margin: 0 0 16px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin: 10px 0; }
+  .grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+  table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; font-size: 14px; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { background: var(--accent-soft); font-weight: 600; }
+  tr:last-child td { border-bottom: 0; }
+  .scroll { overflow-x: auto; }
+  code { background: var(--code); padding: 1px 5px; border-radius: 4px; font-size: 13px; }
+  .yes { color: var(--ok); font-weight: 700; }
+  .no { color: var(--no); font-weight: 700; }
+  .pill { display: inline-block; background: var(--accent-soft); color: var(--ink); border-radius: 99px; padding: 1px 9px; font-size: 12px; margin: 2px 2px 0 0; }
+  ol, ul { padding-left: 20px; margin: 6px 0; }
+  svg { width: 100%; height: auto; display: block; }
+  svg text { fill: var(--ink); font: 13px system-ui, sans-serif; }
+  svg .muted { fill: var(--ink-2); font-size: 11px; }
+  svg .box { fill: var(--panel); stroke: var(--line); stroke-width: 1.5; }
+  svg .hot { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.5; }
+  svg .zone { fill: none; stroke: var(--ink-2); stroke-dasharray: 5 4; }
+  svg .arrow { stroke: var(--ink-2); stroke-width: 1.6; fill: none; marker-end: url(#a); }
+  svg #a path { fill: var(--ink-2); }
+</style>
+</head>
+<body>
+<main>
+
+<h1>POS-034 — Build Brief</h1>
+<p class="sub">Offline POS for small shops, by kennali.com. One tablet = one shop. Status: designed, not built. Written 2026-09-27.
+Full detail: <code>docs/superpowers/specs/2026-09-27-pos-034-design.md</code> (spec) and <code>docs/superpowers/plans/2026-09-27-pos-034-app.md</code> (18 tasks).</p>
+
+<h2>1. What it is</h2>
+<div class="grid">
+  <div class="card"><b>Sell</b><br>Inventory → orders → payment → printed slip. Works with no internet.</div>
+  <div class="card"><b>Any small shop</b><br>Restaurant, hardware, auto parts &amp; service, car wash, general — via presets.</div>
+  <div class="card"><b>Owner in control</b><br>Only the owner sets stock, prices, discounts, promo codes and VAT.</div>
+  <div class="card"><b>Pay once</b><br>One-time license per tablet + optional yearly updates. No sales fee.</div>
+</div>
+
+<h2>2. Fixed rules</h2>
+<div class="card"><ul>
+  <li>Evolve the existing repo — no rewrite.</li>
+  <li><b>Stock never goes below zero.</b> Open orders hold stock; low-stock alerts to the owner.</li>
+  <li><b>No utang / credit.</b> Every sale is paid in full.</li>
+  <li><b>No Senior/PWD discount.</b> Discounts = owner promo codes (%) or an owner discount (% / ₱). One per sale.</li>
+  <li><b>Every item sold exists in Inventory</b> at the owner's price. Nothing typed at the counter.</li>
+  <li><b>VAT is shop-level and automatic:</b> VAT-registered yes/no. Prices include VAT. No per-sale switch.</li>
+  <li>Money in whole centavos; quantities in thousandths (2.5 m = 2500).</li>
+  <li>Void-never-delete, gapless sale numbers (given at payment), totals frozen at payment, audit log.</li>
+  <li>Every change saved immediately, as one all-or-nothing batch.</li>
+  <li>Slip says <i>“Not an official receipt”</i>. Not a BIR machine. Android tablet only.</li>
+</ul></div>
+
+<h2>3. Roles</h2>
+<div class="scroll"><table>
+  <tr><th>Action</th><th>Owner</th><th>Staff</th></tr>
+  <tr><td>Take orders, take payment, print slip</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+  <tr><td>Make / print / convert quotes</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+  <tr><td>Apply a promo code · see Today's sales</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+  <tr><td>Owner discount · cancel sale or quote</td><td class="yes">✓</td><td class="no">—</td></tr>
+  <tr><td>Inventory: products, services, prices, stock, promo codes, import/export</td><td class="yes">✓</td><td class="no">—</td></tr>
+  <tr><td>Reports (This month, Sales), settings, VAT, users</td><td class="yes">✓</td><td class="no">—</td></tr>
+</table></div>
+
+<h2>4. Presets (feature switches)</h2>
+<div class="scroll"><table>
+  <tr><th>Switch</th><th>Restaurant</th><th>Retail / Hardware</th><th>Auto &amp; Tire</th><th>Car Wash</th></tr>
+  <tr><td>Open tickets</td><td>Table</td><td>—</td><td>Job</td><td>Queue</td></tr>
+  <tr><td>Serve step</td><td class="yes">✓</td><td>—</td><td>—</td><td>—</td></tr>
+  <tr><td>Services (labor, never stocked)</td><td>—</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+  <tr><td>Quotations</td><td>—</td><td class="yes">✓</td><td class="yes">✓</td><td>—</td></tr>
+  <tr><td>Plate number</td><td>—</td><td>—</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+  <tr><td>Decimal qty (m, kg)</td><td>—</td><td class="yes">✓</td><td>—</td><td>—</td></tr>
+</table></div>
+<p class="sub">“General” = retail defaults. Owner can change any switch in Settings → More options. Presets are data, not code paths.</p>
+
+<h2>5. Screens &amp; flows</h2>
+<div class="grid">
+  <div class="card"><b>Setup (4 questions)</b><ol><li>Shop type</li><li>Shop name</li><li>Owner name + PIN</li><li>Products: sample / spreadsheet / empty</li></ol>Then recovery code → Today, with a “Finish setting up” checklist (printer, address, VAT, license, staff).</div>
+  <div class="card"><b>Sell</b><br>Tap items → Discount (promo code / owner) → <span class="pill">Exact cash</span><span class="pill">GCash</span><span class="pill">Other / split</span> → number assigned, stock deducted, slip printed.</div>
+  <div class="card"><b>Quotes</b><br>Save cart as <code>Q-0001</code> (valid 7 days) → print/share → convert at quoted prices (stock checked).</div>
+  <div class="card"><b>Inventory (owner)</b><br>Products · Services · Promo codes · Add stock · Count · Damage · CSV import/export · Low-stock list.</div>
+  <div class="card"><b>Today / This month</b><br>Sales, discounts (promo vs owner), VAT, money collected by method, expected cash. End-of-day summary runs itself at 23:59, hash-chained.</div>
+  <div class="card"><b>Practice mode</b><br>Watermarked. “Load demo business”: Restaurant, Hardware, Auto, Car Wash. Going live needs a license and is one-way.</div>
+</div>
+
+<h2>6. Data flow</h2>
+<div class="card">
+<svg viewBox="0 0 900 470" role="img" aria-label="Data flow: screens call the store, the store saves atomically to the tablet database, prints slips, and sends backups and health to the vendor server">
+  <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z"/></marker></defs>
+
+  <rect class="zone" x="10" y="10" width="600" height="450" rx="12"/>
+  <text x="24" y="32" font-weight="600">Tablet (works offline)</text>
+
+  <rect class="box" x="30" y="50" width="240" height="70" rx="8"/>
+  <text x="44" y="76" font-weight="600">Screens</text>
+  <text class="muted" x="44" y="96">Today · Sell · Quotes · Inventory</text>
+  <text class="muted" x="44" y="110">This month · Sales · Settings</text>
+
+  <rect class="hot" x="30" y="170" width="240" height="90" rx="8"/>
+  <text x="44" y="196" font-weight="600">Store (business rules)</text>
+  <text class="muted" x="44" y="216">can() permission check · stock ≥ 0</text>
+  <text class="muted" x="44" y="232">tax &amp; VAT · promo · totals frozen</text>
+  <text class="muted" x="44" y="248">audit entry on every change</text>
+
+  <rect class="box" x="30" y="310" width="240" height="60" rx="8"/>
+  <text x="44" y="336" font-weight="600">Atomic save (one batch)</text>
+  <text class="muted" x="44" y="354">settings blob + changed rows</text>
+
+  <rect class="box" x="30" y="395" width="240" height="50" rx="8"/>
+  <text x="44" y="425" font-weight="600">Database file on tablet</text>
+
+  <rect class="box" x="340" y="60" width="240" height="50" rx="8"/>
+  <text x="354" y="90" font-weight="600">Bluetooth printer (slips)</text>
+
+  <rect class="box" x="340" y="150" width="240" height="50" rx="8"/>
+  <text x="354" y="172" font-weight="600">CSV import / export</text>
+  <text class="muted" x="354" y="190">Inventory spreadsheet</text>
+
+  <rect class="box" x="340" y="240" width="240" height="60" rx="8"/>
+  <text x="354" y="264" font-weight="600">Nightly JSON backup</text>
+  <text class="muted" x="354" y="282">file on tablet (survives uninstall)</text>
+
+  <rect class="box" x="340" y="340" width="240" height="70" rx="8"/>
+  <text x="354" y="364" font-weight="600">Encrypt with recovery code</text>
+  <text class="muted" x="354" y="382">vendor can't read it</text>
+  <text class="muted" x="354" y="398">license checked offline each launch</text>
+
+  <rect class="zone" x="640" y="10" width="250" height="450" rx="12"/>
+  <text x="654" y="32" font-weight="600">kennali.com (when online)</text>
+
+  <rect class="box" x="660" y="60" width="210" height="60" rx="8"/>
+  <text x="674" y="86" font-weight="600">Activate license</text>
+  <text class="muted" x="674" y="104">once · signed license back</text>
+
+  <rect class="box" x="660" y="170" width="210" height="60" rx="8"/>
+  <text x="674" y="196" font-weight="600">Heartbeat (health only)</text>
+  <text class="muted" x="674" y="214">version · backup age · no sales</text>
+
+  <rect class="box" x="660" y="340" width="210" height="70" rx="8"/>
+  <text x="674" y="366" font-weight="600">Encrypted backups</text>
+  <text class="muted" x="674" y="384">last 3 days + 1st of month</text>
+  <text class="muted" x="674" y="400">restore onto a new tablet</text>
+
+  <path class="arrow" d="M150 120 V168"/>
+  <path class="arrow" d="M150 260 V308"/>
+  <path class="arrow" d="M150 370 V393"/>
+  <path class="arrow" d="M270 195 L338 90"/>
+  <path class="arrow" d="M270 215 L338 175"/>
+  <path class="arrow" d="M270 245 L338 268"/>
+  <path class="arrow" d="M460 300 V338"/>
+  <path class="arrow" d="M580 375 H658"/>
+  <path class="arrow" d="M270 185 C 450 130, 560 110, 658 95"/>
+  <path class="arrow" d="M270 230 C 450 230, 560 210, 658 202"/>
+</svg>
+</div>
+
+<h2>7. Database schema (tablet)</h2>
+<p class="sub">One database file named <code>pos034</code>. Each table stores rows as JSON under an <code>id</code>. Money = centavos, qty = thousandths.</p>
+<div class="scroll"><table>
+  <tr><th>Table</th><th>Key fields</th></tr>
+  <tr><td><code>kv</code> (settings blob)</td><td>settings (businessName, address, contactNumber, vatRegistered, shopType, features, lowStockAt, quoteValidDays, printer, trainingMode, checklistDismissed) · users (name, role, PIN hash, active) · stock on hand · invoiceSeq · quoteSeq · recovery hash · installId · license · lowStockAlerts</td></tr>
+  <tr><td><code>products</code></td><td>id, name, kind (stock|service), sku, category, unit, priceCents, costCents, reorderLevel, active</td></tr>
+  <tr><td><code>orders</code> (sales)</td><td>id, invoiceNo (null until paid), status (open|closed|voided), type, label, customerName, customerPhone, vehiclePlate, fromQuoteId, lines[lineNo, productId, name, kind, unitCents, costCents, qty, served, voided], tenders[method, amountCents, tenderedCents, changeCents, refNo], discount (none | promo{code, percent} | owner{percent|fixedCents} | legacy), grossCents, vatableCents, vatCents, discountCents, netCents, openedBy, paidBy, voidedBy, voidedReason</td></tr>
+  <tr><td><code>quotes</code></td><td>id, quoteNo (Q-0001), status (open|converted|cancelled), lines, discount, gross/discount/netCents, customerName, customerPhone, validUntil, convertedSaleId</td></tr>
+  <tr><td><code>promos</code></td><td>id, code (A–Z 0–9, 3–12), percent (1–100), note, active, startsOn, endsOn, firstUsedAt</td></tr>
+  <tr><td><code>stockMoves</code></td><td>id, productId, delta, reason (sale|void|restock|spoilage|count|opening), refOrderId, supplier, docNo, unitCostCents, note, at, actorUserId</td></tr>
+  <tr><td><code>closes</code> (Today's summary)</td><td>id, no, date, format, orders, gross, discounts (promo/owner), vatCents, netCents, tenders by method, expectedCash, countedCash, runningNet, prevHash, hash</td></tr>
+  <tr><td><code>audit</code></td><td>id, at, kind, message, tone, actorUserId</td></tr>
+</table></div>
+<p class="sub">Server (kennali.com, Plan B): licenses, activations, heartbeats, accounts, sessions, encrypted backup blobs. No sales data.</p>
+
+<h2>8. Build order (Plan A — the app)</h2>
+<div class="scroll"><table>
+  <tr><th>#</th><th>Task</th><th>#</th><th>Task</th></tr>
+  <tr><td>1</td><td>Rename to POS-034, app ID <code>com.kennali.pos034</code></td><td>10</td><td>Inventory screen (owner)</td></tr>
+  <tr><td>2</td><td>Remove 2% fee &amp; sales in heartbeat</td><td>11</td><td>Easy sell screen &amp; payment, VAT on slip</td></tr>
+  <tr><td>3</td><td>Vitest + tax engine (promo/owner, shop VAT)</td><td>12</td><td>Promo codes</td></tr>
+  <tr><td>4</td><td>Remove Senior/PWD, data v8 + migration</td><td>13</td><td>Quotations</td></tr>
+  <tr><td>5</td><td>Owner / Staff roles, enforced in store</td><td>14</td><td>Today, This month, Today's summary</td></tr>
+  <tr><td>6</td><td>Atomic saves + new tables</td><td>15</td><td>4-question setup + checklist</td></tr>
+  <tr><td>7</td><td>Presets &amp; feature switches</td><td>16</td><td>CSV import / export</td></tr>
+  <tr><td>8</td><td>Decimal quantities, product kind/SKU</td><td>17</td><td>Demo businesses</td></tr>
+  <tr><td>9</td><td>Stock rules: holds, ≥ 0, numbers at payment</td><td>18</td><td>Tips, plain words, README</td></tr>
+</table></div>
+<p class="sub">Each task: write tests → make them pass → <code>npm run check</code> → commit. Later: Plan B (kennali.com platform), Plan C (updates).</p>
+
+<h2>9. Done means</h2>
+<div class="card"><ul>
+  <li><code>npm run check</code> passes (typecheck, lint, tests).</li>
+  <li>On a tablet: opens in airplane mode; kill the app mid-sale → nothing half-saved; reboot → data intact; slips print at 58 and 80 mm; each demo business loads and sells.</li>
+  <li>Before launch: tax practitioner checks slip wording; EULA + privacy notice; your own business registration.</li>
+</ul></div>
+
+</main>
+</body>
+</html>
