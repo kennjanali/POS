@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Download, FlaskConical, Info, Upload } from 'lucide-react';
 
 import { BranchManager } from '@/components/settings/BranchManager';
@@ -43,6 +43,9 @@ export default function SettingsPage() {
   const licensed = usePos((s) => s.licensed !== null);
   // Typed freely, saved on leaving the field: a half-typed number is not a setting.
   const [lowStockInput, setLowStockInput] = useState(() => formatQty(settings.lowStockAt));
+  // A restore can change the setting while this page is open. The field follows
+  // it, so leaving the field never writes stale text back over it.
+  useEffect(() => setLowStockInput(formatQty(settings.lowStockAt)), [settings.lowStockAt]);
   function saveLowStock() {
     const lowStockAt = parseQty(lowStockInput, false);
     if (lowStockAt === null) {
@@ -50,7 +53,7 @@ export default function SettingsPage() {
       setLowStockInput(formatQty(settings.lowStockAt));
       return;
     }
-    update({ lowStockAt });
+    if (lowStockAt !== settings.lowStockAt) update({ lowStockAt });
   }
   const exportSnapshot = usePos((s) => s.exportSnapshot);
   const importSnapshot = usePos((s) => s.importSnapshot);
