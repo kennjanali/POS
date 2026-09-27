@@ -88,7 +88,7 @@ export const PRESETS: Record<ShopType, Preset> = {
   // The owner picks; until then, the same starting point as retail.
   general: {
     label: 'General',
-    features: RETAIL_FEATURES,
+    features: { ...RETAIL_FEATURES },
     ticketLabel: null,
     orderTypes: SHOP_ORDER_TYPES,
   },

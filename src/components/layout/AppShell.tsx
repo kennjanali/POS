@@ -29,8 +29,8 @@ function NewOrderDialog() {
   const orders = usePos((s) => s.orders);
   const activeBranchId = usePos((s) => s.activeBranchId);
   const shopType = usePos((s) => s.settings.shopType);
-  const orderTypes = PRESETS[shopType].orderTypes;
-  const quickLabels = shopType === 'restaurant' ? QUICK_LABELS : [];
+  const { orderTypes, ticketLabel } = PRESETS[shopType];
+  const quickLabels = ticketLabel === 'Table' ? QUICK_LABELS : [];
   const takenLabels = orders
     .filter((o) => o.status === 'open' && o.branchId === activeBranchId)
     .map((o) => o.label);

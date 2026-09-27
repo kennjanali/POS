@@ -17,6 +17,11 @@ describe('PRESETS', () => {
     expect(PRESETS.auto.ticketLabel).toBe('Job');
     expect(PRESETS.auto.orderTypes).toEqual(['walk-in', 'pickup', 'delivery']);
   });
+
+  it('gives General the retail switches as its own object', () => {
+    expect(PRESETS.general.features).toEqual(PRESETS.retail.features);
+    expect(PRESETS.general.features).not.toBe(PRESETS.retail.features);
+  });
 });
 
 describe('applyPreset', () => {

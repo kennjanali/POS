@@ -41,6 +41,7 @@ import {
 import { can, isLastActiveSuperadmin, type Permission } from '@/lib/permissions';
 import { type Centavos, addC, cents, mulQty } from '@/lib/money';
 import { discountRequest, migrateBlobV7, migrateOrderV7, migrateSnapshot } from '@/lib/migrate';
+import { applyPreset } from '@/lib/presets';
 import { computeBill } from '@/lib/tax';
 import { DEFAULT_BRANCH, DEFAULT_SETTINGS, OPENING_STOCK, SAMPLE_MENU } from '@/lib/seed';
 import { actorId, useAuth } from './useAuth';
@@ -1489,6 +1490,16 @@ export const usePos = create<PosState>()(
       // whose version differs — an empty till after an app update.
       version: 8,
       migrate: (persisted) => migrateBlobV7(persisted) as PosState,
+      // zustand's shallow merge, except that saved settings missing a field
+      // (a blob written before it existed) get its default, and missing
+      // features come from the saved shop type's preset.
+      merge: (persisted, current) => {
+        const p = persisted as Partial<PosState> | undefined;
+        if (!p?.settings) return { ...current, ...p };
+        const settings = { ...DEFAULT_SETTINGS, ...p.settings };
+        settings.features = { ...applyPreset(settings.shopType), ...p.settings.features };
+        return { ...current, ...p, settings };
+      },
       storage: createJSONStorage(() => blobStorage),
       // Orders, stock moves, closes, products and the audit log are
       // deliberately absent: they go to their own row stores, and only changed

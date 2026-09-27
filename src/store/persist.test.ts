@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { cents } from '@/lib/money';
+import { PRESETS } from '@/lib/presets';
 import { ROWS, setStorageBackend, type StorageBackend, type WriteBatch } from '@/lib/storage';
 import { computeBill } from '@/lib/tax';
-import type { AuditEntry, Product } from '@/lib/types';
+import type { AuditEntry, Product, Settings } from '@/lib/types';
 import { ownerShop, resetStore } from '@/test/store';
 import { orderGross, usePos } from './usePos';
 
@@ -146,6 +147,48 @@ describe('saving', () => {
     const written = JSON.parse(first!.kv[0]!.value).state;
     expect(written).not.toHaveProperty('products');
     expect(written).not.toHaveProperty('audit');
+  });
+
+  /** Rehydrate from this version-8 blob, as a later app start would. */
+  async function rehydrateWith(settings: Partial<Settings>) {
+    const saved = usePos.persist.getOptions().partialize!(S()) as object;
+    const blob = { state: { ...saved, settings }, version: 8 };
+    setStorageBackend({ ...recording, getItem: async () => JSON.stringify(blob) });
+    usePos.setState({ hydrated: false });
+    await usePos.persist.rehydrate();
+    await settle();
+  }
+
+  it('fills settings a version-8 blob lacks from the defaults, keeping what it has', async () => {
+    const older: Partial<Settings> = { ...S().settings };
+    delete older.shopType;
+    delete older.features;
+    delete older.quoteValidDays;
+
+    await rehydrateWith(older);
+
+    expect(S().settings.shopType).toBe('restaurant');
+    expect(S().settings.features).toEqual({
+      openOrders: true,
+      serveStep: true,
+      services: false,
+      quotes: false,
+      vehiclePlate: false,
+      measuredUnits: false,
+    });
+    expect(S().settings.quoteValidDays).toBe(7);
+    expect(S().settings.businessName).toBe('Test Shop');
+    // What the New order dialog reads first; it threw on the incomplete blob.
+    expect(() => PRESETS[S().settings.shopType].orderTypes).not.toThrow();
+  });
+
+  it('gives saved settings without features the switches of their own shop type', async () => {
+    const older: Partial<Settings> = { ...S().settings, shopType: 'auto' };
+    delete older.features;
+
+    await rehydrateWith(older);
+
+    expect(S().settings.features).toEqual(PRESETS.auto.features);
   });
 
   it('reads the audit rows back newest first, by time and then by id', async () => {
