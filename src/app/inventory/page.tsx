@@ -1,7 +1,7 @@
 'use client';
 
 import { useId, useMemo, useState } from 'react';
-import { AlertTriangle, Plus } from 'lucide-react';
+import { Plus } from 'lucide-react';
 
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
@@ -69,8 +69,7 @@ export default function InventoryPage() {
   const stocked = rows.filter((r) => r.product.kind === 'stock');
 
   const openBranches = branches.filter((b) => b.active);
-  const negative = stocked.filter((r) => r.onHand < 0);
-  const low = stocked.filter((r) => r.onHand >= 0 && r.onHand <= r.level);
+  const low = stocked.filter((r) => r.onHand <= r.level);
 
   function edit(product: Product) {
     setDraft({
@@ -175,24 +174,6 @@ export default function InventoryPage() {
       )}
 
       <div className="scroll-y flex-1 p-4">
-        {/* Negative stock is a data-integrity problem, not a stock problem.
-            v6 clamped it to zero and lost the discrepancy silently. */}
-        {negative.length > 0 && (
-          <div className="mb-3 flex gap-2 rounded-md border border-bad/40 bg-bad/5 p-3">
-            <AlertTriangle size={15} className="mt-0.5 shrink-0 text-bad" aria-hidden />
-            <div className="min-w-0 text-[12px] leading-relaxed">
-              <p className="font-bold text-bad">
-                {negative.length} item{negative.length > 1 ? 's' : ''} sold below recorded
-                stock
-              </p>
-              <p className="text-ink-2">
-                {negative.map((r) => `${r.product.name} (${formatQty(r.onHand)})`).join(', ')}. Count
-                the shelf and record the correction so the variance is traceable.
-              </p>
-            </div>
-          </div>
-        )}
-
         {low.length > 0 && (
           <div className="mb-3 rounded-md border border-warn/40 bg-warn/5 p-3 text-[12px]">
             <p className="font-bold text-warn">Running low</p>
@@ -258,13 +239,7 @@ export default function InventoryPage() {
                   <td
                     className={cn(
                       'tnum py-2 pr-3 text-right font-bold',
-                      !stockedItem
-                        ? 'text-ink-3'
-                        : onHand < 0
-                          ? 'text-bad'
-                          : onHand <= level
-                            ? 'text-warn'
-                            : '',
+                      !stockedItem ? 'text-ink-3' : onHand <= level ? 'text-warn' : '',
                     )}
                   >
                     {stockedItem ? formatQty(onHand) : '—'}

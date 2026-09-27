@@ -8,6 +8,7 @@ import { addC, cents, type Centavos } from '@/lib/money';
 import { lineTotal } from '@/lib/qty';
 import { ORDER_TYPE_LABELS, type Order } from '@/lib/types';
 import { cn } from '@/components/ui/cn';
+import { billedLines, usePos } from '@/store/usePos';
 
 interface OrderCardProps {
   order: Order;
@@ -16,6 +17,7 @@ interface OrderCardProps {
 }
 
 export function OrderCard({ order, currency, onOpen }: OrderCardProps) {
+  const serveStep = usePos((s) => s.settings.features.serveStep);
   const [, setTick] = useState(0);
 
   // The elapsed timer is the one thing on this screen that must stay live.
@@ -26,9 +28,8 @@ export function OrderCard({ order, currency, onOpen }: OrderCardProps) {
 
   const live = order.lines.filter((l) => !l.voided);
   const pending = live.filter((l) => !l.served);
-  const served = live.filter((l) => l.served);
 
-  const runningTotal = served.reduce<Centavos>(
+  const runningTotal = billedLines(order, serveStep).reduce<Centavos>(
     (sum, l) => addC(sum, lineTotal(l.unitCents, l.qty)),
     cents(0),
   );
@@ -49,7 +50,8 @@ export function OrderCard({ order, currency, onOpen }: OrderCardProps) {
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[14px] font-bold">{order.label}</span>
           <span className="mt-0.5 block text-[10.5px] tracking-wide text-ink-3 uppercase">
-            {ORDER_TYPE_LABELS[order.type]} · {order.invoiceNo}
+            {ORDER_TYPE_LABELS[order.type]}
+            {order.invoiceNo && ` · ${order.invoiceNo}`}
           </span>
         </span>
         <span

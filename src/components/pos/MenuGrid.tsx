@@ -7,11 +7,12 @@ import { peso } from '@/lib/format';
 import { sortProducts } from '@/lib/products';
 import { decimalsAllowed, formatQty, parseQty, type Qty } from '@/lib/qty';
 import type { Product } from '@/lib/types';
-import { usePos } from '@/store/usePos';
+import { heldStock, usePos, type UserResult } from '@/store/usePos';
 import { Button } from '@/components/ui/Button';
 import { cn } from '@/components/ui/cn';
 import { Field } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
+import { toast } from '@/components/ui/Toast';
 
 interface MenuGridProps {
   orderId: string;
@@ -20,6 +21,7 @@ interface MenuGridProps {
 export function MenuGrid({ orderId }: MenuGridProps) {
   const products = usePos((s) => s.products);
   const stock = usePos((s) => s.stock);
+  const orders = usePos((s) => s.orders);
   const branchId = usePos((s) => s.activeBranchId);
   const settings = usePos((s) => s.settings);
   const addLine = usePos((s) => s.addLine);
@@ -27,6 +29,15 @@ export function MenuGrid({ orderId }: MenuGridProps) {
   const [query, setQuery] = useState('');
   /** A measured item waiting for its quantity. */
   const [measuring, setMeasuring] = useState<Product | null>(null);
+
+  // Open orders hold what is on them, so the tiles count what is left after that.
+  const held = useMemo(() => heldStock(orders, branchId), [orders, branchId]);
+
+  function add(productId: string, q?: Qty): UserResult {
+    const result = addLine(orderId, productId, q);
+    if (!result.ok) toast(result.error, 'danger');
+    return result;
+  }
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -56,25 +67,27 @@ export function MenuGrid({ orderId }: MenuGridProps) {
       <div className="scroll-y grid flex-1 auto-rows-min grid-cols-[repeat(auto-fill,minmax(118px,1fr))] gap-2 pr-1">
         {visible.map((product) => {
           const stocked = product.kind === 'stock';
-          const onHand = stock[branchId]?.[product.id] ?? (0 as Qty);
-          const out = stocked && onHand <= 0;
-          const low = stocked && !out && onHand <= (product.reorderLevel ?? settings.lowStockAt);
+          const onHand = stock[branchId]?.[product.id] ?? 0;
+          const left = Math.max(0, onHand - (held.get(product.id) ?? 0)) as Qty;
+          const out = stocked && left <= 0;
+          const low = stocked && !out && left <= (product.reorderLevel ?? settings.lowStockAt);
 
           return (
             <button
               key={product.id}
               type="button"
+              disabled={out}
               onClick={() =>
                 decimalsAllowed(product.unit, settings.features)
                   ? setMeasuring(product)
-                  : addLine(orderId, product.id)
+                  : add(product.id)
               }
               className={cn(
                 'flex min-h-[76px] flex-col justify-between gap-1 rounded-lg border p-2.5 text-left',
-                'transition-[border-color,transform] active:scale-[0.98]',
+                'transition-[border-color,transform]',
                 out
-                  ? 'border-bad/40 bg-bad/5 hover:border-bad'
-                  : 'border-line bg-surface hover:border-accent',
+                  ? 'cursor-not-allowed border-line bg-raised opacity-60'
+                  : 'border-line bg-surface hover:border-accent active:scale-[0.98]',
               )}
             >
               <span className="line-clamp-2 text-[12.5px] leading-snug font-semibold">
@@ -84,15 +97,16 @@ export function MenuGrid({ orderId }: MenuGridProps) {
                 <span className="tnum text-[13px] font-bold text-accent">
                   {peso(product.priceCents, settings.currency)}
                 </span>
-                {settings.showStock && stocked && (
-                  <span
-                    className={cn(
-                      'tnum text-[10px] font-bold',
-                      out ? 'text-bad' : low ? 'text-warn' : 'text-ink-3',
-                    )}
-                  >
-                    {formatQty(onHand)}
-                  </span>
+                {/* Never the raw on-hand figure: staff see only these two. */}
+                {out ? (
+                  <span className="text-[10px] font-bold text-bad">Out of stock</span>
+                ) : (
+                  settings.showStock &&
+                  low && (
+                    <span className="tnum text-[10px] font-bold text-warn">
+                      Only {formatQty(left)} left
+                    </span>
+                  )
                 )}
               </span>
             </button>
@@ -110,8 +124,8 @@ export function MenuGrid({ orderId }: MenuGridProps) {
         <QtyPad
           product={measuring}
           onAdd={(q) => {
-            addLine(orderId, measuring.id, q);
-            setMeasuring(null);
+            const result = add(measuring.id, q);
+            if (result.ok) setMeasuring(null);
           }}
           onClose={() => setMeasuring(null)}
         />

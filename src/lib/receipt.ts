@@ -55,7 +55,7 @@ export function renderReceipt(order: Order, settings: Settings, width: number = 
   out.push(centre('ORDER SLIP'));
   out.push(rule);
 
-  out.push(row('Order no.', order.invoiceNo));
+  out.push(row('Order no.', order.invoiceNo ?? '-'));
   out.push(row('Order', order.label));
   out.push(row('Date', fmtDate(order.closedAt ?? order.openedAt)));
   out.push(row('Time', fmtTime(order.closedAt ?? order.openedAt)));

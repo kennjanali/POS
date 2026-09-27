@@ -37,7 +37,7 @@ function sale(): string {
   S().serveAll(id);
   const due = computeBill(orderGross(S().order(id)!), S().settings, { kind: 'none' }).amountDue;
   S().addTender(id, { method: 'cash', amountCents: due, tenderedCents: due, changeCents: cents(0), refNo: null });
-  expect(S().closeOrder(id)).toBe(true);
+  expect(S().closeOrder(id)).toEqual({ ok: true });
   return id;
 }
 

@@ -123,9 +123,14 @@ for (const settings of [
   console.log(`      net sales over the month: ${(netTotal / 100).toFixed(2)}`);
 
   // ── invoice numbers: gapless and chronological, per branch ───────────
+  // Open orders get their number at payment, so the live tables have none.
+  check(
+    'open orders carry no number yet',
+    data.orders.every((o) => (o.status === 'open') === (o.invoiceNo === null)),
+  );
   for (const branch of data.branches) {
     const rows = data.orders
-      .filter((o) => o.branchId === branch.id)
+      .filter((o) => o.branchId === branch.id && o.invoiceNo !== null)
       .sort((a, b) => a.openedAt - b.openedAt);
     const seqs = rows.map((o) => Number(o.invoiceNo.split('-')[1]));
     const gapless = seqs.every((n, i) => n === i + 1);

@@ -11,7 +11,7 @@ import { toast } from '@/components/ui/Toast';
 import { peso } from '@/lib/format';
 import { addC, cents, type Centavos } from '@/lib/money';
 import { QTY_ONE, formatQty, lineTotal, type Qty } from '@/lib/qty';
-import { usePos } from '@/store/usePos';
+import { billedLines, usePos, type UserResult } from '@/store/usePos';
 import { useAuth } from '@/store/useAuth';
 import { can } from '@/lib/permissions';
 import { ORDER_TYPE_LABELS, type Order } from '@/lib/types';
@@ -23,6 +23,7 @@ interface OrderPanelProps {
 
 export function OrderPanel({ order, onCheckout }: OrderPanelProps) {
   const currency = usePos((s) => s.settings.currency);
+  const serveStep = usePos((s) => s.settings.features.serveStep);
   const changeQty = usePos((s) => s.changeQty);
   const serveAll = usePos((s) => s.serveAll);
   const voidLine = usePos((s) => s.voidLine);
@@ -35,10 +36,15 @@ export function OrderPanel({ order, onCheckout }: OrderPanelProps) {
   const pending = order.lines.filter((l) => !l.served && !l.voided);
   const served = order.lines.filter((l) => l.served && !l.voided);
 
-  const servedTotal = served.reduce<Centavos>(
+  const billed = billedLines(order, serveStep);
+  const billedTotal = billed.reduce<Centavos>(
     (sum, l) => addC(sum, lineTotal(l.unitCents, l.qty)),
     cents(0),
   );
+
+  function showRefusal(result: UserResult) {
+    if (!result.ok) toast(result.error, 'danger');
+  }
 
   function confirmVoid() {
     const reason = voidReason.trim();
@@ -55,7 +61,8 @@ export function OrderPanel({ order, onCheckout }: OrderPanelProps) {
       <header className="shrink-0 border-b border-line px-4 py-3">
         <p className="text-[16px] leading-tight font-bold">{order.label}</p>
         <p className="mt-0.5 text-[11px] text-ink-3">
-          {ORDER_TYPE_LABELS[order.type]} · {order.invoiceNo}
+          {ORDER_TYPE_LABELS[order.type]}
+          {order.invoiceNo && ` · ${order.invoiceNo}`}
         </p>
       </header>
 
@@ -89,7 +96,7 @@ export function OrderPanel({ order, onCheckout }: OrderPanelProps) {
                   <button
                     type="button"
                     aria-label={`Reduce ${line.name}`}
-                    onClick={() => changeQty(order.id, line.lineNo, -QTY_ONE as Qty)}
+                    onClick={() => showRefusal(changeQty(order.id, line.lineNo, -QTY_ONE as Qty))}
                     className="grid size-10 place-items-center rounded-md border border-line bg-surface hover:border-accent"
                   >
                     <Minus size={12} aria-hidden />
@@ -100,7 +107,7 @@ export function OrderPanel({ order, onCheckout }: OrderPanelProps) {
                   <button
                     type="button"
                     aria-label={`Add ${line.name}`}
-                    onClick={() => changeQty(order.id, line.lineNo, QTY_ONE)}
+                    onClick={() => showRefusal(changeQty(order.id, line.lineNo, QTY_ONE))}
                     className="grid size-10 place-items-center rounded-md border border-line bg-surface hover:border-accent"
                   >
                     <Plus size={12} aria-hidden />
@@ -161,16 +168,16 @@ export function OrderPanel({ order, onCheckout }: OrderPanelProps) {
           variant="secondary"
           fullWidth
           disabled={pending.length === 0}
-          onClick={() => serveAll(order.id)}
+          onClick={() => showRefusal(serveAll(order.id))}
         >
           <Check size={15} aria-hidden />
           Serve {pending.length > 0 ? `${pending.length} item${pending.length > 1 ? 's' : ''}` : 'items'}
         </Button>
 
         <div className="flex items-center justify-between px-0.5 text-[12px] text-ink-2">
-          <span>Served subtotal</span>
+          <span>{serveStep ? 'Served subtotal' : 'Subtotal'}</span>
           <span className="tnum text-[15px] font-extrabold text-ink">
-            {peso(servedTotal, currency)}
+            {peso(billedTotal, currency)}
           </span>
         </div>
 
@@ -178,7 +185,7 @@ export function OrderPanel({ order, onCheckout }: OrderPanelProps) {
           size="lg"
           fullWidth
           variant="success"
-          disabled={served.length === 0}
+          disabled={billed.length === 0}
           onClick={onCheckout}
         >
           <Receipt size={16} aria-hidden />

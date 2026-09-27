@@ -35,7 +35,7 @@ describe('service lines', () => {
     expect(S().order(id)?.lines[0]).toMatchObject({ kind: 'service', served: true });
     const due = orderGross(S().order(id)!);
     S().addTender(id, { method: 'cash', amountCents: due, tenderedCents: due, changeCents: cents(0), refNo: null });
-    expect(S().closeOrder(id)).toBe(true);
+    expect(S().closeOrder(id)).toEqual({ ok: true });
     expect(S().voidOrder(id, 'test')).toEqual({ ok: true });
 
     expect(S().stockMoves).toEqual(movesBefore);

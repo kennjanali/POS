@@ -71,6 +71,11 @@ function migrateLineV7(line: { qty: number }): OrderLine {
 export function migrateOrderV7(o: unknown): Order {
   const v7 = o as { type: string; lines?: { qty: number }[] };
   const order: Record<string, unknown> = {
+    // v7 asked nothing about the customer and had no quotations.
+    customerName: null,
+    customerPhone: null,
+    vehiclePlate: null,
+    fromQuoteId: null,
     ...(o as Record<string, unknown>),
     type: orderTypeV7(v7.type),
     discount: discountV7(o as OrderDiscountV7),

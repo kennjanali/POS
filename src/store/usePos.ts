@@ -85,6 +85,13 @@ function guard(p: Permission): UserResult | null {
     : { ok: false, error: 'Only the owner can do that.' };
 }
 
+/** Who the order is for, when the shop asks. */
+export interface OrderExtra {
+  customerName?: string;
+  customerPhone?: string;
+  vehiclePlate?: string;
+}
+
 /** What the first-run wizard collects. */
 export interface SetupInput {
   business: Pick<
@@ -146,16 +153,21 @@ interface PosState {
   order: (id: string | null) => Order | undefined;
   product: (id: string) => Product | undefined;
   stockOf: (productId: string, branchId?: string) => Qty;
+  /** On hand less what open orders hold, in the active branch. Never below zero. */
+  available: (productId: string) => Qty;
   openOrders: () => Order[];
 
   // ── order lifecycle ─────────────────────────────────────────────────
-  openOrder: (label: string, type: OrderType) => string;
+  /** Opens without a number: the number is given at payment. */
+  openOrder: (label: string, type: OrderType, extra?: OrderExtra) => string;
   setActiveOrder: (id: string | null) => void;
-  addLine: (orderId: string, productId: string, qty?: Qty) => void;
-  changeQty: (orderId: string, lineNo: number, delta: Qty) => void;
+  addLine: (orderId: string, productId: string, qty?: Qty) => UserResult;
+  changeQty: (orderId: string, lineNo: number, delta: Qty) => UserResult;
   voidLine: (orderId: string, lineNo: number, reason: string) => UserResult;
-  serveAll: (orderId: string) => void;
-  serveLine: (orderId: string, lineNo: number) => void;
+  serveAll: (orderId: string) => UserResult;
+  serveLine: (orderId: string, lineNo: number) => UserResult;
+  /** Remove an open order that never moved stock or took a number. */
+  discardOpenOrder: (orderId: string) => UserResult;
 
   clearDiscount: (orderId: string) => UserResult;
   /** Temporary, for Checkout's "Discount %" until Task 12's owner and promo setters. */
@@ -166,7 +178,7 @@ interface PosState {
     tender: Omit<Tender, 'id' | 'takenAt'>,
   ) => void;
   removeTender: (orderId: string, tenderId: string) => void;
-  closeOrder: (orderId: string) => boolean;
+  closeOrder: (orderId: string) => UserResult;
   voidOrder: (orderId: string, reason: string) => UserResult;
 
   // ── inventory ───────────────────────────────────────────────────────
@@ -299,6 +311,84 @@ export function keptByTill(order: Order): Centavos {
   );
 }
 
+/**
+ * What goes on the bill. With a serve step only what was served is charged;
+ * without one, every line on the order is.
+ */
+export function billedLines(order: Order, serveStep: boolean): OrderLine[] {
+  return activeLines(order).filter((l) => l.served || !serveStep);
+}
+
+/** Stock lines on open orders in this branch that are not yet off the shelf,
+ *  as productId -> quantity held. */
+export function heldStock(orders: Order[], branchId: string): Map<string, Qty> {
+  const held = new Map<string, Qty>();
+  for (const o of orders) {
+    if (o.status !== 'open' || o.branchId !== branchId) continue;
+    for (const l of o.lines) {
+      if (l.kind !== 'stock' || l.served || l.voided) continue;
+      held.set(l.productId, ((held.get(l.productId) ?? 0) + l.qty) as Qty);
+    }
+  }
+  return held;
+}
+
+function availableIn(
+  s: Pick<PosState, 'orders' | 'stock'>,
+  branchId: string,
+  productId: string,
+): Qty {
+  const onHand = s.stock[branchId]?.[productId] ?? 0;
+  const held = heldStock(s.orders, branchId).get(productId) ?? 0;
+  return Math.max(0, onHand - held) as Qty;
+}
+
+/** The first line the shelf can't cover, as the refusal; null when all fit. */
+function shortLine(lines: OrderLine[], onHand: Record<string, Qty>): string | null {
+  const need = new Map<string, number>();
+  for (const l of lines) {
+    if (l.kind !== 'stock') continue;
+    const total = (need.get(l.productId) ?? 0) + l.qty;
+    need.set(l.productId, total);
+    const have = onHand[l.productId] ?? 0;
+    if (total > have) return `${l.name}: only ${formatQty(Math.max(0, have) as Qty)} left.`;
+  }
+  return null;
+}
+
+/** Take these lines off the shelf: the new on-hand, and a sale move per stock line. */
+function deduct(
+  onHand: Record<string, Qty>,
+  lines: OrderLine[],
+  order: Order,
+  at: number,
+  actor: string | null,
+): { onHand: Record<string, Qty>; moves: StockMove[] } {
+  const next = { ...onHand };
+  const moves: StockMove[] = [];
+  for (const line of lines) {
+    if (line.kind !== 'stock') continue;
+    next[line.productId] = ((next[line.productId] ?? 0) - line.qty) as Qty;
+    moves.push({
+      id: uuidv7(),
+      branchId: order.branchId,
+      productId: line.productId,
+      delta: -line.qty as Qty,
+      reason: 'sale',
+      refOrderId: order.id,
+      note: null,
+      at,
+      actorUserId: actor,
+    });
+  }
+  return { onHand: next, moves };
+}
+
+/** How an order is named in the log: its number, or its label before it has one. */
+function orderName(order: Order): string {
+  return order.invoiceNo ?? order.label;
+}
+
 function nextInvoiceNo(
   seq: Record<string, number>,
   branch: Branch | undefined,
@@ -312,20 +402,38 @@ function nextInvoiceNo(
   };
 }
 
+/** The order's number, issuing the branch's next one if it has none yet.
+ *  Orders opened by earlier builds were numbered at open and keep that number. */
+function numberFor(
+  state: Pick<PosState, 'invoiceSeq' | 'branches'>,
+  order: Order,
+): { invoiceNo: string; seq: Record<string, number> } {
+  if (order.invoiceNo !== null) return { invoiceNo: order.invoiceNo, seq: state.invoiceSeq };
+  return nextInvoiceNo(
+    state.invoiceSeq,
+    state.branches.find((b) => b.id === order.branchId),
+    order.branchId,
+  );
+}
+
 function blankOrder(
   id: string,
-  invoiceNo: string,
   branchId: string,
   label: string,
   type: OrderType,
+  extra: OrderExtra = {},
 ): Order {
   return {
     id,
-    invoiceNo,
+    invoiceNo: null,
     branchId,
     label,
     type,
     status: 'open',
+    customerName: extra.customerName?.trim() || null,
+    customerPhone: extra.customerPhone?.trim() || null,
+    vehiclePlate: extra.vehiclePlate?.trim() || null,
+    fromQuoteId: null,
     openedAt: Date.now(),
     closedAt: null,
     lines: [],
@@ -468,6 +576,7 @@ export const usePos = create<PosState>()(
         const bid = branchId ?? get().activeBranchId;
         return get().stock[bid]?.[productId] ?? (0 as Qty);
       },
+      available: (productId) => availableIn(get(), get().activeBranchId, productId),
       openOrders: () =>
         get()
           .orders.filter(
@@ -476,26 +585,16 @@ export const usePos = create<PosState>()(
           .sort((a, b) => a.openedAt - b.openedAt),
 
       // ── order lifecycle ───────────────────────────────────────────
-      openOrder: (label, type) => {
+      openOrder: (label, type, extra) => {
         const id = uuidv7();
         set((state) => {
-          const { invoiceNo, seq } = nextInvoiceNo(
-            state.invoiceSeq,
-            state.branches.find((b) => b.id === state.activeBranchId),
-            state.activeBranchId,
-          );
-          const order = blankOrder(id, invoiceNo, state.activeBranchId, label, type);
+          // No number yet. Numbers are gapless, so one is given only to a sale
+          // that is paid, or cancelled after its stock moved.
+          const order = blankOrder(id, state.activeBranchId, label, type, extra);
           return {
             orders: [...state.orders, order],
-            invoiceSeq: seq,
             activeOrderId: id,
-            audit: log(
-              state.audit,
-              'order.open',
-              `Opened ${invoiceNo} — ${label}`,
-              'info',
-              state.activeBranchId,
-            ),
+            audit: log(state.audit, 'order.open', `Opened ${label}`, 'info', state.activeBranchId),
           };
         });
         return id;
@@ -503,17 +602,31 @@ export const usePos = create<PosState>()(
 
       setActiveOrder: (id) => set({ activeOrderId: id }),
 
-      addLine: (orderId, productId, qty = QTY_ONE) =>
-        set((state) => {
-          const product = state.products.find((p) => p.id === productId);
-          if (!product) return state;
+      addLine: (orderId, productId, qty = QTY_ONE) => {
+        const state = get();
+        const order = state.orders.find((o) => o.id === orderId);
+        if (!order || order.status !== 'open') {
+          return { ok: false, error: 'That sale is no longer open.' };
+        }
+        const product = state.products.find((p) => p.id === productId);
+        if (!product?.active) return { ok: false, error: 'That item is no longer sold.' };
+        if (product.kind === 'stock') {
+          const left = availableIn(state, order.branchId, productId);
+          if (qty > left) return { ok: false, error: `Only ${formatQty(left)} left.` };
+        }
 
-          const orders = state.orders.map((o) => {
-            if (o.id !== orderId || o.status !== 'open') return o;
+        set((s) => {
+          const orders = s.orders.map((o) => {
+            if (o.id !== orderId) return o;
 
-            // Merge into an existing unserved line for the same product.
+            // Merge into an unserved line for the same product at the same
+            // price. A line keeps the price it was added at.
             const existing = o.lines.find(
-              (l) => l.productId === productId && !l.served && !l.voided,
+              (l) =>
+                l.productId === productId &&
+                !l.served &&
+                !l.voided &&
+                l.unitCents === product.priceCents,
             );
             if (existing) {
               return {
@@ -540,26 +653,41 @@ export const usePos = create<PosState>()(
             };
             return { ...o, lines: [...o.lines, line] };
           });
-          return { ...state, orders };
-        }),
+          return { ...s, orders };
+        });
+        return { ok: true };
+      },
 
-      changeQty: (orderId, lineNo, delta) =>
-        set((state) => ({
-          ...state,
-          orders: state.orders.map((o) => {
-            if (o.id !== orderId || o.status !== 'open') return o;
+      changeQty: (orderId, lineNo, delta) => {
+        const state = get();
+        const order = state.orders.find((o) => o.id === orderId);
+        if (!order || order.status !== 'open') {
+          return { ok: false, error: 'That sale is no longer open.' };
+        }
+        const line = order.lines.find((l) => l.lineNo === lineNo);
+        if (!line || line.served || line.voided) {
+          return { ok: false, error: 'That line can no longer be changed.' };
+        }
+        if (delta > 0 && line.kind === 'stock') {
+          const left = availableIn(state, order.branchId, line.productId);
+          if (delta > left) return { ok: false, error: `Only ${formatQty(left)} left.` };
+        }
+        set((s) => ({
+          ...s,
+          orders: s.orders.map((o) => {
+            if (o.id !== orderId) return o;
             return {
               ...o,
               lines: o.lines
                 .map((l) =>
-                  l.lineNo === lineNo && !l.served
-                    ? { ...l, qty: Math.max(0, l.qty + delta) as Qty }
-                    : l,
+                  l.lineNo === lineNo ? { ...l, qty: Math.max(0, l.qty + delta) as Qty } : l,
                 )
                 .filter((l) => l.qty > 0 || l.served || l.voided),
             };
           }),
-        })),
+        }));
+        return { ok: true };
+      },
 
       voidLine: (orderId, lineNo, reason) => {
         const refused = guard('sale.cancel');
@@ -613,7 +741,7 @@ export const usePos = create<PosState>()(
             audit: log(
               state.audit,
               'line.void',
-              `Voided ${formatQty(line.qty)}x ${line.name} on ${order.invoiceNo} — ${reason}`,
+              `Voided ${formatQty(line.qty)}x ${line.name} on ${orderName(order)} — ${reason}`,
               'warn',
               order.branchId,
             ),
@@ -625,19 +753,46 @@ export const usePos = create<PosState>()(
       serveLine: (orderId, lineNo) => {
         const order = get().order(orderId);
         const line = order?.lines.find((l) => l.lineNo === lineNo);
-        if (!order || order.status !== 'open') return;
-        if (!line || line.served || line.voided) return;
-        serveLines(set, order, [line]);
+        if (!order || order.status !== 'open') {
+          return { ok: false, error: 'That sale is no longer open.' };
+        }
+        if (!line || line.served || line.voided) return { ok: true };
+        return serveLines(set, get, order, [line]);
       },
 
       serveAll: (orderId) => {
         const order = get().order(orderId);
         // Serving after the bill is settled would deduct stock for food that
         // was never charged for.
-        if (!order || order.status !== 'open') return;
+        if (!order || order.status !== 'open') {
+          return { ok: false, error: 'That sale is no longer open.' };
+        }
         const pending = order.lines.filter((l) => !l.served && !l.voided);
-        if (pending.length === 0) return;
-        serveLines(set, order, pending);
+        if (pending.length === 0) return { ok: true };
+        return serveLines(set, get, order, pending);
+      },
+
+      discardOpenOrder: (orderId) => {
+        const refused = guard('sell');
+        if (refused) return refused;
+        const order = get().order(orderId);
+        if (!order || order.status !== 'open') {
+          return { ok: false, error: 'That sale is no longer open.' };
+        }
+        // Once stock has moved, or the order carries a number (opened before
+        // numbers waited for payment), it has to stay on the record: only the
+        // owner's cancel may end it.
+        const moved = order.lines.some((l) => l.served && l.kind === 'stock');
+        if (moved || order.invoiceNo !== null) {
+          return { ok: false, error: 'Ask the owner to cancel this sale.' };
+        }
+        set((s) => ({
+          ...s,
+          activeOrderId: s.activeOrderId === orderId ? null : s.activeOrderId,
+          orders: s.orders.filter((o) => o.id !== orderId),
+          audit: log(s.audit, 'order.discard', `Discarded ${order.label}`, 'info', order.branchId),
+        }));
+        return { ok: true };
       },
 
       clearDiscount: (orderId) => setOpenDiscount(set, get, orderId, { kind: 'none' }),
@@ -685,12 +840,20 @@ export const usePos = create<PosState>()(
       closeOrder: (orderId) => {
         const state = get();
         const order = state.orders.find((o) => o.id === orderId);
-        if (!order || order.status !== 'open') return false;
+        if (!order || order.status !== 'open') {
+          return { ok: false, error: 'That sale is no longer open.' };
+        }
 
-        const served = order.lines.filter((l) => l.served && !l.voided);
-        if (served.length === 0) return false;
+        const { serveStep } = state.settings.features;
+        const billed = billedLines(order, serveStep);
+        if (billed.length === 0) {
+          const error = serveStep
+            ? 'Serve something before taking payment.'
+            : 'Add an item before taking payment.';
+          return { ok: false, error };
+        }
 
-        const gross = served.reduce<Centavos>(
+        const gross = billed.reduce<Centavos>(
           (sum, l) => addC(sum, lineTotal(l.unitCents, l.qty)),
           cents(0),
         );
@@ -702,19 +865,45 @@ export const usePos = create<PosState>()(
         // worked out against the old, higher total, and an e-wallet transfer
         // cannot give change at all — settling either way books money the
         // wallet statement will never show. Re-record the tender instead.
-        if (keptByTill(order) !== bill.amountDue) return false;
+        if (keptByTill(order) !== bill.amountDue) {
+          return { ok: false, error: 'Payment does not match the amount due.' };
+        }
+
+        // Without a serve step the whole order leaves the shelf now. With one,
+        // it left as it was served. The shelf is checked again here: a count
+        // since the line was added may have left too little.
+        const leaving = billed.filter((l) => !l.served);
+        const onHand = state.stock[order.branchId] ?? {};
+        const short = shortLine(leaving, onHand);
+        if (short) return { ok: false, error: short };
+
+        const now = Date.now();
+        const actor = actorId();
+        const taken = deduct(onHand, leaving, order, now, actor);
+        const paying = new Set(leaving.map((l) => l.lineNo));
+        const { invoiceNo, seq } = numberFor(state, order);
 
         set((s) => ({
           ...s,
           activeOrderId: s.activeOrderId === orderId ? null : s.activeOrderId,
+          stock: { ...s.stock, [order.branchId]: taken.onHand },
+          stockMoves: [...taken.moves, ...s.stockMoves],
+          invoiceSeq: seq,
           orders: s.orders.map((o) =>
             o.id !== orderId
               ? o
               : {
                   ...o,
+                  invoiceNo,
                   status: 'closed' as const,
-                  closedAt: Date.now(),
-                  paidBy: actorId(),
+                  closedAt: now,
+                  paidBy: actor,
+                  servedBy: paying.size > 0 ? (o.servedBy ?? actor) : o.servedBy,
+                  // Marked served so the slip and a later cancel treat them
+                  // like any line that left the shelf.
+                  lines: o.lines.map((l) =>
+                    paying.has(l.lineNo) ? { ...l, served: true, servedAt: now } : l,
+                  ),
                   // Frozen. Later settings changes never rewrite this receipt.
                   grossCents: bill.gross,
                   vatableCents: bill.vatableSale,
@@ -727,12 +916,12 @@ export const usePos = create<PosState>()(
           audit: log(
             s.audit,
             'order.close',
-            `Closed ${order.invoiceNo} — ${(bill.amountDue / 100).toFixed(2)}`,
+            `Closed ${invoiceNo} — ${(bill.amountDue / 100).toFixed(2)}`,
             'success',
             order.branchId,
           ),
         }));
-        return true;
+        return { ok: true };
       },
 
       /**
@@ -767,17 +956,27 @@ export const usePos = create<PosState>()(
             });
           }
 
+          // An open order whose lines were served has stock moves pointing at
+          // it, so it is numbered like any sale. One that never served
+          // anything stays unnumbered.
+          const numbered =
+            order.invoiceNo === null && order.lines.some((l) => l.served)
+              ? numberFor(state, order)
+              : { invoiceNo: order.invoiceNo, seq: state.invoiceSeq };
+
           return {
             ...state,
             activeOrderId:
               state.activeOrderId === orderId ? null : state.activeOrderId,
             stock: { ...state.stock, [order.branchId]: branchStock },
             stockMoves: [...moves, ...state.stockMoves],
+            invoiceSeq: numbered.seq,
             orders: state.orders.map((o) =>
               o.id !== orderId
                 ? o
                 : {
                     ...o,
+                    invoiceNo: numbered.invoiceNo,
                     status: 'voided' as const,
                     voidedReason: reason,
                     voidedAt: Date.now(),
@@ -787,7 +986,7 @@ export const usePos = create<PosState>()(
             audit: log(
               state.audit,
               'order.void',
-              `Voided ${order.invoiceNo} — ${reason}`,
+              `Voided ${numbered.invoiceNo ?? order.label} — ${reason}`,
               'danger',
               order.branchId,
             ),
@@ -800,8 +999,11 @@ export const usePos = create<PosState>()(
       adjustStock: (productId, delta, reason, note, branchId) => {
         const refused = guard('inventory.manage');
         if (refused) return refused;
+        const bid = branchId ?? get().activeBranchId;
+        if ((get().stock[bid]?.[productId] ?? 0) + delta < 0) {
+          return { ok: false, error: "Stock can't go below zero." };
+        }
         set((state) => {
-          const bid = branchId ?? state.activeBranchId;
           const branchStock = { ...(state.stock[bid] ?? {}) };
           branchStock[productId] = ((branchStock[productId] ?? 0) + delta) as Qty;
           const move: StockMove = {
@@ -1799,70 +2001,43 @@ function resetNegativeStock(
 }
 
 /**
- * Serving deducts stock. Overselling is recorded as a negative balance and
- * surfaced in Inventory — v6 used Math.max(0, ...) which silently absorbed
- * the discrepancy and made shrinkage untraceable.
+ * Serving deducts stock. Stock never goes below zero: if the shelf can't cover
+ * every line being served, none of them is, and the refusal names the line.
  */
 type SetState = (fn: (state: PosState) => PosState) => void;
 
-function serveLines(set: SetState, order: Order, lines: OrderLine[]) {
+function serveLines(
+  set: SetState,
+  get: () => PosState,
+  order: Order,
+  lines: OrderLine[],
+): UserResult {
+  const onHand = get().stock[order.branchId] ?? {};
+  const short = shortLine(lines, onHand);
+  if (short) return { ok: false, error: short };
+
   const now = Date.now();
   const actor = actorId();
-  set((state) => {
-    const branchStock = { ...(state.stock[order.branchId] ?? {}) };
-    const moves: StockMove[] = [];
-    const oversold: string[] = [];
-
-    for (const line of lines) {
-      if (line.kind !== 'stock') continue;
-      const before = branchStock[line.productId] ?? 0;
-      const after = (before - line.qty) as Qty;
-      branchStock[line.productId] = after;
-      if (after < 0) oversold.push(`${line.name} (${formatQty(after)})`);
-      moves.push({
-        id: uuidv7(),
-        branchId: order.branchId,
-        productId: line.productId,
-        delta: -line.qty as Qty,
-        reason: 'sale',
-        refOrderId: order.id,
-        note: null,
-        at: now,
-        actorUserId: actor,
-      });
-    }
-
-    const served = new Set(lines.map((l) => l.lineNo));
-    let audit = state.audit;
-    if (oversold.length > 0) {
-      audit = log(
-        audit,
-        'stock.oversold',
-        `Negative stock after ${order.invoiceNo}: ${oversold.join(', ')}`,
-        'danger',
-        order.branchId,
-      );
-    }
-
-    return {
-      ...state,
-      stock: { ...state.stock, [order.branchId]: branchStock },
-      stockMoves: [...moves, ...state.stockMoves],
-      audit,
-      orders: state.orders.map((o) =>
-        o.id !== order.id
-          ? o
-          : {
-              ...o,
-              // First waiter to put food on the table owns the service.
-              servedBy: o.servedBy ?? actor,
-              lines: o.lines.map((l) =>
-                served.has(l.lineNo) ? { ...l, served: true, servedAt: now } : l,
-              ),
-            },
-      ),
-    };
-  });
+  const taken = deduct(onHand, lines, order, now, actor);
+  const served = new Set(lines.map((l) => l.lineNo));
+  set((state) => ({
+    ...state,
+    stock: { ...state.stock, [order.branchId]: taken.onHand },
+    stockMoves: [...taken.moves, ...state.stockMoves],
+    orders: state.orders.map((o) =>
+      o.id !== order.id
+        ? o
+        : {
+            ...o,
+            // First waiter to put food on the table owns the service.
+            servedBy: o.servedBy ?? actor,
+            lines: o.lines.map((l) =>
+              served.has(l.lineNo) ? { ...l, served: true, servedAt: now } : l,
+            ),
+          },
+    ),
+  }));
+  return { ok: true };
 }
 
 /** Set someone's PIN. Unguarded: `setUserPin` checks users.manage first, and
@@ -1925,8 +2100,7 @@ export function useBill(orderId: string | null) {
   const settings = usePos((s) => s.settings);
   if (!order) return null;
 
-  const served = order.lines.filter((l) => l.served && !l.voided);
-  const gross = served.reduce<Centavos>(
+  const gross = billedLines(order, settings.features.serveStep).reduce<Centavos>(
     (sum, l) => addC(sum, lineTotal(l.unitCents, l.qty)),
     cents(0),
   );

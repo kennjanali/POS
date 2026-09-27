@@ -20,7 +20,7 @@ import {
   type Order,
   type TenderMethod,
 } from '@/lib/types';
-import { usePos, type UserResult } from '@/store/usePos';
+import { billedLines, usePos, type UserResult } from '@/store/usePos';
 
 const DISCOUNTS = [
   { kind: 'none', label: 'No discount' },
@@ -46,13 +46,15 @@ export function Checkout({ order, open, onClose, onPaid }: CheckoutProps) {
   const [amountInput, setAmountInput] = useState('');
   const [refNo, setRefNo] = useState('');
 
-  const served = order.lines.filter((l) => l.served && !l.voided);
-  // Only served lines are billed. Anything still pending when the sale closes
-  // leaves the kitchen unpaid for and never comes off stock.
-  const pending = order.lines.filter((l) => !l.served && !l.voided);
+  const { serveStep } = settings.features;
+  const billed = billedLines(order, serveStep);
+  // With a serve step only served lines are billed. Anything still pending
+  // when the sale closes leaves the kitchen unpaid for and never comes off
+  // stock. Without one, every line is billed.
+  const pending = serveStep ? order.lines.filter((l) => !l.served && !l.voided) : [];
 
   const bill = useMemo(() => {
-    const gross = served.reduce<Centavos>(
+    const gross = billed.reduce<Centavos>(
       (sum, l) => addC(sum, lineTotal(l.unitCents, l.qty)),
       cents(0),
     );
@@ -141,11 +143,12 @@ export function Checkout({ order, open, onClose, onPaid }: CheckoutProps) {
       );
       return;
     }
-    if (closeOrder(order.id)) {
+    const result = closeOrder(order.id);
+    if (result.ok) {
       onPaid(order.id);
       onClose();
     } else {
-      toast('Payment does not cover the amount due', 'danger');
+      toast(result.error, 'danger');
     }
   }
 
@@ -162,7 +165,7 @@ export function Checkout({ order, open, onClose, onPaid }: CheckoutProps) {
           size="lg"
           fullWidth
           variant="success"
-          disabled={balance > 0 || overRecorded || served.length === 0}
+          disabled={balance > 0 || overRecorded || billed.length === 0}
           onClick={finish}
         >
           {balance > 0
@@ -190,7 +193,7 @@ export function Checkout({ order, open, onClose, onPaid }: CheckoutProps) {
           )}
 
           <ul className="mb-3 flex list-none flex-col gap-1 p-0">
-            {served.map((line) => (
+            {billed.map((line) => (
               <li
                 key={line.lineNo}
                 className="flex items-baseline justify-between gap-3 text-[12.5px]"

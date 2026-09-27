@@ -59,8 +59,11 @@ const S = () => usePos.getState();
 const setTraining = (on) =>
   usePos.setState((s) => ({ settings: { ...s.settings, trainingMode: on } }));
 
-/** Open an order, put one line of `units` on it, serve it. Returns id and the bill due. */
+/** Stock `units` more of the product, open an order, put one line of `units`
+ *  on it, serve it. Returns id and the bill due. The restock keeps the
+ *  no-negative-stock rule from refusing a sale these checks are not about. */
 function ringUp(product, units = 1) {
+  S().adjustStock(product.id, qty(units), 'restock');
   const id = S().openOrder(`T${Math.random().toString(36).slice(2, 7)}`, 'dine-in');
   S().addLine(id, product.id, qty(units));
   S().serveAll(id);
@@ -134,7 +137,9 @@ console.log('\n— B3: clearing sales data —');
   check('nothing was removed', S().orders.length === before);
 
   setTraining(true);
-  ringUp(product);
+  const sold = ringUp(product);
+  S().addTender(sold.id, { method: 'cash', amountCents: sold.due, tenderedCents: sold.due, changeCents: 0, refNo: null });
+  S().closeOrder(sold.id);
   const seqBefore = { ...S().invoiceSeq };
   const auditBefore = S().audit.length;
   const ok = S().resetAll();
@@ -246,7 +251,7 @@ console.log('\n— H1: payment must match the bill it was taken against —');
       changeCents: 0,
       refNo: null,
     });
-    check('exact cash closes', S().closeOrder(id) === true, `due ${due}`);
+    check('exact cash closes', S().closeOrder(id).ok === true, `due ${due}`);
   }
   {
     const { id, due } = ringUp(product);
@@ -257,7 +262,7 @@ console.log('\n— H1: payment must match the bill it was taken against —');
       changeCents: 50000,
       refNo: null,
     });
-    check('cash overpaid with change closes', S().closeOrder(id) === true);
+    check('cash overpaid with change closes', S().closeOrder(id).ok === true);
   }
   {
     const { id, due } = ringUp(product);
@@ -268,7 +273,7 @@ console.log('\n— H1: payment must match the bill it was taken against —');
       changeCents: null,
       refNo: 'X1',
     });
-    check('underpayment is refused', S().closeOrder(id) === false);
+    check('underpayment is refused', S().closeOrder(id).ok === false);
   }
   {
     // The audit's H1: pay in full, then apply a discount.
@@ -281,7 +286,7 @@ console.log('\n— H1: payment must match the bill it was taken against —');
       refNo: 'X2',
     });
     S().setOwnerDiscountPercent(id, 20);
-    check('e-wallet over-recorded by a later discount is refused', S().closeOrder(id) === false);
+    check('e-wallet over-recorded by a later discount is refused', S().closeOrder(id).ok === false);
     check('the order stays open for correction', S().order(id).status === 'open');
   }
   {
@@ -295,7 +300,7 @@ console.log('\n— H1: payment must match the bill it was taken against —');
       refNo: null,
     });
     S().setOwnerDiscountPercent(id, 20);
-    check('cash with stale change is refused', S().closeOrder(id) === false);
+    check('cash with stale change is refused', S().closeOrder(id).ok === false);
 
     // Remove it, take the right amount, and the sale settles.
     const stale = S().order(id).tenders[0];
@@ -311,7 +316,7 @@ console.log('\n— H1: payment must match the bill it was taken against —');
       changeCents: 0,
       refNo: null,
     });
-    check('re-recording the correct amount settles it', S().closeOrder(id) === true);
+    check('re-recording the correct amount settles it', S().closeOrder(id).ok === true);
     check(
       'the frozen total is the discounted one',
       S().order(id).netCents === after.amountDue,
@@ -788,14 +793,16 @@ console.log('— Demo data: never two branches on one BIR code —');
   check('no invoice number is issued twice', clashes === 0, `clashes: ${clashes}`);
 
   // And the next number the till hands out must not land inside a range
-  // another branch already used.
+  // another branch already used. Numbers are given at payment.
   const before = new Set(S().orders.map((o) => o.invoiceNo));
   S().setActiveBranch('BR002');
-  const id = S().openOrder('Collision probe', 'dine-in');
+  const { id, due } = ringUp(product);
+  S().addTender(id, { method: 'cash', amountCents: due, tenderedCents: due, changeCents: 0, refNo: null });
+  S().closeOrder(id);
   const fresh = S().order(id).invoiceNo;
   check(
     'the next invoice number is one nobody has used',
-    !before.has(fresh),
+    fresh !== null && !before.has(fresh),
     `issued ${fresh}`,
   );
   check('the demo load reported what it actually wrote', written === S().orders.length - 1,

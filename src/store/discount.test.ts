@@ -1,13 +1,14 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { cents } from '@/lib/money';
+import { qty } from '@/lib/qty';
 import type { SaleDiscount } from '@/lib/types';
 import { ownerShop, resetStore } from '@/test/store';
 import { usePos } from './usePos';
 
 const S = () => usePos.getState();
 
-/** Open a sale with one ₱500 line, served. */
+/** Open a sale with one ₱500 line, in stock and served. */
 function ringUp500(): string {
   S().upsertProduct({
     id: 'p500',
@@ -22,6 +23,7 @@ function ringUp500(): string {
     active: true,
     reorderLevel: null,
   });
+  S().adjustStock('p500', qty(1), 'opening');
   const id = S().openOrder('T1', 'dine-in');
   S().addLine(id, 'p500');
   S().serveAll(id);
@@ -51,7 +53,7 @@ describe('sale discount', () => {
       changeCents: cents(0),
       refNo: null,
     });
-    expect(S().closeOrder(id)).toBe(true);
+    expect(S().closeOrder(id)).toEqual({ ok: true });
     expect(S().order(id)?.discountCents).toBe(5000);
     expect(S().order(id)?.netCents).toBe(45000);
   });

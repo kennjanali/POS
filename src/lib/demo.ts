@@ -9,7 +9,8 @@
  *    function `closeOrder` uses. If the tax engine changes, this data changes
  *    with it instead of drifting into a second, wrong source of truth.
  *  - Invoice numbers are generated per branch in chronological order, so the
- *    per-branch sequence stays gapless the way BIR requires.
+ *    per-branch sequence stays gapless the way BIR requires. The live tables
+ *    are still open, so like any open order they have no number yet.
  */
 
 import { businessDate } from './format';
@@ -242,7 +243,7 @@ export function buildDemoData(options: DemoOptions): DemoDataset {
 
       for (let i = 0; i < count; i++) {
         const openedAt = sellFrom + Math.floor(((i + rand()) / count) * (end - sellFrom));
-        const order = newOrder(rand, branch, invoiceSeq, openedAt, sellable);
+        const order = newOrder(rand, branch, issueNo(branch, invoiceSeq), openedAt, sellable);
         settleOrder(rand, order, settings);
         // A handful get voided after the fact, so that path has data too.
         if (rand() < 0.015) {
@@ -258,13 +259,12 @@ export function buildDemoData(options: DemoOptions): DemoDataset {
       if (isToday) {
         const live = 3 + Math.floor(rand() * 2);
         for (let i = 0; i < live; i++) {
-          // Oldest first, so the invoice sequence still tracks the clock.
-          // Stops at 10 minutes ago, not 4: leaveOpen marks the first line
+          // Oldest first. Stops at 10 minutes ago, not 4: leaveOpen marks the first line
           // served 6 minutes after opening, and a table served in the future
           // is not a thing.
           const minutesAgo = 40 - Math.round((i * 30) / Math.max(1, live - 1));
           const openedAt = Math.max(dayStart, now - minutesAgo * 60_000);
-          const order = newOrder(rand, branch, invoiceSeq, openedAt, sellable);
+          const order = newOrder(rand, branch, null, openedAt, sellable);
           leaveOpen(rand, order);
           record(order);
         }
@@ -361,24 +361,32 @@ export function buildDemoData(options: DemoOptions): DemoDataset {
   return { branches, orders, stock, stockMoves, invoiceSeq };
 }
 
-/** A fresh order with the branch's next invoice number. Mutates `invoiceSeq`. */
+/** The branch's next invoice number. Mutates `invoiceSeq`. */
+function issueNo(branch: Branch, invoiceSeq: Record<string, number>): string {
+  const seq = (invoiceSeq[branch.id] ?? 0) + 1;
+  invoiceSeq[branch.id] = seq;
+  return `${branch.branchCode}-${String(seq).padStart(7, '0')}`;
+}
+
 function newOrder(
   rand: () => number,
   branch: Branch,
-  invoiceSeq: Record<string, number>,
+  invoiceNo: string | null,
   openedAt: number,
   products: Product[],
 ): Order {
-  const seq = (invoiceSeq[branch.id] ?? 0) + 1;
-  invoiceSeq[branch.id] = seq;
   const type = weighted(rand, ORDER_TYPES);
   return {
     id: uuidv7(),
-    invoiceNo: `${branch.branchCode}-${String(seq).padStart(7, '0')}`,
+    invoiceNo,
     branchId: branch.id,
     label: labelFor(rand, type),
     type,
     status: 'closed',
+    customerName: null,
+    customerPhone: null,
+    vehiclePlate: null,
+    fromQuoteId: null,
     openedAt,
     closedAt: null,
     lines: buildLines(rand, products),

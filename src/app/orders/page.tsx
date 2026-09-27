@@ -59,7 +59,7 @@ export default function OrdersPage() {
         (o) =>
           !q ||
           o.label.toLowerCase().includes(q) ||
-          o.invoiceNo.toLowerCase().includes(q),
+          (o.invoiceNo ?? '').toLowerCase().includes(q),
       )
       .sort((a, b) => (b.closedAt ?? b.openedAt) - (a.closedAt ?? a.openedAt));
   }, [orders, filter, branchFilter, date, query]);
@@ -209,7 +209,7 @@ export default function OrdersPage() {
                     order.status === 'voided' && 'text-ink-3 line-through',
                   )}
                 >
-                  <td className="py-2 pr-3 font-mono text-[11.5px]">{order.invoiceNo}</td>
+                  <td className="py-2 pr-3 font-mono text-[11.5px]">{order.invoiceNo ?? '—'}</td>
                   <td className="py-2 pr-3 font-semibold">{order.label}</td>
                   {branches.length > 1 && (
                     <td className="py-2 pr-3 text-ink-2">
@@ -255,7 +255,7 @@ export default function OrdersPage() {
                     {order.status === 'closed' && (
                       <button
                         type="button"
-                        aria-label={`Order slip for ${order.invoiceNo}`}
+                        aria-label={`Order slip for ${order.invoiceNo ?? order.label}`}
                         onClick={() => setReceiptFor(order.id)}
                         className="grid size-10 place-items-center rounded text-ink-3 hover:bg-raised hover:text-ink"
                       >
@@ -265,7 +265,7 @@ export default function OrdersPage() {
                     {canVoid && order.status !== 'voided' && (
                       <button
                         type="button"
-                        aria-label={`Void ${order.invoiceNo}`}
+                        aria-label={`Void ${order.invoiceNo ?? order.label}`}
                         onClick={() => setVoidTarget(order.id)}
                         className="grid size-10 place-items-center rounded text-ink-3 hover:bg-bad/10 hover:text-bad"
                       >

@@ -139,12 +139,20 @@ export type SaleDiscount =
 
 export interface Order {
   id: string;
-  /** The order number: gapless and sequential per branch. Named from the v7 data model. */
-  invoiceNo: string;
+  /** The order number: gapless and sequential per branch, given when the sale
+   *  is paid (or cancelled after stock moved). Null while open. Orders opened
+   *  by earlier builds were numbered at open and keep that number. Named from the v7
+   *  data model. */
+  invoiceNo: string | null;
   branchId: string;
   label: string;
   type: OrderType;
   status: OrderStatus;
+  customerName: string | null;
+  customerPhone: string | null;
+  vehiclePlate: string | null;
+  /** The quotation this sale was made from. */
+  fromQuoteId: string | null;
   openedAt: number;
   closedAt: number | null;
 
