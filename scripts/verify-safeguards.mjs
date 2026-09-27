@@ -34,7 +34,7 @@ function emit(name, file) {
   writeFileSync(join(dir, `${name}.js`), js);
 }
 
-for (const n of ['brand', 'money', 'tax', 'format', 'id', 'seed', 'demo', 'crypto', 'idb', 'storage', 'printer', 'receipt', 'device', 'license', 'permissions', 'types', 'archive', 'files', 'backup', 'closes', 'cloudBackup'])
+for (const n of ['brand', 'money', 'tax', 'format', 'id', 'seed', 'migrate', 'demo', 'crypto', 'idb', 'storage', 'printer', 'receipt', 'device', 'license', 'permissions', 'types', 'archive', 'files', 'backup', 'closes', 'cloudBackup'])
   emit(n, `src/lib/${n}.ts`);
 for (const n of ['useAuth', 'usePos']) emit(n, `src/store/${n}.ts`);
 
@@ -274,7 +274,7 @@ console.log('\n— H1: payment must match the bill it was taken against —');
       changeCents: null,
       refNo: 'X2',
     });
-    S().setDiscount(id, { discountKind: 'custom', customPercent: 20 });
+    S().setOwnerDiscountPercent(id, 20);
     check('e-wallet over-recorded by a later discount is refused', S().closeOrder(id) === false);
     check('the order stays open for correction', S().order(id).status === 'open');
   }
@@ -288,7 +288,7 @@ console.log('\n— H1: payment must match the bill it was taken against —');
       changeCents: 0,
       refNo: null,
     });
-    S().setDiscount(id, { discountKind: 'custom', customPercent: 20 });
+    S().setOwnerDiscountPercent(id, 20);
     check('cash with stale change is refused', S().closeOrder(id) === false);
 
     // Remove it, take the right amount, and the sale settles.
@@ -369,6 +369,12 @@ console.log('\n— Migration: a backup from the KRAMGEN v7 build still restores 
   delete v7.installId;
   delete v7.appVersion;
   delete v7.recovery;
+  // v7 orders carried discountKind/customPercent where v8 has `discount`.
+  v7.version = 7;
+  v7.orders = v7.orders.map(({ discount, ...o }) =>
+    discount.kind === 'owner'
+      ? { ...o, discountKind: 'custom', customPercent: discount.percent }
+      : { ...o, discountKind: 'none', customPercent: 20 });
   const before = { orders: v7.orders.length, seq: JSON.stringify(v7.invoiceSeq), users: v7.users.length };
   const keptRecovery = S().recovery;
   const keptInstall = S().installId;
@@ -379,6 +385,9 @@ console.log('\n— Migration: a backup from the KRAMGEN v7 build still restores 
   check('the invoice sequence comes back', JSON.stringify(S().invoiceSeq) === before.seq);
   check('the staff come back', S().users.length === before.users);
   check('the closed sale keeps its frozen total', S().order(id)?.netCents === due);
+  check('every sale comes up to v8',
+    S().orders.every((o) => o.discount && !('discountKind' in o)) &&
+      S().order(id)?.discount.kind === 'none');
   check('the install keeps its recovery code', S().recovery === keptRecovery);
   check('and its identity', S().installId === keptInstall);
 }
@@ -521,8 +530,7 @@ console.log('\n— Monthly archive: nothing leaves without a verified file —')
     tenders: status === 'closed'
       ? [{ id: 't' + id, method: 'cash', amountCents: net, tenderedCents: net,
            changeCents: 0, refNo: null, takenAt: at }] : [],
-    discountKind: 'none', customPercent: 20, diners: 1, eligibleDiners: 1,
-    discountIdNo: null, discountIdName: null,
+    discount: { kind: 'none' },
     grossCents: net, vatableCents: 0, vatExemptCents: 0, vatCents: 0,
     discountCents: 0, netCents: status === 'closed' ? net : 0,
     voidedReason: null, voidedAt: status === 'voided' ? at : null,

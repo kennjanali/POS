@@ -14,13 +14,12 @@
 
 import { businessDate } from './format';
 import { uuidv7 } from './id';
+import { discountRequest } from './migrate';
 import { type Centavos, addC, cents, mulQty } from './money';
 import { BRANCH_COLORS, OPENING_STOCK, QUICK_LABELS } from './seed';
 import { computeBill } from './tax';
-import { orderDiscountRequest } from './types';
 import type {
   Branch,
-  DiscountKind,
   Order,
   OrderLine,
   OrderType,
@@ -105,11 +104,9 @@ const ORDER_TYPES: readonly [OrderType, number][] = [
   ['panda', 10],
 ];
 
-const DISCOUNTS: readonly [DiscountKind, number][] = [
+const DISCOUNTS: readonly ['none' | 'owner', number][] = [
   ['none', 85],
-  ['senior', 7],
-  ['pwd', 4],
-  ['custom', 4],
+  ['owner', 4],
 ];
 
 const TENDERS: readonly [TenderMethod, number][] = [
@@ -384,12 +381,7 @@ function newOrder(
     closedAt: null,
     lines: buildLines(rand, products),
     tenders: [],
-    discountKind: 'none',
-    customPercent: 20,
-    diners: 1,
-    eligibleDiners: 1,
-    discountIdNo: null,
-    discountIdName: null,
+    discount: { kind: 'none' },
     grossCents: cents(0),
     vatableCents: cents(0),
     vatExemptCents: cents(0),
@@ -461,27 +453,20 @@ function settleOrder(rand: () => number, order: Order, settings: Settings) {
   const servedAt = order.openedAt + (4 + Math.floor(rand() * 9)) * 60_000;
   order.lines = order.lines.map((line) => ({ ...line, servedAt }));
 
-  const kind = weighted(rand, DISCOUNTS);
-  order.discountKind = kind;
-  if (kind === 'custom') {
-    order.customPercent = pick(rand, [5, 10, 15, 20]);
-  }
-  if (kind === 'senior' || kind === 'pwd') {
-    // A shared bill some of the time — the RR 7-2010 path deserves coverage.
-    const diners = rand() < 0.35 ? 2 + Math.floor(rand() * 3) : 1;
-    order.diners = diners;
-    order.eligibleDiners = diners > 1 ? 1 + Math.floor(rand() * 2) : 1;
-    order.discountIdNo = `${kind === 'senior' ? 'SC' : 'PWD'}-${
-      100_000 + Math.floor(rand() * 899_999)
-    }`;
-    order.discountIdName = pick(rand, WALK_IN_NAMES);
+  if (weighted(rand, DISCOUNTS) === 'owner') {
+    order.discount = {
+      kind: 'owner',
+      percent: pick(rand, [5, 10, 15, 20]),
+      fixedCents: null,
+      by: null,
+    };
   }
 
   const gross = order.lines.reduce<Centavos>(
     (sum, line) => addC(sum, mulQty(line.unitCents, line.qty)),
     cents(0),
   );
-  const bill = computeBill(gross, settings, orderDiscountRequest(order));
+  const bill = computeBill(gross, settings, discountRequest(order.discount));
 
   order.grossCents = bill.gross;
   order.vatableCents = bill.vatableSale;

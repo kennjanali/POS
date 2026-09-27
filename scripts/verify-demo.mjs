@@ -22,14 +22,14 @@ function emit(name, file) {
   writeFileSync(join(dir, `${name}.js`), js);
 }
 
-for (const name of ['money', 'tax', 'format', 'id', 'seed', 'types', 'demo']) {
+for (const name of ['money', 'tax', 'format', 'id', 'seed', 'types', 'migrate', 'demo']) {
   emit(name, `src/lib/${name}.ts`);
 }
 
 const load = (name) => import(pathToFileURL(join(dir, `${name}.js`)).href);
 const { buildDemoData } = await load('demo');
 const { computeBill } = await load('tax');
-const { orderDiscountRequest } = await load('types');
+const { discountRequest } = await load('migrate');
 const { DEFAULT_BRANCH, SAMPLE_MENU, DEFAULT_SETTINGS, OPENING_STOCK } =
   await load('seed');
 const { businessDate } = await load('format');
@@ -91,8 +91,8 @@ for (const settings of [
     if (order.status === 'open') continue;
     const served = order.lines.filter((l) => l.served && !l.voided);
     const gross = served.reduce((sum, l) => sum + l.unitCents * l.qty, 0);
-    const bill = computeBill(gross, settings, orderDiscountRequest(order));
-    kinds.add(order.discountKind);
+    const bill = computeBill(gross, settings, discountRequest(order.discount));
+    kinds.add(order.discount.kind);
     if (
       order.grossCents !== bill.gross ||
       order.netCents !== bill.amountDue ||
@@ -110,8 +110,8 @@ for (const settings of [
   check('every frozen total matches computeBill', mismatch === 0, `${mismatch} mismatched`);
   check('every settled order is paid in full', underpaid === 0, `${underpaid} underpaid`);
   check(
-    'all four discount kinds represented',
-    kinds.size === 4,
+    'sales with and without an owner discount',
+    kinds.size === 2 && kinds.has('none') && kinds.has('owner'),
     [...kinds].sort().join(', '),
   );
   console.log(`      net sales over the month: ${(netTotal / 100).toFixed(2)}`);

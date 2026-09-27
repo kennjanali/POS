@@ -72,12 +72,8 @@ export function renderReceipt(order: Order, settings: Settings, width: number = 
     out.push(row(`${settings.vatLabel}-exempt sale`, amount(order.vatExemptCents)));
   }
   if (order.discountCents > 0) {
-    const label =
-      order.discountKind === 'senior'
-        ? 'Senior discount 20%'
-        : order.discountKind === 'pwd'
-          ? 'PWD discount 20%'
-          : 'Discount';
+    const d = order.discount;
+    const label = d.kind === 'promo' ? `Promo ${d.code} (${d.percent}%)` : 'Discount';
     out.push(row(label, `-${amount(order.discountCents)}`));
   }
   if (settings.vatRegistered) {
@@ -98,13 +94,6 @@ export function renderReceipt(order: Order, settings: Settings, width: number = 
     if (tender.changeCents && tender.changeCents > 0) {
       out.push(row('  Change', amount(tender.changeCents)));
     }
-  }
-
-  if (order.discountIdNo) {
-    out.push(rule);
-    out.push(row('ID No.', order.discountIdNo));
-    if (order.discountIdName) out.push(row('Name', order.discountIdName));
-    out.push(row('Signature', '____________'));
   }
 
   out.push(rule);

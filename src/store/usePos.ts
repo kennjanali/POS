@@ -32,19 +32,19 @@ import {
 } from '@/lib/archive';
 import { isLastActiveSuperadmin } from '@/lib/permissions';
 import { type Centavos, addC, cents, mulQty } from '@/lib/money';
+import { discountRequest, migrateBlobV7, migrateOrderV7, migrateSnapshot } from '@/lib/migrate';
 import { computeBill } from '@/lib/tax';
 import { DEFAULT_BRANCH, DEFAULT_SETTINGS, OPENING_STOCK, SAMPLE_MENU } from '@/lib/seed';
 import { actorId } from './useAuth';
-import { orderDiscountRequest } from '@/lib/types';
 import type {
   AuditEntry,
   Branch,
   DailyClose,
-  DiscountKind,
   Order,
   OrderLine,
   OrderType,
   Product,
+  SaleDiscount,
   Settings,
   StockMove,
   StockReason,
@@ -127,20 +127,9 @@ interface PosState {
   serveAll: (orderId: string) => void;
   serveLine: (orderId: string, lineNo: number) => void;
 
-  setDiscount: (
-    orderId: string,
-    patch: Partial<
-      Pick<
-        Order,
-        | 'discountKind'
-        | 'customPercent'
-        | 'diners'
-        | 'eligibleDiners'
-        | 'discountIdNo'
-        | 'discountIdName'
-      >
-    >,
-  ) => void;
+  clearDiscount: (orderId: string) => UserResult;
+  /** Temporary, for Checkout's "Discount %" until Task 12's owner and promo setters. */
+  setOwnerDiscountPercent: (orderId: string, percent: number) => UserResult;
 
   addTender: (
     orderId: string,
@@ -311,12 +300,7 @@ function blankOrder(
     closedAt: null,
     lines: [],
     tenders: [],
-    discountKind: 'none',
-    customPercent: 20,
-    diners: 1,
-    eligibleDiners: 1,
-    discountIdNo: null,
-    discountIdName: null,
+    discount: { kind: 'none' },
     grossCents: cents(0),
     vatableCents: cents(0),
     vatExemptCents: cents(0),
@@ -342,7 +326,7 @@ async function pinTaken(users: User[], pin: string, exceptId?: string): Promise<
   return null;
 }
 
-const SNAPSHOT_VERSION = 7;
+const SNAPSHOT_VERSION = 8;
 
 /**
  * Why a restore was refused, or null if the file is usable. Restoring replaces
@@ -353,10 +337,10 @@ function describeBadSnapshot(snapshot: DataSnapshot): string | null {
   if (!snapshot || typeof snapshot !== 'object') {
     return `That file is not a ${PRODUCT_NAME} backup.`;
   }
-  if (snapshot.version !== SNAPSHOT_VERSION) {
+  if (snapshot.version !== 7 && snapshot.version !== SNAPSHOT_VERSION) {
     return (
       `That backup is version ${snapshot.version ?? 'unknown'}; this app reads ` +
-      `version ${SNAPSHOT_VERSION}. Convert it first — see scripts/migrate-v6.mjs.`
+      `versions 7 and ${SNAPSHOT_VERSION}.`
     );
   }
   if (!Array.isArray(snapshot.products) || snapshot.products.length === 0) {
@@ -603,13 +587,19 @@ export const usePos = create<PosState>()(
         serveLines(set, order, pending);
       },
 
-      setDiscount: (orderId, patch) =>
-        set((state) => ({
-          ...state,
-          orders: state.orders.map((o) =>
-            o.id === orderId && o.status === 'open' ? { ...o, ...patch } : o,
-          ),
-        })),
+      clearDiscount: (orderId) => setOpenDiscount(set, get, orderId, { kind: 'none' }),
+
+      setOwnerDiscountPercent: (orderId, percent) => {
+        if (!Number.isFinite(percent) || percent < 0 || percent > 100) {
+          return { ok: false, error: 'Enter a percent from 0 to 100.' };
+        }
+        return setOpenDiscount(set, get, orderId, {
+          kind: 'owner',
+          percent,
+          fixedCents: null,
+          by: actorId(),
+        });
+      },
 
       addTender: (orderId, tender) =>
         set((state) => ({
@@ -649,7 +639,7 @@ export const usePos = create<PosState>()(
           (sum, l) => addC(sum, mulQty(l.unitCents, l.qty)),
           cents(0),
         );
-        const bill = computeBill(gross, state.settings, orderDiscountRequest(order));
+        const bill = computeBill(gross, state.settings, discountRequest(order.discount));
 
         // Money kept has to equal the bill exactly. Checking the tender total
         // alone was not enough: applying a discount or voiding a line *after*
@@ -1287,7 +1277,7 @@ export const usePos = create<PosState>()(
       exportSnapshot: () => {
         const s = get();
         return {
-          version: 7,
+          version: SNAPSHOT_VERSION,
           exportedAt: new Date().toISOString(),
           installId: s.installId,
           appVersion: APP_VERSION,
@@ -1306,12 +1296,13 @@ export const usePos = create<PosState>()(
         };
       },
 
-      importSnapshot: (snapshot) => {
+      importSnapshot: (file) => {
         // A restore replaces the books wholesale, so the file has to earn it.
         // Checking only that `products` was an array let a truncated or
         // hand-edited export through, and it reported success either way.
-        const problem = describeBadSnapshot(snapshot);
+        const problem = describeBadSnapshot(file);
         if (problem) return { ok: false, error: problem };
+        const snapshot = migrateSnapshot(file);
 
         set((state) => {
           const settings = { ...state.settings, ...snapshot.settings };
@@ -1465,11 +1456,11 @@ export const usePos = create<PosState>()(
     {
       // Frozen, like DB_NAME in idb.ts: a new name is an empty till.
       name: 'pos034-v7',
-      // The one place stored data changes shape. Bump `version` only together
-      // with a step in `migrate`: without one, zustand discards stored state
+      // Stored data changes shape only in lib/migrate.ts. Bump `version` only
+      // together with a step there: without one, zustand discards stored state
       // whose version differs — an empty till after an app update.
-      version: 7,
-      migrate: (persisted) => persisted as PosState,
+      version: 8,
+      migrate: (persisted) => migrateBlobV7(persisted) as PosState,
       storage: createJSONStorage(() => kvStorage),
       // `orders` and `stockMoves` are deliberately absent: they go to their own
       // row stores, written one record at a time. Everything listed here is
@@ -1602,7 +1593,10 @@ async function loadRows(rehydrated: PosState | undefined): Promise<void> {
     const legacy = rehydrated as unknown as
       | { orders?: Order[]; stockMoves?: StockMove[] }
       | undefined;
-    const orders = rows.length > 0 ? rows : (legacy?.orders ?? []);
+    const loaded = rows.length > 0 ? rows : (legacy?.orders ?? []);
+    // v7 orders carry no `discount`; they come up to v8 on the way in.
+    const orders = loaded.map((o) => ('discount' in o ? o : migrateOrderV7(o)));
+    const upgraded = orders.filter((o, i) => o !== loaded[i]);
     const stockMoves = moves.length > 0 ? moves : (legacy?.stockMoves ?? []);
 
     for (const order of orders) writtenOrders.set(order.id, order);
@@ -1615,9 +1609,12 @@ async function loadRows(rehydrated: PosState | undefined): Promise<void> {
     usePos.setState({ orders, stockMoves, closes, hydrated: true });
     void usePos.getState().checkLicense();
 
-    // Migrating from the blob: put the rows where they now belong.
+    // Migrating from the blob: put the rows where they now belong. Rows that
+    // were upgraded on the way in are written back as v8.
     if (rows.length === 0 && orders.length > 0) {
       void writeRows(ROWS.orders, orders, []);
+    } else if (upgraded.length > 0) {
+      void writeRows(ROWS.orders, upgraded, []);
     }
     if (moves.length === 0 && stockMoves.length > 0) {
       void writeRows(ROWS.stockMoves, stockMoves, []);
@@ -1697,6 +1694,24 @@ function serveLines(set: SetState, order: Order, lines: OrderLine[]) {
   });
 }
 
+/** One discount per sale, and only while it is open: a closed sale's totals are frozen. */
+function setOpenDiscount(
+  set: SetState,
+  get: () => PosState,
+  orderId: string,
+  discount: SaleDiscount,
+): UserResult {
+  const order = get().order(orderId);
+  if (!order || order.status !== 'open') {
+    return { ok: false, error: 'That sale is no longer open.' };
+  }
+  set((state) => ({
+    ...state,
+    orders: state.orders.map((o) => (o.id === orderId ? { ...o, discount } : o)),
+  }));
+  return { ok: true };
+}
+
 /** Live bill for an open order, recomputed from current settings. */
 export function useBill(orderId: string | null) {
   const order = usePos((s) => (orderId ? s.orders.find((o) => o.id === orderId) : undefined));
@@ -1708,8 +1723,8 @@ export function useBill(orderId: string | null) {
     (sum, l) => addC(sum, mulQty(l.unitCents, l.qty)),
     cents(0),
   );
-  return computeBill(gross, settings, orderDiscountRequest(order));
+  return computeBill(gross, settings, discountRequest(order.discount));
 }
 
-export type { DiscountKind, TenderMethod };
+export type { TenderMethod };
 export { businessDate };

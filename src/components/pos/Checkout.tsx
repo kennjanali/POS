@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { AlertTriangle, Info, Trash2 } from 'lucide-react';
+import { AlertTriangle, Trash2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
@@ -9,25 +9,22 @@ import { Modal } from '@/components/ui/Modal';
 import { toast } from '@/components/ui/Toast';
 import { cn } from '@/components/ui/cn';
 import { peso } from '@/lib/format';
+import { discountRequest } from '@/lib/migrate';
 import { cents, parsePesos, type Centavos } from '@/lib/money';
 import { computeBill } from '@/lib/tax';
 import {
   REFERENCED_METHODS,
   TENDER_LABELS,
   TENDER_METHODS,
-  orderDiscountRequest,
-  type DiscountKind,
   type Order,
   type TenderMethod,
 } from '@/lib/types';
-import { usePos } from '@/store/usePos';
+import { usePos, type UserResult } from '@/store/usePos';
 
-const DISCOUNTS: { kind: DiscountKind; label: string }[] = [
-  { kind: 'none', label: 'None' },
-  { kind: 'senior', label: 'Senior' },
-  { kind: 'pwd', label: 'PWD' },
-  { kind: 'custom', label: 'Custom' },
-];
+const DISCOUNTS = [
+  { kind: 'none', label: 'No discount' },
+  { kind: 'owner', label: 'Discount %' },
+] as const;
 
 interface CheckoutProps {
   order: Order;
@@ -38,7 +35,8 @@ interface CheckoutProps {
 
 export function Checkout({ order, open, onClose, onPaid }: CheckoutProps) {
   const settings = usePos((s) => s.settings);
-  const setDiscount = usePos((s) => s.setDiscount);
+  const clearDiscount = usePos((s) => s.clearDiscount);
+  const setOwnerDiscountPercent = usePos((s) => s.setOwnerDiscountPercent);
   const addTender = usePos((s) => s.addTender);
   const removeTender = usePos((s) => s.removeTender);
   const closeOrder = usePos((s) => s.closeOrder);
@@ -57,9 +55,9 @@ export function Checkout({ order, open, onClose, onPaid }: CheckoutProps) {
       (sum, l) => cents(sum + l.unitCents * l.qty),
       cents(0),
     );
-    return computeBill(gross, settings, orderDiscountRequest(order));
+    return computeBill(gross, settings, discountRequest(order.discount));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [order.lines, order.discountKind, order.customPercent, settings]);
+  }, [order.lines, order.discount, settings]);
 
   // What the till keeps once change is handed back — the figure that has to
   // match the bill. See keptByTill in the store.
@@ -71,9 +69,12 @@ export function Checkout({ order, open, onClose, onPaid }: CheckoutProps) {
   // Negative balance means a discount was applied or a line voided after the
   // payment was recorded, leaving a tender that is now too large.
   const overRecorded = kept > bill.amountDue;
-  const statutory = order.discountKind === 'senior' || order.discountKind === 'pwd';
   const needsRef = REFERENCED_METHODS.includes(method);
-  const needsId = statutory && !order.discountIdNo?.trim();
+  const ownerPercent = order.discount.kind === 'owner' ? (order.discount.percent ?? 0) : null;
+
+  function showRefusal(result: UserResult) {
+    if (!result.ok) toast(result.error, 'danger');
+  }
 
   function recordTender() {
     if (balance <= 0) {
@@ -131,10 +132,6 @@ export function Checkout({ order, open, onClose, onPaid }: CheckoutProps) {
   }
 
   function finish() {
-    if (needsId) {
-      toast('Record the Senior / PWD ID number first', 'danger');
-      return;
-    }
     if (overRecorded) {
       toast(
         `The bill changed after payment was recorded. Remove the tender and ` +
@@ -212,7 +209,7 @@ export function Checkout({ order, open, onClose, onPaid }: CheckoutProps) {
 
             {bill.discount > 0 && (
               <Row
-                label={statutory ? 'Statutory discount (20%)' : 'Discount'}
+                label="Discount"
                 value={`−${peso(bill.discount, settings.currency)}`}
                 tone="note"
               />
@@ -233,17 +230,6 @@ export function Checkout({ order, open, onClose, onPaid }: CheckoutProps) {
               </dd>
             </div>
           </dl>
-
-          {statutory && (
-            <div className="mt-3 flex gap-2 rounded-md border border-note/30 bg-note/5 p-2.5">
-              <Info size={13} className="mt-0.5 shrink-0 text-note" aria-hidden />
-              <div className="min-w-0 text-[11px] leading-relaxed text-ink-2">
-                {bill.trace.map((step, i) => (
-                  <p key={i}>{step}</p>
-                ))}
-              </div>
-            </div>
-          )}
         </section>
 
         {/* ── Right: discount + tender ───────────────────────────── */}
@@ -252,16 +238,22 @@ export function Checkout({ order, open, onClose, onPaid }: CheckoutProps) {
             <p className="mb-1.5 text-[10.5px] font-bold tracking-wide text-ink-2 uppercase">
               Discount
             </p>
-            <div className="grid grid-cols-4 gap-1.5">
+            <div className="grid grid-cols-2 gap-1.5">
               {DISCOUNTS.map(({ kind, label }) => (
                 <button
                   key={kind}
                   type="button"
-                  aria-pressed={order.discountKind === kind}
-                  onClick={() => setDiscount(order.id, { discountKind: kind })}
+                  aria-pressed={order.discount.kind === kind}
+                  onClick={() =>
+                    showRefusal(
+                      kind === 'none'
+                        ? clearDiscount(order.id)
+                        : setOwnerDiscountPercent(order.id, ownerPercent ?? 0),
+                    )
+                  }
                   className={cn(
                     'min-h-11 rounded-md border px-1 py-2 text-[12px] font-semibold transition-colors',
-                    order.discountKind === kind
+                    order.discount.kind === kind
                       ? 'border-note bg-note text-white'
                       : 'border-line bg-raised text-ink-2 hover:bg-ground',
                   )}
@@ -272,64 +264,18 @@ export function Checkout({ order, open, onClose, onPaid }: CheckoutProps) {
             </div>
           </div>
 
-          {order.discountKind === 'custom' && (
+          {ownerPercent !== null && (
             <Field
               label="Percent off"
               type="number"
               min={0}
               max={100}
               suffix="%"
-              value={order.customPercent}
+              value={ownerPercent}
               onChange={(e) =>
-                setDiscount(order.id, { customPercent: Number(e.target.value) || 0 })
+                showRefusal(setOwnerDiscountPercent(order.id, Number(e.target.value) || 0))
               }
             />
-          )}
-
-          {statutory && (
-            <div className="flex flex-col gap-2.5 rounded-md border border-line bg-raised p-2.5">
-              <Field
-                label="ID number"
-                placeholder="OSCA / PWD ID"
-                hint="Required on record under RA 9994 / RA 10754."
-                value={order.discountIdNo ?? ''}
-                onChange={(e) => setDiscount(order.id, { discountIdNo: e.target.value })}
-              />
-              <Field
-                label="Name on ID"
-                placeholder="Full name"
-                value={order.discountIdName ?? ''}
-                onChange={(e) =>
-                  setDiscount(order.id, { discountIdName: e.target.value })
-                }
-              />
-              <div className="grid grid-cols-2 gap-2">
-                <Field
-                  label="Diners"
-                  type="number"
-                  min={1}
-                  value={order.diners}
-                  onChange={(e) =>
-                    setDiscount(order.id, { diners: Math.max(1, Number(e.target.value)) })
-                  }
-                />
-                <Field
-                  label="Eligible"
-                  type="number"
-                  min={1}
-                  value={order.eligibleDiners}
-                  onChange={(e) =>
-                    setDiscount(order.id, {
-                      eligibleDiners: Math.max(1, Number(e.target.value)),
-                    })
-                  }
-                />
-              </div>
-              <p className="text-[10.5px] leading-snug text-ink-3">
-                On a shared bill the discount applies only to the eligible diner&rsquo;s
-                share (RR 7-2010).
-              </p>
-            </div>
           )}
 
           <div>

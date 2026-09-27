@@ -1,7 +1,7 @@
 import type { PinCredential } from './crypto';
 import type { Centavos } from './money';
 import type { ReceiptPrinter } from './printer';
-import type { DiscountRequest, TaxProfile } from './tax';
+import type { TaxProfile } from './tax';
 
 export type OrderStatus = 'open' | 'closed' | 'voided';
 export type OrderType = 'dine-in' | 'takeout' | 'grab' | 'panda';
@@ -105,21 +105,17 @@ export interface Tender {
   takenAt: number;
 }
 
-/** An order's discount as stored before the v8 data model. Temporary. */
-export type DiscountKind = 'none' | 'senior' | 'pwd' | 'custom';
-
 /**
- * What the tax engine gets for an order's stored discount. Only a custom
- * discount still counts; senior and PWD no longer discount anything.
- * Temporary, until orders carry their own discount (data v8).
+ * The one discount on a sale. A promo copies its code and percent so the sale
+ * never changes when the promo does; an owner discount is a percent or a fixed
+ * amount, with who gave it. `legacy` is a statutory discount from before v8:
+ * its frozen totals stand, and it discounts nothing new.
  */
-export function orderDiscountRequest(
-  order: Pick<Order, 'discountKind' | 'customPercent'>,
-): DiscountRequest {
-  return order.discountKind === 'custom'
-    ? { kind: 'percent', percent: order.customPercent }
-    : { kind: 'none' };
-}
+export type SaleDiscount =
+  | { kind: 'none' }
+  | { kind: 'promo'; promoId: string; code: string; percent: number }
+  | { kind: 'owner'; percent: number | null; fixedCents: Centavos | null; by: string | null }
+  | { kind: 'legacy' };
 
 export interface Order {
   id: string;
@@ -135,13 +131,7 @@ export interface Order {
   lines: OrderLine[];
   tenders: Tender[];
 
-  discountKind: DiscountKind;
-  customPercent: number;
-  diners: number;
-  eligibleDiners: number;
-  /** SC/PWD ID number. RA 9994 requires this on record. */
-  discountIdNo: string | null;
-  discountIdName: string | null;
+  discount: SaleDiscount;
 
   /** Frozen at close so the receipt never re-computes from changed settings. */
   grossCents: Centavos;
@@ -240,7 +230,7 @@ export interface DailyClose {
 }
 
 export interface DataSnapshot {
-  version: 7;
+  version: 7 | 8;
   exportedAt: string;
   /** Which install and which build wrote the file. Absent in older backups. */
   installId?: string | null;
