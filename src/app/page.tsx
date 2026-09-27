@@ -1,169 +1,115 @@
 'use client';
 
-import { useState } from 'react';
-import { ClipboardList, X } from 'lucide-react';
+import { useMemo } from 'react';
 
-import { Empty } from '@/components/ui/Empty';
-import { Button } from '@/components/ui/Button';
-import { Checkout } from '@/components/pos/Checkout';
-import { ProductGrid } from '@/components/pos/ProductGrid';
-import { OrderCard } from '@/components/pos/OrderCard';
-import { OrderPanel } from '@/components/pos/OrderPanel';
-import { ReceiptModal } from '@/components/pos/Receipt';
-import { QuoteSlip } from '@/components/quotes/QuoteSlip';
-import { useShell } from '@/components/layout/shell';
-import { ticketWord } from '@/lib/presets';
-import type { Order } from '@/lib/types';
+import { DailyCloses } from '@/components/dashboard/DailyCloses';
+import { businessDate, peso } from '@/lib/format';
+import { formatQty } from '@/lib/qty';
+import { daySummary } from '@/lib/today';
+import { TENDER_LABELS, TENDER_METHODS } from '@/lib/types';
+import { can } from '@/lib/permissions';
 import { usePos } from '@/store/usePos';
+import { useAuth } from '@/store/useAuth';
 
-/** The branch's open orders, oldest first. */
-function openIn(orders: Order[], branchId: string): Order[] {
-  return orders
-    .filter((o) => o.status === 'open' && o.branchId === branchId)
-    .sort((a, b) => a.openedAt - b.openedAt);
-}
-
-/**
- * Retail has one cart: the order being worked on, or else the oldest open one
- * (left over from when the shop kept tickets open). None until the first tap.
- */
-function currentCart(s: { orders: Order[]; activeBranchId: string; activeOrderId: string | null }) {
-  const open = openIn(s.orders, s.activeBranchId);
-  return open.find((o) => o.id === s.activeOrderId) ?? open[0];
-}
-
-export default function SellPage() {
-  const tickets = usePos((s) => s.settings.features.openOrders);
-  const [checkoutId, setCheckoutId] = useState<string | null>(null);
-  const [receiptFor, setReceiptFor] = useState<string | null>(null);
-  const [quoteFor, setQuoteFor] = useState<string | null>(null);
-
-  // The order the payment screen was opened for, as it is now.
-  const paying = usePos((s) => s.orders.find((o) => o.id === checkoutId && o.status === 'open'));
-
-  return (
-    <div className="h-full">
-      {tickets ? <TicketFloor onCheckout={setCheckoutId} /> : <RetailCart onCheckout={setCheckoutId} />}
-
-      {paying && (
-        <Checkout
-          order={paying}
-          open
-          onClose={() => setCheckoutId(null)}
-          onPaid={(id) => setReceiptFor(id)}
-          onQuoted={setQuoteFor}
-        />
-      )}
-
-      {receiptFor && (
-        <ReceiptModal orderId={receiptFor} onClose={() => setReceiptFor(null)} />
-      )}
-
-      {quoteFor && <QuoteSlip quoteId={quoteFor} onClose={() => setQuoteFor(null)} />}
-    </div>
-  );
-}
-
-/** Retail: products on the left, the cart on the right. Pay, and the next cart starts. */
-function RetailCart({ onCheckout }: { onCheckout: (orderId: string) => void }) {
-  const cart = usePos(currentCart);
-
-  // Read at the tap, not from this render: two quick taps must land on one cart.
-  function cartId(): string {
-    const s = usePos.getState();
-    return currentCart(s)?.id ?? s.openOrder('Walk-in', 'walk-in');
-  }
-
-  return (
-    <div className="flex h-full">
-      <div className="min-w-0 flex-1">
-        <ProductGrid getOrderId={cartId} />
-      </div>
-      <div className="w-[360px] shrink-0">
-        <OrderPanel order={cart} onCheckout={() => cart && onCheckout(cart.id)} />
-      </div>
-    </div>
-  );
-}
-
-/** Tables, jobs or a queue: open tickets side by side, each opened to add and pay. */
-function TicketFloor({ onCheckout }: { onCheckout: (orderId: string) => void }) {
-  const { openNewOrder } = useShell();
-
-  const activeBranchId = usePos((s) => s.activeBranchId);
+export default function TodayPage() {
   const orders = usePos((s) => s.orders);
-  const activeOrderId = usePos((s) => s.activeOrderId);
-  const setActiveOrder = usePos((s) => s.setActiveOrder);
-  const currency = usePos((s) => s.settings.currency);
-  const word = usePos((s) => ticketWord(s.settings.shopType));
+  const products = usePos((s) => s.products);
+  const lowStockOf = usePos((s) => s.lowStock);
+  const settings = usePos((s) => s.settings);
+  // Low stock is the owner's working list; staff see the day's money only.
+  const isOwner = useAuth((s) => can(s.session, 'inventory.manage'));
 
-  const openOrders = openIn(orders, activeBranchId);
-  const activeOrder = openOrders.find((o) => o.id === activeOrderId);
-  const plural = `${word.toLowerCase()}s`;
+  const day = businessDate(Date.now());
+  const s = useMemo(() => daySummary(orders, day), [orders, day]);
+  const taken = TENDER_METHODS.filter((m) => s.collected[m] > 0);
+
+  const lowStock = isOwner ? lowStockOf() : [];
+  const names = useMemo(() => new Map(products.map((p) => [p.id, p.name])), [products]);
 
   return (
-    <>
-      <div className="scroll-y h-full p-4">
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <h2 className="text-[11px] font-bold tracking-wide text-ink-2 uppercase">
-            Open {plural} · {openOrders.length}
-          </h2>
-          <Button size="sm" onClick={openNewOrder}>
-            New {word.toLowerCase()}
-          </Button>
+    <div className="scroll-y h-full">
+      <div className="grid gap-3 p-4">
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-2.5">
+          <Tile label="Net sales" value={peso(s.net, settings.currency)} big />
+          <Tile label="Sales" value={String(s.sales)} />
+          <Tile label="Collected" value={peso(s.collectedTotal, settings.currency)} />
+          {settings.vatRegistered && <Tile label="Output VAT" value={peso(s.vat, settings.currency)} />}
         </div>
 
-        {openOrders.length === 0 ? (
-          <Empty
-            icon={ClipboardList}
-            title={`No open ${plural}`}
-            action="Start one to add items and take payment."
-          />
-        ) : (
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(190px,1fr))] gap-2.5">
-            {openOrders.map((order) => (
-              <OrderCard
-                key={order.id}
-                order={order}
-                currency={currency}
-                onOpen={() => setActiveOrder(order.id)}
-              />
-            ))}
-          </div>
-        )}
+        <div className="grid gap-3 lg:grid-cols-2">
+          <section className="rounded-lg border border-line bg-surface p-3.5">
+            <h3 className="mb-3 text-[11px] font-bold tracking-wide text-ink-2 uppercase">
+              Collected today
+            </h3>
+            {taken.length === 0 ? (
+              <p className="py-6 text-center text-[12.5px] text-ink-3">
+                Nothing collected yet today.
+              </p>
+            ) : (
+              <dl className="flex flex-col gap-1.5">
+                {taken.map((m) => (
+                  <div key={m} className="flex items-baseline justify-between text-[12.5px]">
+                    <dt className="text-ink-2">{TENDER_LABELS[m]}</dt>
+                    <dd className="tnum font-bold">{peso(s.collected[m], settings.currency)}</dd>
+                  </div>
+                ))}
+                <div className="flex items-baseline justify-between border-t border-line pt-1.5 text-[12.5px]">
+                  <dt className="text-ink-2">Total</dt>
+                  <dd className="tnum font-bold">{peso(s.collectedTotal, settings.currency)}</dd>
+                </div>
+              </dl>
+            )}
+            {s.cancelled > 0 && (
+              <p className="mt-3 border-t border-line pt-2 text-[11.5px] text-ink-2">
+                {s.cancelled} sale{s.cancelled === 1 ? '' : 's'} cancelled today -{' '}
+                {peso(s.cancelledCents, settings.currency)}.
+              </p>
+            )}
+          </section>
+
+          {isOwner && (
+            <section className="rounded-lg border border-line bg-surface p-3.5">
+              <h3 className="mb-3 text-[11px] font-bold tracking-wide text-ink-2 uppercase">
+                Running low
+              </h3>
+              {lowStock.length === 0 ? (
+                <p className="py-6 text-center text-[12.5px] text-ink-3">
+                  Nothing is at its reorder level.
+                </p>
+              ) : (
+                <ul className="flex list-none flex-col gap-1.5 p-0">
+                  {lowStock.map((item) => (
+                    <li
+                      key={item.productId}
+                      className="flex items-baseline justify-between gap-3 text-[12.5px]"
+                    >
+                      <span className="min-w-0 truncate font-semibold">
+                        {names.get(item.productId) ?? item.productId}
+                      </span>
+                      <span className="tnum shrink-0 text-ink-2">
+                        {formatQty(item.available)} left · reorder at {formatQty(item.level)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          )}
+        </div>
+
+        <DailyCloses />
       </div>
+    </div>
+  );
+}
 
-      {/* ── Ticket workspace ───────────────────────────────────── */}
-      {activeOrder && (
-        <div
-          className="fixed inset-0 z-300 flex bg-black/40"
-          onMouseDown={(e) => {
-            if (e.target === e.currentTarget) setActiveOrder(null);
-          }}
-        >
-          <div className="animate-rise ml-auto flex h-full w-full max-w-5xl bg-surface shadow-2xl">
-            <div className="hidden min-w-0 flex-1 md:block">
-              <ProductGrid getOrderId={() => activeOrder.id} />
-            </div>
-
-            <div className="flex w-full min-w-0 flex-col md:w-[380px]">
-              <div className="flex justify-end border-b border-line px-2 py-1.5">
-                <button
-                  type="button"
-                  onClick={() => setActiveOrder(null)}
-                  aria-label={`Close ${word.toLowerCase()}`}
-                  className="grid size-10 place-items-center rounded text-ink-3 transition-colors hover:bg-raised hover:text-ink"
-                >
-                  <X size={16} aria-hidden />
-                </button>
-              </div>
-              <div className="min-h-0 flex-1">
-                <OrderPanel order={activeOrder} onCheckout={() => onCheckout(activeOrder.id)} />
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-    </>
+function Tile({ label, value, big }: { label: string; value: string; big?: boolean }) {
+  return (
+    <div className="rounded-lg border border-line bg-surface p-3">
+      <p className="text-[10.5px] font-bold tracking-wide text-ink-3 uppercase">{label}</p>
+      <p className={`tnum mt-1 font-extrabold leading-none ${big ? 'text-[24px]' : 'text-[18px]'}`}>
+        {value}
+      </p>
+    </div>
   );
 }

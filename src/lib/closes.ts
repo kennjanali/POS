@@ -36,6 +36,8 @@ export function buildClose(input: {
   previous: DailyClose | null;
   now: number;
   actor: string | null;
+  /** What the owner counted in the drawer. Left out when nobody counted. */
+  countedCashCents?: Centavos;
 }): Unsigned {
   const since = input.previous?.closedAt ?? 0;
   const here = (ts: number | null) => inWindow(ts, since, input.now);
@@ -61,6 +63,7 @@ export function buildClose(input: {
   return {
     id: input.id,
     no: (input.previous?.no ?? 0) + 1,
+    format: 2,
     date: businessDate(input.now),
     closedAt: input.now,
     closedBy: input.actor,
@@ -72,12 +75,23 @@ export function buildClose(input: {
     tenders: tenders as Record<TenderMethod, Centavos>,
     runningNetCents: cents((input.previous?.runningNetCents ?? 0) + netCents),
     prevHash: input.previous?.hash ?? GENESIS,
+    promoDiscountCents: sum(settled, (o) => (o.discount.kind === 'promo' ? o.discountCents : 0)),
+    ownerDiscountCents: sum(settled, (o) => (o.discount.kind === 'owner' ? o.discountCents : 0)),
+    vatCents: sum(settled, (o) => o.vatCents),
+    // Change was already given back, so the till holds what was applied.
+    expectedCashCents: cents(tenders.cash),
+    countedCashCents: input.countedCashCents ?? null,
   };
 }
 
-/** The fields a hash covers, in a fixed order, so the same close always hashes the same. */
+/**
+ * The fields a hash covers, in a fixed order, so the same close always hashes
+ * the same. A close written before the format-2 fields must keep hashing over
+ * exactly the fields it had, or every day already on the till would read as
+ * tampered with.
+ */
 function canonical(close: Unsigned): string {
-  return JSON.stringify([
+  const base = [
     close.id,
     close.no,
     close.date,
@@ -91,6 +105,16 @@ function canonical(close: Unsigned): string {
     TENDER_METHODS.map((m) => close.tenders[m]),
     close.runningNetCents,
     close.prevHash,
+  ];
+  if ((close.format ?? 1) < 2) return JSON.stringify(base);
+  return JSON.stringify([
+    ...base,
+    close.format,
+    close.promoDiscountCents,
+    close.ownerDiscountCents,
+    close.vatCents,
+    close.expectedCashCents,
+    close.countedCashCents,
   ]);
 }
 

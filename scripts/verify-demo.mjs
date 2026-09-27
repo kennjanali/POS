@@ -178,10 +178,10 @@ for (const settings of [
 }
 
 // Determinism: the same options must produce the same money, so two people
-// reading the dashboard see the same figures.
+// reading the reports see the same figures.
 // ── today ──────────────────────────────────────────────────────────────
-// The Dashboard opens on Today. A demo whose most recent sale was yesterday
-// puts thousands of orders on the Orders page and zeroes on the Dashboard,
+// Today is the home screen. A demo whose most recent sale was yesterday
+// puts thousands of orders on the Sales page and zeroes on Today,
 // which reads as a broken app rather than as a closed shop.
 console.log();
 console.log('— today —');

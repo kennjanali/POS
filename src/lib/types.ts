@@ -311,6 +311,8 @@ export interface DailyClose {
   id: string;
   /** 1, 2, 3… in order. */
   no: number;
+  /** Which fields this close carries. Absent on every close written before. */
+  format?: 1 | 2;
   /** Business date the close was taken on, YYYY-MM-DD. */
   date: string;
   closedAt: number;
@@ -328,6 +330,20 @@ export interface DailyClose {
   runningNetCents: Centavos;
   prevHash: string;
   hash: string;
+
+  // ── format 2 ────────────────────────────────────────────────────────
+  // Absent rather than required, so closes written before these fields are
+  // still the closes they were and still hash the way they were hashed.
+  /** Of `discountCents`, the part a promo code gave away. */
+  promoDiscountCents?: Centavos;
+  /** Of `discountCents`, the part the owner gave away. */
+  ownerDiscountCents?: Centavos;
+  /** Output VAT on the sales in this window. */
+  vatCents?: Centavos;
+  /** What the till should hold: the cash taken in this window. */
+  expectedCashCents?: Centavos;
+  /** What the owner counted. Null on a close the app took by itself. */
+  countedCashCents?: Centavos | null;
 }
 
 export interface DataSnapshot {

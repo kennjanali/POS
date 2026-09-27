@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from 'react';
 
-import { DailyCloses } from '@/components/dashboard/DailyCloses';
 import { cn } from '@/components/ui/cn';
 import { businessDate, peso } from '@/lib/format';
 import { cents } from '@/lib/money';
@@ -19,9 +18,10 @@ const RANGES: { key: Range; label: string; days: number | null }[] = [
   { key: 'all', label: 'All time', days: null },
 ];
 
-export default function DashboardPage() {
+export default function MonthPage() {
   const orders = usePos((s) => s.orders);
   const products = usePos((s) => s.products);
+  const promos = usePos((s) => s.promos);
   const settings = usePos((s) => s.settings);
   const branchId = usePos((s) => s.activeBranchId);
   const branches = usePos((s) => s.branches);
@@ -45,6 +45,8 @@ export default function DashboardPage() {
 
     let net = 0;
     let discount = 0;
+    let promoDiscount = 0;
+    let ownerDiscount = 0;
     let vat = 0;
     let cost = 0;
     const byTender: Record<TenderMethod, number> = {
@@ -60,6 +62,10 @@ export default function DashboardPage() {
     for (const order of scoped) {
       net += order.netCents;
       discount += order.discountCents;
+      // A legacy discount is neither the owner's nor a promo's, so it lands in
+      // neither bucket rather than in the wrong one.
+      if (order.discount.kind === 'promo') promoDiscount += order.discountCents;
+      if (order.discount.kind === 'owner') ownerDiscount += order.discountCents;
       vat += order.vatCents;
       for (const tender of order.tenders) {
         byTender[tender.method] += tender.amountCents;
@@ -119,12 +125,22 @@ export default function DashboardPage() {
       (o) => o.status === 'closed' && o.branchId === branchId,
     ).length;
 
+    // Counted over the same rows as every other tile, so the codes line up
+    // with the period and the branch on screen rather than with all time.
+    const uses = new Map<string, number>();
+    for (const order of scoped) {
+      if (order.discount.kind !== 'promo') continue;
+      uses.set(order.discount.promoId, (uses.get(order.discount.promoId) ?? 0) + 1);
+    }
+
     return {
       onDevice,
       byBranch,
       count: scoped.length,
       net,
       discount,
+      promoDiscount,
+      ownerDiscount,
       vat,
       cost,
       grossProfit: net - vat - cost,
@@ -132,8 +148,12 @@ export default function DashboardPage() {
       byTender,
       top,
       voided,
+      usedPromos: promos
+        .map((promo) => ({ promo, uses: uses.get(promo.id) ?? 0 }))
+        .filter((row) => row.uses > 0)
+        .sort((a, b) => b.uses - a.uses),
     };
-  }, [orders, products, range, branchId, branches]);
+  }, [orders, products, range, branchId, branches, promos]);
 
   const maxRevenue = stats.top[0]?.revenue ?? 1;
   const maxBranchNet = Math.max(1, ...stats.byBranch.map((b) => b.net));
@@ -188,6 +208,24 @@ export default function DashboardPage() {
             value={peso(cents(stats.discount), settings.currency)}
             tone="note"
           />
+          {(stats.promoDiscount > 0 || stats.ownerDiscount > 0) && (
+            <>
+              {stats.promoDiscount > 0 && (
+                <Stat
+                  label="of which promo"
+                  value={peso(cents(stats.promoDiscount), settings.currency)}
+                  tone="note"
+                />
+              )}
+              {stats.ownerDiscount > 0 && (
+                <Stat
+                  label="of which owner"
+                  value={peso(cents(stats.ownerDiscount), settings.currency)}
+                  tone="note"
+                />
+              )}
+            </>
+          )}
           {settings.vatRegistered && (
             <Stat label="Output VAT" value={peso(cents(stats.vat), settings.currency)} />
           )}
@@ -291,7 +329,33 @@ export default function DashboardPage() {
             )}
           </section>
 
-          <DailyCloses />
+          <section className="rounded-lg border border-line bg-surface p-3.5">
+            <h3 className="mb-3 text-[11px] font-bold tracking-wide text-ink-2 uppercase">
+              Promo codes
+            </h3>
+            {stats.usedPromos.length === 0 ? (
+              <p className="py-6 text-center text-[12.5px] text-ink-3">
+                No promo code was used in this period.
+              </p>
+            ) : (
+              <ul className="flex list-none flex-col gap-1.5 p-0">
+                {stats.usedPromos.map(({ promo, uses }) => (
+                  <li
+                    key={promo.id}
+                    className="flex items-baseline justify-between gap-3 text-[12.5px]"
+                  >
+                    <span className="min-w-0 truncate font-semibold">
+                      {promo.code}
+                      {!promo.active && <span className="ml-2 text-ink-3">off</span>}
+                    </span>
+                    <span className="tnum shrink-0 text-ink-2">
+                      {uses} sale{uses === 1 ? '' : 's'}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
         </div>
       </div>
     </div>

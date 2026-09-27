@@ -99,11 +99,12 @@ export interface RouteSpec {
 }
 
 export const ROUTES: readonly RouteSpec[] = [
-  { href: '/', label: 'Sell', permission: 'sell' },
+  { href: '/', label: 'Today', permission: 'today.view' },
+  { href: '/sell', label: 'Sell', permission: 'sell' },
   { href: '/quotes', label: 'Quotations', permission: 'quote.make', feature: 'quotes' },
   { href: '/orders', label: 'Sales', permission: 'reports.view' },
   { href: '/inventory', label: 'Inventory', permission: 'inventory.manage' },
-  { href: '/dashboard', label: 'Dashboard', permission: 'reports.view' },
+  { href: '/month', label: 'This month', permission: 'reports.view' },
   { href: '/settings', label: 'Settings', permission: 'settings.manage' },
 ];
 

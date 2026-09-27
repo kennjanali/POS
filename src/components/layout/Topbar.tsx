@@ -11,10 +11,12 @@ import { can, ROLE_LABELS } from '@/lib/permissions';
 import { formatQty, type Qty } from '@/lib/qty';
 
 const TITLES: Record<string, string> = {
-  '/': 'Point of Sale',
-  '/orders': 'Orders',
+  '/': 'Today',
+  '/sell': 'Sell',
+  '/quotes': 'Quotations',
+  '/orders': 'Sales',
   '/inventory': 'Inventory',
-  '/dashboard': 'Dashboard',
+  '/month': 'This month',
   '/settings': 'Settings',
 };
 

@@ -5,9 +5,11 @@ import { Lock } from 'lucide-react';
 
 import { SlipFooter } from '@/components/pos/SlipFooter';
 import { Button } from '@/components/ui/Button';
+import { Field } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
 import { toast } from '@/components/ui/Toast';
 import { fmtDate, peso } from '@/lib/format';
+import { parsePesos } from '@/lib/money';
 import { COLUMNS } from '@/lib/printer';
 import { renderClose } from '@/lib/receipt';
 import type { DailyClose } from '@/lib/types';
@@ -27,25 +29,52 @@ export function DailyCloses() {
   const closeDay = usePos((s) => s.closeDay);
   const [busy, setBusy] = useState(false);
   const [shown, setShown] = useState<DailyClose | null>(null);
+  // What the owner counted in the drawer. Left blank, the close is taken
+  // without a count, which is what the nightly close always is.
+  const [counted, setCounted] = useState('');
 
   async function closeNow() {
     setBusy(true);
-    const close = await closeDay();
+    const close = await closeDay(counted.trim() ? parsePesos(counted) : undefined);
     setBusy(false);
-    if (close) setShown(close);
-    else toast('Nothing to close — no sales since the last close.', 'danger');
+    if (close) {
+      setShown(close);
+      setCounted('');
+    } else {
+      toast('Nothing to close — no sales since the last close.', 'danger');
+    }
   }
 
   const recent = closes.slice(-SHOWN).reverse();
 
   return (
     <section className="rounded-lg border border-line bg-surface p-3.5">
-      <h3 className="mb-3 text-[11px] font-bold tracking-wide text-ink-2 uppercase">Daily closes</h3>
+      <h3 className="mb-3 text-[11px] font-bold tracking-wide text-ink-2 uppercase">
+        Today&rsquo;s summary
+      </h3>
 
-      <Button variant="secondary" fullWidth disabled={busy || pending === 0} onClick={() => void closeNow()}>
-        <Lock size={14} aria-hidden />
-        {pending === 0 ? 'Nothing to close' : `Close day now — ${pending} sale${pending === 1 ? '' : 's'}`}
-      </Button>
+      <div className="grid gap-2 sm:grid-cols-[1fr_auto] sm:items-end">
+        <Field
+          label="Counted cash (optional)"
+          type="number"
+          inputMode="decimal"
+          step="0.01"
+          min="0"
+          placeholder="Leave blank if nobody counted"
+          value={counted}
+          onChange={(e) => setCounted(e.target.value)}
+        />
+        <Button
+          variant="secondary"
+          disabled={busy || pending === 0}
+          onClick={() => void closeNow()}
+        >
+          <Lock size={14} aria-hidden />
+          {pending === 0
+            ? 'Nothing to close'
+            : `Close day now — ${pending} sale${pending === 1 ? '' : 's'}`}
+        </Button>
+      </div>
 
       {recent.length === 0 ? (
         <p className="mt-3 text-[11.5px] leading-relaxed text-ink-3">
@@ -73,9 +102,7 @@ export function DailyCloses() {
         </ul>
       )}
 
-      {shown && (
-        <CloseSlip close={shown} onClose={() => setShown(null)} />
-      )}
+      {shown && <CloseSlip close={shown} onClose={() => setShown(null)} />}
     </section>
   );
 }

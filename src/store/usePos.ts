@@ -337,7 +337,7 @@ interface PosState {
   /** When the oldest of those happened, or null when there are none. */
   oldestUnclosed: () => number | null;
   /** Close everything since the last close. Null when there is nothing to close. */
-  closeDay: () => Promise<DailyClose | null>;
+  closeDay: (countedCashCents?: Centavos) => Promise<DailyClose | null>;
   clearPersistError: () => void;
 }
 
@@ -2414,11 +2414,18 @@ export const usePos = create<PosState>()(
         return times.length > 0 ? Math.min(...times) : null;
       },
 
-      closeDay: async () => {
+      closeDay: async (countedCashCents) => {
         if (get().unclosedSales() === 0) return null;
         const previous = get().closes.at(-1) ?? null;
         const close = await signClose(
-          buildClose({ id: uuidv7(), orders: get().orders, previous, now: Date.now(), actor: actorId() }),
+          buildClose({
+            id: uuidv7(),
+            orders: get().orders,
+            previous,
+            now: Date.now(),
+            actor: actorId(),
+            countedCashCents,
+          }),
         );
         // Hashing is async. If another close landed meanwhile, this one would
         // fork the chain — drop it; the other already covers these sales.

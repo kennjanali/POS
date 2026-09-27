@@ -24,11 +24,12 @@ import { cn } from '@/components/ui/cn';
 
 /** Icons only. Which links exist, and who sees them, is permissions.ts. */
 const ICONS: Record<string, typeof ShoppingCart> = {
-  '/': ShoppingCart,
+  '/': Sun,
+  '/sell': ShoppingCart,
   '/quotes': FileText,
   '/orders': ClipboardList,
   '/inventory': Package,
-  '/dashboard': LayoutDashboard,
+  '/month': LayoutDashboard,
   '/settings': SettingsIcon,
 };
 

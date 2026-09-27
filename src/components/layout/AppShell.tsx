@@ -62,7 +62,7 @@ function NewOrderDialog() {
     setCustomerPhone('');
     setPlate('');
     closeNewOrder();
-    router.push('/');
+    router.push('/sell');
     toast(`Opened ${trimmed}`, 'success');
   }
 

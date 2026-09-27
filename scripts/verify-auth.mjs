@@ -51,8 +51,8 @@ const STAFF = { role: 'staff' };
 console.log('\n— route guard —');
 
 const VISIBLE = {
-  superadmin: ['/', '/orders', '/inventory', '/dashboard', '/settings'],
-  staff: ['/'],
+  superadmin: ['/', '/sell', '/orders', '/inventory', '/month', '/settings'],
+  staff: ['/', '/sell'],
 };
 
 for (const [role, expected] of Object.entries(VISIBLE)) {
@@ -79,8 +79,8 @@ for (const [role, expected] of Object.entries(VISIBLE)) {
   }
 }
 
-check('landing: staff start on Sell', landingFor(STAFF) === '/', landingFor(STAFF));
-check('landing: the owner starts on Sell', landingFor(OWNER) === '/');
+check('landing: staff start on Today', landingFor(STAFF) === '/', landingFor(STAFF));
+check('landing: the owner starts on Today', landingFor(OWNER) === '/');
 
 check('a signed-out visitor may visit nothing', ROUTES.every((r) => !canVisit(null, r.href)));
 check(

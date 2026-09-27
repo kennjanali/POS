@@ -49,6 +49,26 @@ export function renderClose(close: DailyClose, settings: Settings, width: number
   for (const method of TENDER_METHODS) {
     if (close.tenders[method] > 0) out.push(row(TENDER_LABELS[method], amount(close.tenders[method])));
   }
+  // The till column, so the owner can read off a shortage or an overage without
+  // doing the sum on paper. A close the app took by itself has no count.
+  if (close.expectedCashCents !== undefined) {
+    out.push(rule, row('Expected in till', amount(close.expectedCashCents)));
+    if (close.countedCashCents != null) {
+      out.push(
+        row('Counted', amount(close.countedCashCents)),
+        row('Over / (short)', amount(close.countedCashCents - close.expectedCashCents)),
+      );
+    }
+  }
+  // The split only exists on a close that carries it, and VAT is not a line a
+  // shop that is not registered may print.
+  if (close.promoDiscountCents || close.ownerDiscountCents) {
+    if (close.promoDiscountCents) out.push(row('  of which promo', `-${amount(close.promoDiscountCents)}`));
+    if (close.ownerDiscountCents) out.push(row('  of which owner', `-${amount(close.ownerDiscountCents)}`));
+  }
+  if (settings.vatRegistered && close.vatCents) {
+    out.push(row('Output VAT', amount(close.vatCents)));
+  }
   out.push(rule, row('Running total', amount(close.runningNetCents)), row('Check', close.hash.slice(0, 12)));
   return out.join('\n');
 }
