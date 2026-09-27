@@ -18,7 +18,15 @@ import {
   PIN_LENGTH,
   type PinCredential,
 } from '@/lib/crypto';
-import { ROWS, kvStorage, onPersistWrite, readRows, writeRows } from '@/lib/storage';
+import {
+  ROWS,
+  blobStorage,
+  onPersistWrite,
+  readRows,
+  takePendingBlob,
+  writeBatch,
+  type WriteBatch,
+} from '@/lib/storage';
 import { uuidv7 } from '@/lib/id';
 import { businessDate } from '@/lib/format';
 import {
@@ -1481,17 +1489,15 @@ export const usePos = create<PosState>()(
       // whose version differs — an empty till after an app update.
       version: 8,
       migrate: (persisted) => migrateBlobV7(persisted) as PosState,
-      storage: createJSONStorage(() => kvStorage),
-      // `orders` and `stockMoves` are deliberately absent: they go to their own
-      // row stores, written one record at a time. Everything listed here is
-      // small and rarely touched, so rewriting it wholesale is free.
-      // See the note on ROWS in lib/storage.ts.
+      storage: createJSONStorage(() => blobStorage),
+      // Orders, stock moves, closes, products and the audit log are
+      // deliberately absent: they go to their own row stores, and only changed
+      // rows are written. Everything listed here is small and rarely touched,
+      // so rewriting it wholesale is free. See the note on ROWS in lib/storage.ts.
       partialize: (state) => ({
         branches: state.branches,
         users: state.users,
-        products: state.products,
         stock: state.stock,
-        audit: state.audit,
         settings: state.settings,
         invoiceSeq: state.invoiceSeq,
         recovery: state.recovery,
@@ -1532,15 +1538,29 @@ onPersistWrite((error) => {
   usePos.setState({ persistError: error });
 });
 
-// ── Sales persistence ────────────────────────────────────────────────────
-// Orders and stock moves live in their own row stores rather than the blob.
-// They stay in memory for reading — every screen that filters or sums them is
-// untouched — but only the rows that actually changed are written.
+// ── Saving ───────────────────────────────────────────────────────────────
+// Sales, stock moves, closes, products and the audit log live in their own
+// row stores rather than the blob. They stay in memory for reading — every
+// screen that filters or sums them is untouched — but only the rows that
+// actually changed are written.
+//
+// Each change is saved as one batch: the blob and every changed row, in one
+// transaction. persist hands the blob to `blobStorage` right after `set()`,
+// once subscribers have run; the subscriber below only schedules `flush` for
+// the end of the tick, which then diffs the rows and takes that blob.
+
+/** The row stores this store fills. Each is named after its state field. */
+const SAVED = [ROWS.orders, ROWS.stockMoves, ROWS.closes, ROWS.products, ROWS.audit] as const;
+type Saved = (typeof SAVED)[number];
+type Row = { id: string };
 
 /** What each row store already holds, so a change can be spotted by identity. */
-const writtenOrders = new Map<string, Order>();
-const writtenMoves = new Map<string, StockMove>();
-const writtenCloses = new Map<string, DailyClose>();
+const written = Object.fromEntries(SAVED.map((store) => [store, new Map<string, Row>()])) as Record<
+  Saved,
+  Map<string, Row>
+>;
+/** The array each store was last diffed at. An untouched array is skipped. */
+const lastDiffed: Partial<Record<Saved, Row[]>> = {};
 
 /**
  * Rows whose object identity changed since the last write. Every mutation in
@@ -1554,16 +1574,21 @@ function diffRows<T extends { id: string }>(
 ): { changed: T[]; removed: string[] } {
   const changed: T[] = [];
   const seen = new Set<string>();
+  let added = 0;
 
   for (const row of current) {
     seen.add(row.id);
-    if (written.get(row.id) !== row) changed.push(row);
+    const before = written.get(row.id);
+    if (before === undefined) added++;
+    if (before !== row) changed.push(row);
   }
 
-  // Removals only happen when a month is archived away, so the extra pass is
-  // skipped entirely in the common case.
+  // Removals are rare — a month archived away, or the audit log past its cap
+  // — so the extra pass runs only when some written id is missing. The new
+  // rows have to be counted: at the cap one entry arrives as another drops
+  // off, and the size alone does not change.
   const removed: string[] =
-    written.size === seen.size
+    written.size + added === seen.size
       ? []
       : [...written.keys()].filter((id) => !seen.has(id));
 
@@ -1572,73 +1597,70 @@ function diffRows<T extends { id: string }>(
   return { changed, removed };
 }
 
-let lastOrders: Order[] | null = null;
-let lastMoves: StockMove[] | null = null;
-let lastCloses: DailyClose[] | null = null;
+let flushScheduled = false;
 
+/** Save everything this tick changed: the blob and every changed row, as one batch. */
+function flush(): void {
+  flushScheduled = false;
+  const state = usePos.getState();
+  const rows: WriteBatch['rows'] = [];
+  for (const store of SAVED) {
+    const current: Row[] = state[store];
+    if (current === lastDiffed[store]) continue;
+    lastDiffed[store] = current;
+    const { changed, removed } = diffRows(current, written[store]);
+    if (changed.length > 0 || removed.length > 0) rows.push({ store, changed, removed });
+  }
+  const blob = takePendingBlob();
+  if (blob || rows.length > 0) void writeBatch({ kv: blob ? [blob] : [], rows });
+}
+
+// Nothing is saved until the rows are back, or an empty till could be written
+// over a full one. Blobs handed over before then are not lost: the latest is
+// held, and the first flush after `hydrated` takes it.
 usePos.subscribe((state) => {
-  if (!state.hydrated) return;
-
-  if (state.orders !== lastOrders) {
-    lastOrders = state.orders;
-    const { changed, removed } = diffRows(state.orders, writtenOrders);
-    void writeRows(ROWS.orders, changed, removed);
-  }
-  if (state.stockMoves !== lastMoves) {
-    lastMoves = state.stockMoves;
-    const { changed, removed } = diffRows(state.stockMoves, writtenMoves);
-    void writeRows(ROWS.stockMoves, changed, removed);
-  }
-  if (state.closes !== lastCloses) {
-    lastCloses = state.closes;
-    const { changed, removed } = diffRows(state.closes, writtenCloses);
-    void writeRows(ROWS.closes, changed, removed);
-  }
+  if (!state.hydrated || flushScheduled) return;
+  flushScheduled = true;
+  queueMicrotask(flush);
 });
 
 /**
- * Read the sales back and open the till. Installs written before the row
- * stores existed carry their sales inside the rehydrated blob instead; those
- * are adopted here and written across on the way through, so the upgrade
- * costs the owner nothing and loses nothing.
+ * Read the rows back and open the till. Installs written before a row store
+ * existed carry its rows inside the rehydrated blob instead; those are adopted
+ * here. `written` records only what the stores really hold, so adopted rows —
+ * and v7 orders upgraded on the way in — go out with the first save, in the
+ * same batch as the blob that no longer carries them. The upgrade costs the
+ * owner nothing and loses nothing.
  */
 async function loadRows(rehydrated: PosState | undefined): Promise<void> {
   try {
-    const [rows, moves, closes] = await Promise.all([
+    const [rows, moves, closes, products, audit] = await Promise.all([
       readRows<Order>(ROWS.orders),
       readRows<StockMove>(ROWS.stockMoves),
       readRows<DailyClose>(ROWS.closes),
+      readRows<Product>(ROWS.products),
+      readRows<AuditEntry>(ROWS.audit),
     ]);
 
-    const legacy = rehydrated as unknown as
-      | { orders?: Order[]; stockMoves?: StockMove[] }
-      | undefined;
-    const loaded = rows.length > 0 ? rows : (legacy?.orders ?? []);
-    // v7 orders carry no `discount`; they come up to v8 on the way in.
-    const orders = loaded.map((o) => ('discount' in o ? o : migrateOrderV7(o)));
-    const upgraded = orders.filter((o, i) => o !== loaded[i]);
-    const stockMoves = moves.length > 0 ? moves : (legacy?.stockMoves ?? []);
+    const stored: Record<Saved, Row[]> = { orders: rows, stockMoves: moves, closes, products, audit };
+    for (const store of SAVED) {
+      written[store] = new Map(stored[store].map((row) => [row.id, row] as const));
+      // The first save diffs every store against what was just read.
+      delete lastDiffed[store];
+    }
 
-    for (const order of orders) writtenOrders.set(order.id, order);
-    for (const move of stockMoves) writtenMoves.set(move.id, move);
-    lastOrders = orders;
-    lastMoves = stockMoves;
-    for (const close of closes) writtenCloses.set(close.id, close);
-    lastCloses = closes;
-
-    usePos.setState({ orders, stockMoves, closes, hydrated: true });
+    const loaded = rows.length > 0 ? rows : (rehydrated?.orders ?? []);
+    usePos.setState({
+      // v7 orders carry no `discount`; they come up to v8 on the way in.
+      orders: loaded.map((o) => ('discount' in o ? o : migrateOrderV7(o))),
+      stockMoves: moves.length > 0 ? moves : (rehydrated?.stockMoves ?? []),
+      closes,
+      products: products.length > 0 ? products : (rehydrated?.products ?? []),
+      // Rows come back oldest first; the log is kept newest first.
+      audit: audit.length > 0 ? [...audit].reverse() : (rehydrated?.audit ?? []),
+      hydrated: true,
+    });
     void usePos.getState().checkLicense();
-
-    // Migrating from the blob: put the rows where they now belong. Rows that
-    // were upgraded on the way in are written back as v8.
-    if (rows.length === 0 && orders.length > 0) {
-      void writeRows(ROWS.orders, orders, []);
-    } else if (upgraded.length > 0) {
-      void writeRows(ROWS.orders, upgraded, []);
-    }
-    if (moves.length === 0 && stockMoves.length > 0) {
-      void writeRows(ROWS.stockMoves, stockMoves, []);
-    }
   } catch {
     usePos.setState({
       hydrated: true,

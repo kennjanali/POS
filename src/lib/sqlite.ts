@@ -20,6 +20,10 @@ const SCHEMA = `
   CREATE TABLE IF NOT EXISTS orders (id TEXT PRIMARY KEY NOT NULL, json TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS stockMoves (id TEXT PRIMARY KEY NOT NULL, json TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS closes (id TEXT PRIMARY KEY NOT NULL, json TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS products (id TEXT PRIMARY KEY NOT NULL, json TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS audit (id TEXT PRIMARY KEY NOT NULL, json TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS promos (id TEXT PRIMARY KEY NOT NULL, json TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS quotes (id TEXT PRIMARY KEY NOT NULL, json TEXT NOT NULL);
 `;
 
 const sqlite = new SQLiteConnection(CapacitorSQLite);
@@ -58,14 +62,6 @@ export const sqliteBackend: StorageBackend = {
     return (result.values?.[0]?.value as string | undefined) ?? null;
   },
 
-  setItem: async (name, value) => {
-    const db = await openDb();
-    await db.run(
-      'INSERT INTO kv (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value;',
-      [name, value],
-    );
-  },
-
   removeItem: async (name) => {
     const db = await openDb();
     await db.run('DELETE FROM kv WHERE key = ?;', [name]);
@@ -79,18 +75,25 @@ export const sqliteBackend: StorageBackend = {
   },
 
   // One transaction per batch, so a half-written batch can never survive.
-  writeRows: async (name, changed, removed) => {
+  writeBatch: async (batch) => {
     const db = await openDb();
     await db.executeSet(
       [
-        ...changed.map((row) => ({
-          statement: `INSERT INTO ${name} (id, json) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET json = excluded.json;`,
-          values: [row.id, JSON.stringify(row)],
+        ...batch.kv.map(({ name, value }) => ({
+          statement:
+            'INSERT INTO kv (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value;',
+          values: [name, value],
         })),
-        ...removed.map((id) => ({
-          statement: `DELETE FROM ${name} WHERE id = ?;`,
-          values: [id],
-        })),
+        ...batch.rows.flatMap(({ store, changed, removed }) => [
+          ...changed.map((row) => ({
+            statement: `INSERT INTO ${store} (id, json) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET json = excluded.json;`,
+            values: [row.id, JSON.stringify(row)],
+          })),
+          ...removed.map((id) => ({
+            statement: `DELETE FROM ${store} WHERE id = ?;`,
+            values: [id],
+          })),
+        ]),
       ],
       true,
     );

@@ -8,36 +8,52 @@
  * Every write outcome is reported to the topbar through `onPersistWrite`.
  * v6 swallowed a failed write with console.warn and lost a day of sales; a
  * failure here always ends up on screen.
+ *
+ * Each change is saved as one batch, in one transaction: the settings blob
+ * and every row that changed with it. A sale is never on disk without its
+ * stock moves, or without the invoice counter that numbered it.
  */
 
 import { Capacitor } from '@capacitor/core';
 
 /**
- * Sales do not live in the settings blob.
+ * Sales, the menu and the audit log do not live in the settings blob.
  *
  * Everything else the app persists is small and changes rarely, so rewriting
- * it wholesale costs nothing. Sales are neither: a year of trading is ~24 MB,
+ * it wholesale costs nothing. These are neither: a year of trading is ~24 MB,
  * and zustand's persist middleware re-serialises whatever it is given after
- * every state change. These row stores hold one record per sale, stock
- * move or daily close, written individually, so a tap costs the same after a week or a year.
+ * every state change. These row stores hold one record per sale, stock move,
+ * daily close, product, audit entry, promo or quote, and only changed records
+ * are written, so a tap costs the same after a week or a year.
+ *
+ * The names are frozen: renaming one hides every row already on a device.
  */
 export const ROWS = {
   orders: 'orders',
   stockMoves: 'stockMoves',
   closes: 'closes',
+  products: 'products',
+  audit: 'audit',
+  promos: 'promos',
+  quotes: 'quotes',
 } as const;
 
 export type RowStore = (typeof ROWS)[keyof typeof ROWS];
 
+/** Everything one change saves. Written in one transaction, all or nothing. */
+export interface WriteBatch {
+  kv: { name: string; value: string }[];
+  rows: { store: RowStore; changed: { id: string }[]; removed: string[] }[];
+}
+
 /** What a backend provides. Failures reject; this module reports them. */
 export interface StorageBackend {
   getItem(name: string): Promise<string | null>;
-  setItem(name: string, value: string): Promise<void>;
   removeItem(name: string): Promise<void>;
   /** Every row, oldest first. Read once, at startup. */
   readRows<T>(name: RowStore): Promise<T[]>;
-  /** One batch, all or nothing. */
-  writeRows<T extends { id: string }>(name: RowStore, changed: T[], removed: string[]): Promise<void>;
+  /** One transaction: all of the batch lands, or none of it. */
+  writeBatch(batch: WriteBatch): Promise<void>;
 }
 
 let backend: Promise<StorageBackend> | null = null;
@@ -47,6 +63,19 @@ function getBackend(): Promise<StorageBackend> {
     ? import('./sqlite').then((m) => m.sqliteBackend)
     : import('./idb').then((m) => m.idbBackend);
   return backend;
+}
+
+/** Set by tests, which run without a window. Used in place of the platform's. */
+let testBackend: StorageBackend | null = null;
+
+/** Tests only. With a backend set, storage works without a window. */
+export function setStorageBackend(b: StorageBackend | null): void {
+  testBackend = b;
+}
+
+/** A test's backend is called in the same tick, so one await sees the write. */
+function withBackend<T>(run: (b: StorageBackend) => Promise<T>): Promise<T> {
+  return testBackend ? run(testBackend) : getBackend().then(run);
 }
 
 // ── Write reporting ──────────────────────────────────────────────────────
@@ -89,33 +118,42 @@ function reported(write: Promise<void>): Promise<void> {
  * Next prerenders pages at build time, where there is no storage at all. The
  * adapter answers "nothing stored" rather than throwing, or the export fails.
  */
-const canStore = (): boolean => typeof window !== 'undefined';
+const canStore = (): boolean => testBackend !== null || typeof window !== 'undefined';
 
-/** zustand's persist storage: the small settings blob. */
-export const kvStorage = {
+let pendingBlob: { name: string; value: string } | null = null;
+
+/**
+ * zustand's persist storage: the small settings blob. Reads go to the
+ * backend; writes do not. persist calls `setItem` right after every change,
+ * but the blob has to land in the same transaction as the rows that changed
+ * with it, so it is held here until the store's next batch takes it.
+ */
+export const blobStorage = {
   getItem: async (name: string): Promise<string | null> =>
-    canStore() ? (await getBackend()).getItem(name) : null,
+    canStore() ? withBackend((b) => b.getItem(name)) : null,
 
-  setItem: async (name: string, value: string): Promise<void> => {
-    if (!canStore()) return;
-    return reported(getBackend().then((b) => b.setItem(name, value)));
+  setItem: (name: string, value: string): void => {
+    pendingBlob = { name, value };
   },
 
   removeItem: async (name: string): Promise<void> => {
     if (!canStore()) return;
-    return (await getBackend()).removeItem(name);
+    return withBackend((b) => b.removeItem(name));
   },
 };
 
-export async function readRows<T>(name: RowStore): Promise<T[]> {
-  return canStore() ? (await getBackend()).readRows<T>(name) : [];
+/** The latest blob persist handed over, once. Null when nothing changed since. */
+export function takePendingBlob(): { name: string; value: string } | null {
+  const blob = pendingBlob;
+  pendingBlob = null;
+  return blob;
 }
 
-export async function writeRows<T extends { id: string }>(
-  name: RowStore,
-  changed: T[],
-  removed: string[],
-): Promise<void> {
-  if (!canStore() || (changed.length === 0 && removed.length === 0)) return;
-  return reported(getBackend().then((b) => b.writeRows(name, changed, removed)));
+export async function readRows<T>(name: RowStore): Promise<T[]> {
+  return canStore() ? withBackend((b) => b.readRows<T>(name)) : [];
+}
+
+export function writeBatch(batch: WriteBatch): Promise<void> {
+  if (!canStore()) return Promise.resolve();
+  return reported(withBackend((b) => b.writeBatch(batch)));
 }

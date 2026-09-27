@@ -4,15 +4,16 @@
  *
  * v6 did `localStorage.setItem(STORE, JSON.stringify(DB))` after every order
  * action — O(total data) per write, capped at 5-10MB. IndexedDB has no
- * practical size cap, and sales are written one row at a time.
+ * practical size cap, and only changed rows are written.
  */
 
 import { ROWS, type RowStore, type StorageBackend } from './storage';
 
 /** Frozen: renaming this hides every sale already on a customer's device. */
 const DB_NAME = 'pos034';
-/** v2 added the `orders` and `stockMoves` row stores; v3 added `closes`. */
-const DB_VERSION = 3;
+/** v2 added the `orders` and `stockMoves` row stores; v3 added `closes`;
+ *  v4 added `products`, `audit`, `promos` and `quotes`. */
+const DB_VERSION = 4;
 const STORE = 'kv';
 
 let dbPromise: Promise<IDBDatabase> | null = null;
@@ -76,8 +77,6 @@ export const idbBackend: StorageBackend = {
   getItem: (name) =>
     tx<string | undefined>('readonly', (store) => store.get(name)).then((value) => value ?? null),
 
-  setItem: (name, value) => tx('readwrite', (store) => store.put(value, name)).then(() => undefined),
-
   removeItem: (name) => tx('readwrite', (store) => store.delete(name)).then(() => undefined),
 
   readRows: <T>(name: RowStore) =>
@@ -93,17 +92,28 @@ export const idbBackend: StorageBackend = {
       .catch(() => []),
 
   // One transaction per batch, so a half-written batch can never survive.
-  writeRows: (name, changed, removed) =>
+  writeBatch: (batch) =>
     openDb().then(
       (db) =>
         new Promise<void>((resolve, reject) => {
-          const transaction = db.transaction(name, 'readwrite');
-          const store = transaction.objectStore(name);
-          for (const row of changed) store.put(row);
-          for (const id of removed) store.delete(id);
+          const transaction = db.transaction([STORE, ...batch.rows.map((r) => r.store)], 'readwrite');
           transaction.oncomplete = () => resolve();
           transaction.onerror = () => reject(transaction.error);
           transaction.onabort = () => reject(transaction.error);
+          try {
+            const kv = transaction.objectStore(STORE);
+            for (const { name, value } of batch.kv) kv.put(value, name);
+            for (const { store, changed, removed } of batch.rows) {
+              const rows = transaction.objectStore(store);
+              for (const row of changed) rows.put(row);
+              for (const id of removed) rows.delete(id);
+            }
+          } catch (error) {
+            // A bad row throws here, not in onerror. Left alone, the
+            // transaction would still commit everything queued before it.
+            transaction.abort();
+            reject(error);
+          }
         }),
     ),
 };
