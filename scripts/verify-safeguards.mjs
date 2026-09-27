@@ -34,7 +34,7 @@ function emit(name, file) {
   writeFileSync(join(dir, `${name}.js`), js);
 }
 
-for (const n of ['brand', 'money', 'qty', 'tax', 'format', 'id', 'presets', 'seed', 'migrate', 'demo', 'crypto', 'idb', 'storage', 'printer', 'receipt', 'device', 'license', 'permissions', 'types', 'archive', 'files', 'backup', 'closes', 'cloudBackup', 'stockHistory', 'promo'])
+for (const n of ['brand', 'money', 'qty', 'tax', 'format', 'id', 'presets', 'seed', 'migrate', 'demo', 'crypto', 'idb', 'storage', 'printer', 'receipt', 'device', 'license', 'permissions', 'types', 'archive', 'files', 'backup', 'closes', 'cloudBackup', 'stockHistory', 'promo', 'quotes'])
   emit(n, `src/lib/${n}.ts`);
 for (const n of ['useAuth', 'usePos']) emit(n, `src/store/${n}.ts`);
 

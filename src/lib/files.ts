@@ -18,7 +18,15 @@ export const SAVE_LOCATION = Capacitor.isNativePlatform() ? 'Documents › POS03
 
 /** Save a JSON file. Rejects if it did not land, so no caller records a backup that never happened. */
 export async function saveJsonFile(name: string, value: unknown): Promise<void> {
-  const contents = JSON.stringify(value);
+  await saveTextFile(name, JSON.stringify(value), 'application/json');
+}
+
+/** Save a plain-text file, e.g. a quotation the customer takes away. */
+export async function saveTextFile(
+  name: string,
+  contents: string,
+  type = 'text/plain',
+): Promise<void> {
   if (Capacitor.isNativePlatform()) {
     // Android 10 asks for storage permission; 11+ grants it for the app's own files.
     if ((await Filesystem.checkPermissions()).publicStorage !== 'granted') {
@@ -35,7 +43,7 @@ export async function saveJsonFile(name: string, value: unknown): Promise<void> 
     return;
   }
 
-  const url = URL.createObjectURL(new Blob([contents], { type: 'application/json' }));
+  const url = URL.createObjectURL(new Blob([contents], { type }));
   const link = document.createElement('a');
   link.href = url;
   link.download = name;

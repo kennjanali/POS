@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { AlertTriangle, Banknote, Smartphone, Split, Trash2 } from 'lucide-react';
+import { AlertTriangle, Banknote, FileText, Smartphone, Split, Trash2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
@@ -29,9 +29,11 @@ interface CheckoutProps {
   open: boolean;
   onClose: () => void;
   onPaid: (orderId: string) => void;
+  /** The cart became a quotation: the slip takes over from the payment screen. */
+  onQuoted?: (quoteId: string) => void;
 }
 
-export function Checkout({ order, open, onClose, onPaid }: CheckoutProps) {
+export function Checkout({ order, open, onClose, onPaid, onQuoted }: CheckoutProps) {
   const settings = usePos((s) => s.settings);
   const clearDiscount = usePos((s) => s.clearDiscount);
   const applyPromo = usePos((s) => s.applyPromo);
@@ -40,6 +42,7 @@ export function Checkout({ order, open, onClose, onPaid }: CheckoutProps) {
   const removeTender = usePos((s) => s.removeTender);
   const closeOrder = usePos((s) => s.closeOrder);
   const payExact = usePos((s) => s.payExact);
+  const saveOrderAsQuote = usePos((s) => s.saveOrderAsQuote);
   const canDiscount = useAuth((s) => can(s.session, 'discount.owner'));
 
   const [method, setMethod] = useState<TenderMethod>('cash');
@@ -111,6 +114,14 @@ export function Checkout({ order, open, onClose, onPaid }: CheckoutProps) {
   function paid() {
     onPaid(order.id);
     close();
+  }
+
+  /** Nothing is taken and no stock moves; the cart becomes a numbered slip. */
+  function quoted() {
+    const result = saveOrderAsQuote(order.id);
+    if (!result.ok) return toast(result.error, 'danger');
+    close();
+    onQuoted?.(result.quoteId);
   }
 
   function pay(how: 'cash' | 'gcash') {
@@ -295,6 +306,20 @@ export function Checkout({ order, open, onClose, onPaid }: CheckoutProps) {
               {discountLabel}
             </button>
           </div>
+
+          {/* Not every shop quotes. When it does, this is the way out of the
+              cart that is not a sale: no money, no stock, just a number. */}
+          {settings.features.quotes && (
+            <Button
+              fullWidth
+              variant="secondary"
+              disabled={billed.length === 0}
+              onClick={quoted}
+            >
+              <FileText size={15} aria-hidden />
+              Save as quote
+            </Button>
+          )}
 
 
           {!split ? (

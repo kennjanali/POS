@@ -47,8 +47,9 @@ import {
   migrateOrderV7,
   migrateSnapshot,
 } from '@/lib/migrate';
-import { applyPreset } from '@/lib/presets';
+import { applyPreset, ticketWord } from '@/lib/presets';
 import { findUsablePromo, isValidCode, normalizeCode } from '@/lib/promo';
+import { addDays, nextQuoteNo, quoteStatus } from '@/lib/quotes';
 import { QTY_ONE, formatQty, lineTotal, type Qty } from '@/lib/qty';
 import { computeBill, type BillBreakdown } from '@/lib/tax';
 import { UPGRADE_RESET_NOTE } from '@/lib/stockHistory';
@@ -65,6 +66,8 @@ import type {
   Product,
   ProductKind,
   Promo,
+  Quote,
+  QuoteLine,
   SaleDiscount,
   Settings,
   StockMove,
@@ -79,6 +82,16 @@ import type {
 export type UserResult =
   | { ok: true; /** Something the screen should say, e.g. a cleared payment. */
       notice?: string }
+  | { ok: false; error: string };
+
+/** A quotation that was made or copied. */
+export type QuoteResult =
+  | { ok: true; quoteId: string }
+  | { ok: false; error: string };
+
+/** A quote turned into a real, open order. */
+export type ConvertQuoteResult =
+  | { ok: true; orderId: string }
   | { ok: false; error: string };
 
 /** What the owner types to make or change a promo code. */
@@ -128,6 +141,10 @@ interface PosState {
   users: User[];
   products: Product[];
   promos: Promo[];
+  /** Quotations. Paper promises of a price: they never move stock. */
+  quotes: Quote[];
+  /** The next number in the Q- series, kept so numbering is gapless. */
+  quoteSeq: number;
   orders: Order[];
   /** branchId -> productId -> on hand */
   stock: Record<string, Record<string, Qty>>;
@@ -194,6 +211,19 @@ interface PosState {
     orderId: string,
     d: { percent: number } | { fixedCents: Centavos },
   ) => UserResult;
+
+  /** Any staff may quote. The cart is thrown away and a quotation replaces it. */
+  saveOrderAsQuote: (orderId: string) => QuoteResult;
+  /** Opens a real order at the prices written on the quote. Any staff. */
+  convertQuote: (
+    quoteId: string,
+    now?: number,
+    options?: { confirmExpired?: boolean },
+  ) => ConvertQuoteResult;
+  /** Copies a quote at today's prices, under a new number. Any staff. */
+  requote: (quoteId: string) => QuoteResult;
+  /** The owner alone. A cancelled quote can never be converted. */
+  cancelQuote: (quoteId: string, reason: string) => UserResult;
 
   addTender: (
     orderId: string,
@@ -414,8 +444,13 @@ function availableIn(
   return Math.max(0, onHand - held) as Qty;
 }
 
-/** The first line the shelf can't cover, as the refusal; null when all fit. */
-function shortLine(lines: OrderLine[], onHand: Record<string, Qty>): string | null {
+/** The first line the shelf can't cover, as the refusal; null when all fit.
+ *  Takes the little an order line and a quote line have in common, so a
+ *  quotation is held to the same stock rule as the sale it becomes. */
+function shortLine(
+  lines: { productId: string; name: string; kind: ProductKind; qty: Qty }[],
+  onHand: Record<string, Qty>,
+): string | null {
   const need = new Map<string, number>();
   for (const l of lines) {
     if (l.kind !== 'stock') continue;
@@ -554,6 +589,38 @@ function blankOrder(
   };
 }
 
+/** A quotation, numbered and totalled. The caller supplies what the customer
+ *  was shown; the shop's own settings decide how long it holds. */
+function newQuote(
+  state: Pick<PosState, 'quoteSeq' | 'settings'>,
+  from: {
+    lines: QuoteLine[];
+    discount: SaleDiscount;
+    customerName: string | null;
+    customerPhone: string | null;
+  },
+): Quote {
+  const gross = from.lines.reduce<Centavos>((sum, l) => addC(sum, lineTotal(l.unitCents, l.qty)), cents(0));
+  const bill = computeBill(gross, state.settings, discountRequest(from.discount));
+  return {
+    id: uuidv7(),
+    quoteNo: nextQuoteNo(state.quoteSeq),
+    status: 'open',
+    lines: from.lines,
+    discount: from.discount,
+    grossCents: bill.gross,
+    discountCents: bill.discount,
+    netCents: bill.amountDue,
+    customerName: from.customerName,
+    customerPhone: from.customerPhone,
+    validUntil: addDays(businessDate(Date.now()), state.settings.quoteValidDays),
+    createdAt: Date.now(),
+    createdBy: actorId(),
+    convertedSaleId: null,
+    cancelledReason: null,
+  };
+}
+
 /** True if any user — active or not — already answers to this PIN. A
  *  deactivated user keeps their PIN reserved; the audit trail still names them. */
 async function pinTaken(users: User[], pin: string, exceptId?: string): Promise<User | null> {
@@ -645,6 +712,8 @@ export const usePos = create<PosState>()(
       users: [],
       products: [],
       promos: [],
+      quotes: [],
+      quoteSeq: 1,
       orders: [],
       stock: { [DEFAULT_BRANCH.id]: {} },
       stockMoves: [],
@@ -926,6 +995,197 @@ export const usePos = create<PosState>()(
           return { ok: false, error: 'Enter an amount of 0 or more.' };
         }
         return setOpenDiscount(set, get, orderId, discount);
+      },
+
+      saveOrderAsQuote: (orderId) => {
+        const refused = guard('quote.make');
+        if (refused) return refused;
+        const state = get();
+        const order = state.order(orderId);
+        if (!order || order.status !== 'open') {
+          return { ok: false, error: 'That sale is no longer open.' };
+        }
+        if (order.lines.length === 0) {
+          return { ok: false, error: 'Add something to the cart first.' };
+        }
+        // Once stock has gone out or money has been taken, it is a sale, not a
+        // cart. The owner cancels those; they are not quoted.
+        if (staysOnRecord(order)) {
+          return { ok: false, error: 'Ask the owner to cancel this sale.' };
+        }
+        const quote = newQuote(state, {
+          lines: order.lines
+            .filter((l) => !l.voided)
+            .map((l) => ({
+              lineNo: l.lineNo,
+              productId: l.productId,
+              name: l.name,
+              kind: l.kind,
+              unitCents: l.unitCents,
+              unit: l.unit,
+              qty: l.qty,
+            })),
+          discount: order.discount,
+          customerName: order.customerName,
+          customerPhone: order.customerPhone,
+        });
+        set((s) => ({
+          ...s,
+          quotes: [...s.quotes, quote],
+          quoteSeq: s.quoteSeq + 1,
+          // The cart has become a piece of paper. Throwing it away releases
+          // whatever stock it was holding.
+          activeOrderId: s.activeOrderId === orderId ? null : s.activeOrderId,
+          orders: s.orders.filter((o) => o.id !== orderId),
+          audit: log(s.audit, 'quote.create', `Quoted ${quote.quoteNo}`, 'info', order.branchId),
+        }));
+        return { ok: true, quoteId: quote.id };
+      },
+
+      convertQuote: (quoteId, now = Date.now(), options = {}) => {
+        const refused = guard('quote.make');
+        if (refused) return refused;
+        const state = get();
+        const quote = state.quotes.find((q) => q.id === quoteId);
+        if (!quote) return { ok: false, error: 'That quotation is gone.' };
+        if (quote.status !== 'open') {
+          return { ok: false, error: `That quotation is already ${quote.status}.` };
+        }
+
+        // A quote is a promise, but only until it says so. Turning it into a
+        // sale is a fresh promise, so an expired one is confirmed, not allowed
+        // through quietly.
+        const today = businessDate(now);
+        if (quoteStatus(quote, today) === 'expired' && options.confirmExpired !== true) {
+          return {
+            ok: false,
+            error: `${quote.quoteNo} expired on ${quote.validUntil}. Convert it anyway?`,
+          };
+        }
+
+        const branchId = state.activeBranchId;
+        const gone: string[] = [];
+        for (const l of quote.lines) {
+          const product = state.products.find((p) => p.id === l.productId);
+          if (!product?.active) gone.push(l.name);
+        }
+        if (gone.length > 0) {
+          return {
+            ok: false,
+            error: `No longer sold: ${[...new Set(gone)].join(', ')}.`,
+          };
+        }
+
+        const available: Record<string, Qty> = {};
+        for (const l of quote.lines) {
+          if (l.kind === 'stock') {
+            available[l.productId] = availableIn(state, branchId, l.productId);
+          }
+        }
+        const short = shortLine(quote.lines, available);
+        if (short) {
+          return { ok: false, error: `Not enough stock to convert. ${short}` };
+        }
+
+        // The point of a quotation: the lines are the ones the customer was
+        // shown, at the prices they were shown.
+        const order = blankOrder(
+          uuidv7(),
+          branchId,
+          ticketWord(state.settings.shopType),
+          'walk-in',
+          { customerName: quote.customerName ?? undefined, customerPhone: quote.customerPhone ?? undefined },
+        );
+        order.fromQuoteId = quote.id;
+        order.lines = quote.lines.map((l) => ({
+          lineNo: l.lineNo,
+          productId: l.productId,
+          name: l.name,
+          unitCents: l.unitCents,
+          // Cost is today's, not the quoted one: profit is judged when the
+          // goods actually go out.
+          costCents: state.products.find((p) => p.id === l.productId)?.costCents,
+          kind: l.kind,
+          unit: l.unit,
+          qty: l.qty,
+          served: false,
+          servedAt: null,
+          voided: false,
+          voidReason: null,
+        }));
+        order.discount = quote.discount;
+
+        set((s) => ({
+          ...s,
+          orders: [...s.orders, order],
+          quotes: s.quotes.map((q) =>
+            q.id === quote.id ? { ...q, status: 'converted', convertedSaleId: order.id } : q,
+          ),
+          audit: log(s.audit, 'quote.convert', `Converted ${quote.quoteNo}`, 'info', branchId),
+        }));
+        return { ok: true, orderId: order.id };
+      },
+
+      requote: (quoteId) => {
+        const refused = guard('quote.make');
+        if (refused) return refused;
+        const source = get().quotes.find((q) => q.id === quoteId);
+        if (!source) return { ok: false, error: 'That quotation is gone.' };
+        if (source.status !== 'open') {
+          return { ok: false, error: `That quotation is already ${source.status}.` };
+        }
+        // Same items, today's prices. An item that has since left the catalogue
+        // keeps the quoted line: a re-quote is not a stock check.
+        const lines: QuoteLine[] = source.lines.map((l) => {
+          const product = get().products.find((p) => p.id === l.productId);
+          if (!product) return { ...l };
+          return { ...l, name: product.name, unit: product.unit, unitCents: product.priceCents };
+        });
+        const quote = newQuote(get(), {
+          lines,
+          discount: source.discount,
+          customerName: source.customerName,
+          customerPhone: source.customerPhone,
+        });
+        set((s) => ({
+          ...s,
+          quotes: [...s.quotes, quote],
+          quoteSeq: s.quoteSeq + 1,
+          audit: log(
+            s.audit,
+            'quote.requote',
+            `Re-quoted ${source.quoteNo} as ${quote.quoteNo}`,
+            'info',
+            s.activeBranchId,
+          ),
+        }));
+        return { ok: true, quoteId: quote.id };
+      },
+
+      cancelQuote: (quoteId, reason) => {
+        const refused = guard('quote.cancel');
+        if (refused) return refused;
+        const quote = get().quotes.find((q) => q.id === quoteId);
+        if (!quote) return { ok: false, error: 'That quotation is gone.' };
+        if (quote.status !== 'open') {
+          return { ok: false, error: `That quotation is already ${quote.status}.` };
+        }
+        set((s) => ({
+          ...s,
+          quotes: s.quotes.map((q) =>
+            q.id === quote.id
+              ? { ...q, status: 'cancelled', cancelledReason: reason.trim() || 'No reason given' }
+              : q,
+          ),
+          audit: log(
+            s.audit,
+            'quote.cancel',
+            `Cancelled ${quote.quoteNo}: ${reason.trim() || 'No reason given'}`,
+            'warn',
+            s.activeBranchId,
+          ),
+        }));
+        return { ok: true };
       },
 
       createPromo: (input) => {
@@ -2004,6 +2264,8 @@ export const usePos = create<PosState>()(
           users: s.users,
           products: s.products,
           promos: s.promos,
+          quotes: s.quotes,
+          quoteSeq: s.quoteSeq,
           orders: s.orders,
           stock: s.stock,
           stockMoves: s.stockMoves,
@@ -2039,6 +2301,9 @@ export const usePos = create<PosState>()(
             products: snapshot.products,
             // Absent in backups made before promo codes existed.
             promos: snapshot.promos ?? [],
+            // Absent in backups made before quotations existed.
+            quotes: snapshot.quotes ?? [],
+            quoteSeq: snapshot.quoteSeq ?? 1,
             orders: snapshot.orders ?? [],
             stock: snapshot.stock ?? {},
             stockMoves: snapshot.stockMoves ?? [],
@@ -2263,6 +2528,7 @@ const SAVED = [
   ROWS.closes,
   ROWS.products,
   ROWS.promos,
+  ROWS.quotes,
   ROWS.audit,
 ] as const;
 type Saved = (typeof SAVED)[number];
@@ -2384,12 +2650,13 @@ function newestFirst(a: AuditEntry, b: AuditEntry): number {
  */
 async function loadRows(rehydrated: PosState | undefined): Promise<void> {
   try {
-    const [rows, moves, closes, products, promos, audit] = await Promise.all([
+    const [rows, moves, closes, products, promos, quotes, audit] = await Promise.all([
       readRows<Order>(ROWS.orders),
       readRows<StockMove>(ROWS.stockMoves),
       readRows<DailyClose>(ROWS.closes),
       readRows<Product>(ROWS.products),
       readRows<Promo>(ROWS.promos),
+      readRows<Quote>(ROWS.quotes),
       readRows<AuditEntry>(ROWS.audit),
     ]);
 
@@ -2399,6 +2666,7 @@ async function loadRows(rehydrated: PosState | undefined): Promise<void> {
       closes,
       products,
       promos,
+      quotes: quotes.length > 0 ? quotes : (rehydrated?.quotes ?? []),
       audit,
     };
     for (const store of SAVED) {

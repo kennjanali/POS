@@ -6,7 +6,7 @@ import { qty } from '@/lib/qty';
 import type { Product } from '@/lib/types';
 import { ownerShop, resetStore } from '@/test/store';
 import { usePos } from '@/store/usePos';
-import { renderReceipt } from './receipt';
+import { renderQuote, renderReceipt } from './receipt';
 
 const S = () => usePos.getState();
 
@@ -71,5 +71,51 @@ describe('the slip', () => {
     expect(slip({ kind: 'legacy' })).toContain('Discount (legacy)');
     expect(slip({ kind: 'owner', percent: 10, fixedCents: null, by: null })).toMatch(/^Discount\s+-112\.00$/m);
     expect(slip({ kind: 'promo', promoId: 'p', code: 'GRAND10', percent: 10 })).toContain('Promo GRAND10 (10%)');
+  });
+});
+
+describe('the quotation', () => {
+  beforeEach(async () => {
+    resetStore();
+    await ownerShop();
+    usePos.setState((s) => ({ settings: { ...s.settings, shopType: 'auto', features: applyPreset('auto') } }));
+    S().upsertProduct(TIRE);
+    S().receiveStock({ lines: [{ productId: 'tire', qty: qty(4) }] });
+  });
+
+  /** Quotes four tires, and returns the slip as printed. */
+  function quoteTire(extra?: { customerName?: string }): string {
+    const id = S().openOrder('Job', 'walk-in', extra);
+    S().addLine(id, 'tire', qty(4));
+    const saved = S().saveOrderAsQuote(id);
+    if (!saved.ok) throw new Error(saved.error);
+    return renderQuote(S().quotes[0]!, S().settings);
+  }
+
+  it('says it is not a receipt, and never says RECEIPT', () => {
+    const slip = quoteTire();
+    expect(slip).toContain('QUOTATION');
+    expect(slip).toContain('NOT A RECEIPT');
+    expect(slip).not.toContain('RECEIPT OR INVOICE');
+  });
+
+  it('prints the number, the date it holds to, and the customer', () => {
+    const slip = quoteTire({ customerName: 'Maria Santos' });
+    expect(slip).toMatch(/Quote no\.\s+Q-0001/);
+    expect(slip).toMatch(/Valid until\s+\d{4}-\d{2}-\d{2}/);
+    expect(slip).toMatch(/Customer\s+Maria Santos/);
+  });
+
+  it('shows the quantity with its unit and the quoted total', () => {
+    const slip = quoteTire();
+    expect(slip).toMatch(/^4 pcs Tire 185\/65 R15\s+4,480\.00$/m);
+    expect(slip).toMatch(/^QUOTED TOTAL\s+4,480\.00$/m);
+  });
+
+  it('keeps every line inside the printer width', () => {
+    usePos.setState((s) => ({ settings: { ...s.settings, businessName: 'Sampalok Auto Shop and Parts Depot' } }));
+    for (const line of quoteTire().split('\n')) {
+      expect(line.length).toBeLessThanOrEqual(58);
+    }
   });
 });

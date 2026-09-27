@@ -10,6 +10,7 @@ import { ProductGrid } from '@/components/pos/ProductGrid';
 import { OrderCard } from '@/components/pos/OrderCard';
 import { OrderPanel } from '@/components/pos/OrderPanel';
 import { ReceiptModal } from '@/components/pos/Receipt';
+import { QuoteSlip } from '@/components/quotes/QuoteSlip';
 import { useShell } from '@/components/layout/shell';
 import { ticketWord } from '@/lib/presets';
 import type { Order } from '@/lib/types';
@@ -35,6 +36,7 @@ export default function SellPage() {
   const tickets = usePos((s) => s.settings.features.openOrders);
   const [checkoutId, setCheckoutId] = useState<string | null>(null);
   const [receiptFor, setReceiptFor] = useState<string | null>(null);
+  const [quoteFor, setQuoteFor] = useState<string | null>(null);
 
   // The order the payment screen was opened for, as it is now.
   const paying = usePos((s) => s.orders.find((o) => o.id === checkoutId && o.status === 'open'));
@@ -49,12 +51,15 @@ export default function SellPage() {
           open
           onClose={() => setCheckoutId(null)}
           onPaid={(id) => setReceiptFor(id)}
+          onQuoted={setQuoteFor}
         />
       )}
 
       {receiptFor && (
         <ReceiptModal orderId={receiptFor} onClose={() => setReceiptFor(null)} />
       )}
+
+      {quoteFor && <QuoteSlip quoteId={quoteFor} onClose={() => setQuoteFor(null)} />}
     </div>
   );
 }

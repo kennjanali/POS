@@ -1,7 +1,14 @@
 import { amount, fmtDate, fmtTime } from './format';
 import { COLUMNS } from './printer';
 import { formatQty, lineTotal } from './qty';
-import { TENDER_LABELS, TENDER_METHODS, type DailyClose, type Order, type Settings } from './types';
+import {
+  TENDER_LABELS,
+  TENDER_METHODS,
+  type DailyClose,
+  type Order,
+  type Quote,
+  type Settings,
+} from './types';
 
 /**
  * Slips are plain fixed-width text: the screen shows it and the thermal
@@ -43,6 +50,63 @@ export function renderClose(close: DailyClose, settings: Settings, width: number
     if (close.tenders[method] > 0) out.push(row(TENDER_LABELS[method], amount(close.tenders[method])));
   }
   out.push(rule, row('Running total', amount(close.runningNetCents)), row('Check', close.hash.slice(0, 12)));
+  return out.join('\n');
+}
+
+/**
+ * A quotation, printed. It says plainly that it is not a receipt: nothing has
+ * been paid, and a customer must never leave believing it was.
+ */
+export function renderQuote(q: Quote, settings: Settings, width: number = COLUMNS[58]): string {
+  const { row, centre, rule } = layout(width);
+  const out: string[] = [];
+
+  out.push(centre(settings.businessName.toUpperCase()));
+  if (settings.address) out.push(centre(settings.address));
+  out.push(centre('QUOTATION'));
+  out.push(centre('NOT A RECEIPT - NOTHING PAID'));
+  out.push(rule);
+
+  out.push(row('Quote no.', q.quoteNo));
+  out.push(row('Date', fmtDate(q.createdAt)));
+  out.push(row('Valid until', q.validUntil));
+  if (q.customerName) out.push(row('Customer', q.customerName));
+  if (q.customerPhone) out.push(row('Phone', q.customerPhone));
+  out.push(rule);
+
+  for (const line of q.lines) {
+    // "2.5 m Electrical wire", the same wording a receipt uses.
+    const item = [formatQty(line.qty), line.unit, line.name].filter(Boolean).join(' ');
+    out.push(row(item, amount(lineTotal(line.unitCents, line.qty))));
+  }
+  out.push(rule);
+
+  out.push(row('Gross', amount(q.grossCents)));
+  if (q.discountCents > 0) {
+    const d = q.discount;
+    const label =
+      d.kind === 'promo'
+        ? `Promo ${d.code} (${d.percent}%)`
+        : d.kind === 'owner' && d.percent !== null
+          ? `Discount ${d.percent}%`
+          : 'Discount';
+    out.push(row(label, `-${amount(q.discountCents)}`));
+  }
+  out.push(row('QUOTED TOTAL', amount(q.netCents)));
+
+  if (q.status === 'converted') {
+    out.push(rule, row('Status', 'Converted to a sale'));
+  } else if (q.status === 'cancelled') {
+    out.push(rule, row('Status', `Cancelled${q.cancelledReason ? `: ${q.cancelledReason}` : ''}`));
+  }
+
+  out.push(rule);
+  if (settings.receiptFooter) out.push(centre(settings.receiptFooter));
+  out.push('');
+  out.push(centre('PRICES HOLD UNTIL THE DATE ABOVE.'));
+  out.push(centre('PLEASE CONFIRM BEFORE WORK BEGINS.'));
+  if (settings.trainingMode) out.push(centre('*** TRAINING MODE ***'));
+
   return out.join('\n');
 }
 

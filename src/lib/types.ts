@@ -130,6 +130,46 @@ export interface Promo {
   firstUsedAt: number | null;
 }
 
+/**
+ * A line on a quotation. The price is a copy of the product's at the moment
+ * the quote was made: the quote is what the customer was shown, so a later
+ * price rise must not rewrite it. `unit` rides along for the slip, the same
+ * frozen copy an order line keeps.
+ */
+export interface QuoteLine {
+  lineNo: number;
+  productId: string;
+  name: string;
+  kind: ProductKind;
+  unitCents: Centavos;
+  unit: string;
+  qty: Qty;
+}
+
+/**
+ * A quotation. It is a piece of paper, not a sale: it never moves stock and
+ * never counts towards money collected. Converting one opens a real order at
+ * the quoted prices and stamps `convertedSaleId` back onto the quote.
+ */
+export interface Quote {
+  id: string;
+  quoteNo: string;
+  status: 'open' | 'converted' | 'cancelled';
+  lines: QuoteLine[];
+  discount: SaleDiscount;
+  grossCents: Centavos;
+  discountCents: Centavos;
+  netCents: Centavos;
+  customerName: string | null;
+  customerPhone: string | null;
+  /** `YYYY-MM-DD` business date the quote stops holding on. */
+  validUntil: string;
+  createdAt: number;
+  createdBy: string | null;
+  convertedSaleId: string | null;
+  cancelledReason: string | null;
+}
+
 export interface Tender {
   id: string;
   method: TenderMethod;
@@ -301,6 +341,10 @@ export interface DataSnapshot {
   products: Product[];
   /** Absent in backups made before promo codes existed. */
   promos?: Promo[];
+  /** Absent in backups made before quotations existed. */
+  quotes?: Quote[];
+  /** The next quotation number, so the Q- series is gapless. Absent in older backups. */
+  quoteSeq?: number;
   orders: Order[];
   stock: Record<string, Record<string, Qty>>;
   stockMoves: StockMove[];

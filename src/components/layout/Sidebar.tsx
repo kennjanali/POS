@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import {
   ChevronsLeft,
   ClipboardList,
+  FileText,
   LayoutDashboard,
   Moon,
   Package,
@@ -24,6 +25,7 @@ import { cn } from '@/components/ui/cn';
 /** Icons only. Which links exist, and who sees them, is permissions.ts. */
 const ICONS: Record<string, typeof ShoppingCart> = {
   '/': ShoppingCart,
+  '/quotes': FileText,
   '/orders': ClipboardList,
   '/inventory': Package,
   '/dashboard': LayoutDashboard,
@@ -34,7 +36,8 @@ export function Sidebar() {
   const pathname = usePathname();
   const { railCollapsed, toggleRail, theme, toggleTheme, openNewOrder } = useShell();
   const session = useAuth((s) => s.session);
-  const nav = routesFor(session);
+  const features = usePos((s) => s.settings.features);
+  const nav = routesFor(session, features);
   const canOpenOrders = can(session, 'sell');
   // What the shop calls an open ticket. A retail shop has a single cart and no
   // tickets to open, so the button would lie about what it does.

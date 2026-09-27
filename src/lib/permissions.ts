@@ -12,6 +12,7 @@
  * against a determined insider.
  */
 
+import type { Features } from './presets';
 import type { Role } from './types';
 
 export type Permission =
@@ -92,10 +93,14 @@ export interface RouteSpec {
   href: string;
   label: string;
   permission: Permission;
+  /** Off for some shop types, whatever the role. A hidden route stays a
+   *  stranger: not in the nav, and not reachable by typing it. */
+  feature?: keyof Features;
 }
 
 export const ROUTES: readonly RouteSpec[] = [
   { href: '/', label: 'Sell', permission: 'sell' },
+  { href: '/quotes', label: 'Quotations', permission: 'quote.make', feature: 'quotes' },
   { href: '/orders', label: 'Sales', permission: 'reports.view' },
   { href: '/inventory', label: 'Inventory', permission: 'inventory.manage' },
   { href: '/dashboard', label: 'Dashboard', permission: 'reports.view' },
@@ -107,21 +112,28 @@ export function normalizePath(pathname: string): string {
   return pathname.replace(/\/+$/, '') || '/';
 }
 
-export function routesFor(actor: Actor | null): RouteSpec[] {
-  return ROUTES.filter((route) => can(actor, route.permission));
+/** What the shop has turned on. Absent means "no feature gates to check". */
+export type FeatureFlags = Partial<Features> | undefined;
+
+function switchedOn(route: RouteSpec, features: FeatureFlags): boolean {
+  return route.feature === undefined || features?.[route.feature] === true;
 }
 
-export function canVisit(actor: Actor | null, pathname: string): boolean {
+export function routesFor(actor: Actor | null, features?: FeatureFlags): RouteSpec[] {
+  return ROUTES.filter((route) => can(actor, route.permission) && switchedOn(route, features));
+}
+
+export function canVisit(actor: Actor | null, pathname: string, features?: FeatureFlags): boolean {
   const route = ROUTES.find((r) => r.href === normalizePath(pathname));
   // An unknown path is not a permission question — let the router 404 it.
   if (!route) return true;
-  return can(actor, route.permission);
+  return can(actor, route.permission) && switchedOn(route, features);
 }
 
 /** Where this actor belongs when they sign in, or when they land somewhere
  *  they are not allowed to be. */
-export function landingFor(actor: Actor | null): string {
-  return routesFor(actor)[0]?.href ?? '/';
+export function landingFor(actor: Actor | null, features?: FeatureFlags): string {
+  return routesFor(actor, features)[0]?.href ?? '/';
 }
 
 // ── The one account rule that is not a permission ──────────────────────
