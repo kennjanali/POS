@@ -17,7 +17,7 @@ These keep the plan free of false claims. Check every ad, post, page and script 
 5. **No invented numbers.** No market statistics, savings figures or customer counts unless there's a source or your own real data behind them.
 6. **No invented or edited testimonials.** Real customers only, with written permission for name, photo and quote.
 7. **Don't name or compare competitors.** Describe the problem ("cloud POS stops when the internet drops"), not a brand.
-8. **Legal and tax statements** only in the form a tax practitioner has confirmed (design §12). POS-034 has no Senior/PWD discount feature, so never advertise one.
+8. **Legal and tax statements** only in the form a tax practitioner has confirmed (design §12).
 9. **Prices on the website include every mandatory cost.** The one-time license, what setup costs, and that maintenance is optional.
 10. **Lead forms** state what's collected and why, and ask for consent (Data Privacy Act, RA 10173).
 
