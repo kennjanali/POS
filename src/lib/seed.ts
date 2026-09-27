@@ -1,4 +1,5 @@
 import { cents } from './money';
+import { applyPreset } from './presets';
 import type { Branch, Product, Settings } from './types';
 
 export const QUICK_LABELS = [
@@ -8,9 +9,6 @@ export const QUICK_LABELS = [
   'Table 4',
   'Table 5',
   'Table 6',
-  'Bar Seat',
-  'Walk-in',
-  'Takeout',
 ];
 
 export const BRANCH_COLORS = [
@@ -40,6 +38,13 @@ export const DEFAULT_SETTINGS: Settings = {
   vatRegistered: false,
   vatRate: 0.12,
   vatLabel: 'VAT',
+
+  // Until the owner picks a shop type, the till works as it always has.
+  shopType: 'restaurant',
+  features: applyPreset('restaurant'),
+  contactNumber: '',
+  quoteValidDays: 7,
+  checklistDismissed: [],
 };
 
 export const DEFAULT_BRANCH: Branch = {

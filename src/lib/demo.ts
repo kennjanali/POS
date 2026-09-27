@@ -100,8 +100,7 @@ function weighted<T>(rand: () => number, table: readonly [T, number][]): T {
 const ORDER_TYPES: readonly [OrderType, number][] = [
   ['dine-in', 55],
   ['takeout', 20],
-  ['grab', 15],
-  ['panda', 10],
+  ['delivery', 25],
 ];
 
 const DISCOUNTS: readonly ['none' | 'owner', number][] = [
@@ -406,8 +405,7 @@ function startOfDay(ts: number): number {
 }
 
 function labelFor(rand: () => number, type: OrderType): string {
-  if (type === 'grab') return 'GrabFood';
-  if (type === 'panda') return 'FoodPanda';
+  if (type === 'delivery') return rand() < 0.6 ? 'GrabFood' : 'FoodPanda';
   if (type === 'takeout') return rand() < 0.5 ? 'Takeout' : pick(rand, WALK_IN_NAMES);
   return pick(rand, QUICK_LABELS);
 }

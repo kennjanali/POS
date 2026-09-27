@@ -17,11 +17,10 @@ import { Toaster, toast } from '@/components/ui/Toast';
 import { usePos } from '@/store/usePos';
 import { useAuth } from '@/store/useAuth';
 import { can } from '@/lib/permissions';
+import { PRESETS } from '@/lib/presets';
 import { QUICK_LABELS } from '@/lib/seed';
 import { ORDER_TYPE_LABELS, type OrderType } from '@/lib/types';
 import { cn } from '@/components/ui/cn';
-
-const ORDER_TYPES = Object.keys(ORDER_TYPE_LABELS) as OrderType[];
 
 function NewOrderDialog() {
   const { newOrderOpen, closeNewOrder } = useShell();
@@ -29,12 +28,17 @@ function NewOrderDialog() {
   const openOrder = usePos((s) => s.openOrder);
   const orders = usePos((s) => s.orders);
   const activeBranchId = usePos((s) => s.activeBranchId);
+  const shopType = usePos((s) => s.settings.shopType);
+  const orderTypes = PRESETS[shopType].orderTypes;
+  const quickLabels = shopType === 'restaurant' ? QUICK_LABELS : [];
   const takenLabels = orders
     .filter((o) => o.status === 'open' && o.branchId === activeBranchId)
     .map((o) => o.label);
 
   const [label, setLabel] = useState('');
-  const [type, setType] = useState<OrderType>('dine-in');
+  const [picked, setPicked] = useState<OrderType | null>(null);
+  // The shop type can change under an open dialog (hydration, Settings).
+  const type = picked !== null && orderTypes.includes(picked) ? picked : orderTypes[0]!;
 
   function submit(name: string) {
     const trimmed = name.trim();
@@ -66,12 +70,12 @@ function NewOrderDialog() {
           <p className="mb-2 text-[11px] font-bold tracking-wide text-ink-2 uppercase">
             Order type
           </p>
-          <div className="grid grid-cols-4 gap-1.5">
-            {ORDER_TYPES.map((t) => (
+          <div className="grid grid-cols-3 gap-1.5">
+            {orderTypes.map((t) => (
               <button
                 key={t}
                 type="button"
-                onClick={() => setType(t)}
+                onClick={() => setPicked(t)}
                 aria-pressed={type === t}
                 className={cn(
                   'rounded-md border px-2 py-2 text-[12px] font-semibold transition-colors',
@@ -86,36 +90,38 @@ function NewOrderDialog() {
           </div>
         </div>
 
-        <div>
-          <p className="mb-2 text-[11px] font-bold tracking-wide text-ink-2 uppercase">
-            Quick pick
-          </p>
-          <div className="grid grid-cols-3 gap-1.5">
-            {QUICK_LABELS.map((name) => {
-              const taken = takenLabels.includes(name);
-              return (
-                <button
-                  key={name}
-                  type="button"
-                  disabled={taken}
-                  onClick={() => submit(name)}
-                  className={cn(
-                    'rounded-md border px-2 py-2.5 text-[12px] font-semibold transition-colors',
-                    taken
-                      ? 'cursor-not-allowed border-line bg-raised text-ink-4 line-through'
-                      : 'border-line bg-raised hover:border-accent hover:text-accent',
-                  )}
-                >
-                  {name}
-                </button>
-              );
-            })}
+        {quickLabels.length > 0 && (
+          <div>
+            <p className="mb-2 text-[11px] font-bold tracking-wide text-ink-2 uppercase">
+              Quick pick
+            </p>
+            <div className="grid grid-cols-3 gap-1.5">
+              {quickLabels.map((name) => {
+                const taken = takenLabels.includes(name);
+                return (
+                  <button
+                    key={name}
+                    type="button"
+                    disabled={taken}
+                    onClick={() => submit(name)}
+                    className={cn(
+                      'rounded-md border px-2 py-2.5 text-[12px] font-semibold transition-colors',
+                      taken
+                        ? 'cursor-not-allowed border-line bg-raised text-ink-4 line-through'
+                        : 'border-line bg-raised hover:border-accent hover:text-accent',
+                    )}
+                  >
+                    {name}
+                  </button>
+                );
+              })}
+            </div>
           </div>
-        </div>
+        )}
 
         <Field
-          label="Or name it yourself"
-          placeholder="Kuya Ben, Table 12, Delivery #3"
+          label={quickLabels.length > 0 ? 'Or name it yourself' : 'Name'}
+          placeholder="Name or plate no."
           value={label}
           onChange={(e) => setLabel(e.target.value)}
           onKeyDown={(e) => {

@@ -22,7 +22,7 @@ function emit(name, file) {
   writeFileSync(join(dir, `${name}.js`), js);
 }
 
-for (const name of ['money', 'tax', 'format', 'id', 'seed', 'types', 'migrate', 'demo']) {
+for (const name of ['money', 'tax', 'format', 'id', 'presets', 'seed', 'types', 'migrate', 'demo']) {
   emit(name, `src/lib/${name}.ts`);
 }
 

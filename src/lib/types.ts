@@ -1,10 +1,11 @@
 import type { PinCredential } from './crypto';
 import type { Centavos } from './money';
+import type { Features, ShopType } from './presets';
 import type { ReceiptPrinter } from './printer';
 import type { TaxProfile } from './tax';
 
 export type OrderStatus = 'open' | 'closed' | 'voided';
-export type OrderType = 'dine-in' | 'takeout' | 'grab' | 'panda';
+export type OrderType = 'dine-in' | 'takeout' | 'delivery' | 'walk-in' | 'pickup';
 export type TenderMethod = 'cash' | 'gcash' | 'maya' | 'card' | 'bank' | 'other';
 
 export const TENDER_METHODS: readonly TenderMethod[] = [
@@ -36,8 +37,9 @@ export const REFERENCED_METHODS: readonly TenderMethod[] = [
 export const ORDER_TYPE_LABELS: Record<OrderType, string> = {
   'dine-in': 'Dine-in',
   takeout: 'Takeout',
-  grab: 'GrabFood',
-  panda: 'FoodPanda',
+  delivery: 'Delivery',
+  'walk-in': 'Walk-in',
+  pickup: 'Pickup',
 };
 
 export type Role = 'superadmin' | 'staff';
@@ -198,6 +200,15 @@ export interface Settings extends TaxProfile {
   trainingMode: boolean;
   /** The paired Bluetooth printer (Android app only). Absent until chosen. */
   printer?: ReceiptPrinter | null;
+  /** The preset the switches started from. The switches decide behaviour, not this. */
+  shopType: ShopType;
+  /** Set by the shop type; the owner changes them in Settings → More options. */
+  features: Features;
+  contactNumber: string;
+  /** How many days a quotation stays valid. */
+  quoteValidDays: number;
+  /** "Finish setting up" checklist items the owner dismissed. */
+  checklistDismissed: string[];
 }
 
 /**

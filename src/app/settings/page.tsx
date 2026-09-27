@@ -18,8 +18,19 @@ import { cents } from '@/lib/money';
 import { peso, fmtDate } from '@/lib/format';
 import { backupFileName, saveBackup } from '@/lib/backup';
 import { canShareFiles, SAVE_LOCATION, shareSavedFile } from '@/lib/files';
+import { PRESETS, type Features } from '@/lib/presets';
 import type { DataSnapshot, Settings } from '@/lib/types';
 import { usePos } from '@/store/usePos';
+
+/** One toggle per switch, in plain words. */
+const FEATURE_LABELS: Record<keyof Features, string> = {
+  openOrders: 'Tables / jobs stay open until paid',
+  serveStep: 'Serve items before payment',
+  services: 'Sell services, not only items',
+  quotes: 'Make quotations',
+  vehiclePlate: 'Write the plate number on tickets',
+  measuredUnits: 'Sell by the metre or kilo (2.5 m, 0.75 kg)',
+};
 
 export default function SettingsPage() {
   const settings = usePos((s) => s.settings);
@@ -300,6 +311,21 @@ export default function SettingsPage() {
               cannot be loaded or wiped from here — restore a backup instead.
             </p>
           )}
+        </Section>
+
+        {/* ── More options ─────────────────────────────────────── */}
+        <Section title="More options">
+          <p className="text-[12px] leading-relaxed text-ink-2">
+            Your shop type ({PRESETS[settings.shopType].label}) set these. Change any of them here.
+          </p>
+          {(Object.keys(FEATURE_LABELS) as (keyof Features)[]).map((key) => (
+            <Toggle
+              key={key}
+              label={FEATURE_LABELS[key]}
+              checked={settings.features[key]}
+              onChange={(on) => update({ features: { ...settings.features, [key]: on } })}
+            />
+          ))}
         </Section>
 
         {/* ── Audit ────────────────────────────────────────────── */}

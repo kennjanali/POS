@@ -5,8 +5,9 @@
  * than a second migration somewhere else.
  */
 
+import { applyPreset } from './presets';
 import type { DiscountRequest } from './tax';
-import type { DataSnapshot, Order, SaleDiscount, Settings, User } from './types';
+import type { DataSnapshot, Order, OrderType, SaleDiscount, Settings, User } from './types';
 
 /** What the tax engine gets for a sale's discount. A legacy discount is frozen
  *  history and takes nothing off a new bill. */
@@ -45,10 +46,16 @@ function discountV7({ discountKind, customPercent }: OrderDiscountV7): SaleDisco
   return { kind: 'none' };
 }
 
+/** GrabFood and FoodPanda became one delivery type. */
+function orderTypeV7(type: string): OrderType {
+  return type === 'grab' || type === 'panda' ? 'delivery' : (type as OrderType);
+}
+
 /** A v7 order as v8 stores it. Frozen totals are untouched. */
 export function migrateOrderV7(o: unknown): Order {
   const order: Record<string, unknown> = {
     ...(o as Record<string, unknown>),
+    type: orderTypeV7((o as { type: string }).type),
     discount: discountV7(o as OrderDiscountV7),
   };
   for (const field of ORDER_FIELDS_V7) delete order[field];
@@ -57,9 +64,20 @@ export function migrateOrderV7(o: unknown): Order {
 
 // ── settings ─────────────────────────────────────────────────────────────
 
-/** Prices always include VAT now, so the old switch has nothing to say. */
+/**
+ * Prices always include VAT now, so the old switch has nothing to say. Every
+ * v7 install was a restaurant, the only shop the app knew, so it keeps the
+ * restaurant switches.
+ */
 function migrateSettingsV7(settings: Settings): Settings {
-  const next: Settings & { pricesIncludeVat?: boolean } = { ...settings };
+  const next: Settings & { pricesIncludeVat?: boolean } = {
+    ...settings,
+    shopType: 'restaurant',
+    features: applyPreset('restaurant'),
+    contactNumber: '',
+    quoteValidDays: 7,
+    checklistDismissed: [],
+  };
   delete next.pricesIncludeVat;
   return next;
 }
