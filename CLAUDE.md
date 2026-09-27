@@ -63,3 +63,15 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 ---
 
 **These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
+
+
+Approach:
+- Think before acting.  
+- Read existing files before writing code.  
+- Be concise in output but thorough in reasoning.  
+- Prefer editing over rewriting whole files.  
+- Do not re-read files you have already read unless the file may have changed.  
+- Test your code before declaring done.  
+- No sycophantic openers or closing fluff.  
+- Keep solutions simple and direct.  
+- User instructions always override this file.
