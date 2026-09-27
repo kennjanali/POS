@@ -75,27 +75,27 @@
 <h1>POS-034 &mdash; Build Progress</h1>
 <p class="sub">
   Offline POS for small shops, by kennali.com. One tablet = one shop.<br>
-  Branch <code>pos-034-redesign</code> &middot; 30 commits ahead of <code>main</code>, none pushed &middot; as of 2026-09-28.<br>
+  Branch <code>pos-034-redesign</code> &middot; 34 commits ahead of <code>main</code> &middot; as of 2026-09-28.<br>
   Spec: <code>docs/superpowers/specs/2026-09-27-pos-034-design.md</code> &middot;
   Plan: <code>docs/superpowers/plans/2026-09-27-pos-034-app.md</code> (18 tasks) &middot;
   Ledger: <code>.superpowers/sdd/2026-09-27-pos-034-app/progress.md</code>
 </p>
 
 <div class="grid">
-  <div class="stat"><b>10<span class="n">/18</span></b><span>Tasks complete</span></div>
-  <div class="stat"><b>1</b><span>In progress (Task 11)</span></div>
-  <div class="stat"><b>7</b><span>Not started</span></div>
+  <div class="stat"><b>12<span class="n">/18</span></b><span>Tasks complete</span></div>
+  <div class="stat"><b>0</b><span>In progress</span></div>
+  <div class="stat"><b>6</b><span>Not started</span></div>
   <div class="stat"><b class="yes">PASS</b><span><code>npm run check</code> — all 6 stages</span></div>
-  <div class="stat"><b>121</b><span>Tests passing (17 files)</span></div>
+  <div class="stat"><b>147</b><span>Tests passing (19 files)</span></div>
 </div>
 
-<div class="bar" role="img" aria-label="10 of 18 tasks complete, 1 in progress, 7 not started">
-  <i class="d" style="width:55.6%"></i><i class="w" style="width:5.6%"></i><i class="n" style="width:38.8%"></i>
+<div class="bar" role="img" aria-label="12 of 18 tasks complete, 0 in progress, 6 not started">
+  <i class="d" style="width:66.7%"></i><i class="w" style="width:0%"></i><i class="n" style="width:33.3%"></i>
 </div>
 <div class="legend">
-  <span><i class="dot" style="background:var(--ok)"></i>10 complete</span>
-  <span><i class="dot" style="background:var(--wait)"></i>1 in progress</span>
-  <span><i class="dot" style="background:var(--idle-soft);border:1px solid var(--line)"></i>7 not started</span>
+  <span><i class="dot" style="background:var(--ok)"></i>12 complete</span>
+  <span><i class="dot" style="background:var(--wait)"></i>0 in progress</span>
+  <span><i class="dot" style="background:var(--idle-soft);border:1px solid var(--line)"></i>6 not started</span>
 </div>
 
 <h2>Quality gate</h2>
@@ -104,7 +104,7 @@
   <tr><th>Stage</th><th>Result</th><th>What it covers</th></tr>
   <tr><td><code>typecheck</code></td><td class="yes">PASS</td><td><code>tsc --noEmit</code></td></tr>
   <tr><td><code>lint</code></td><td class="yes">PASS</td><td><code>eslint src</code></td></tr>
-  <tr><td><code>test</code></td><td class="yes">PASS</td><td>121 tests, 17 files</td></tr>
+  <tr><td><code>test</code></td><td class="yes">PASS</td><td>147 tests, 19 files</td></tr>
   <tr><td><code>verify:auth</code></td><td class="yes">PASS</td><td>Route guard for every role, last-owner protection, PIN hashing</td></tr>
   <tr><td><code>verify:demo</code></td><td class="yes">PASS</td><td>Demo data: frozen totals, gapless numbers, stock sums to on hand</td></tr>
   <tr><td><code>verify:safeguards</code></td><td class="yes">PASS</td><td>First run, license offline binding, one-way practice door, daily close chain, backup encryption, receipt width, archive pruning</td></tr>
@@ -114,9 +114,9 @@
 <h2>Tasks</h2>
 <div class="chips" role="group" aria-label="Filter tasks by status">
   <button type="button" data-f="all" aria-pressed="true">All 18</button>
-  <button type="button" data-f="done" aria-pressed="false">Complete (10)</button>
-  <button type="button" data-f="wait" aria-pressed="false">In progress (1)</button>
-  <button type="button" data-f="idle" aria-pressed="false">Not started (7)</button>
+  <button type="button" data-f="done" aria-pressed="false">Complete (12)</button>
+  <button type="button" data-f="wait" aria-pressed="false">In progress (0)</button>
+  <button type="button" data-f="idle" aria-pressed="false">Not started (6)</button>
 </div>
 <div class="scroll">
 <table id="tasks">
@@ -184,16 +184,16 @@
       <td class="mono">dc0ccc0..be7c5aa</td>
       <td>Products, services, add stock, count, damage, quick-add, per-item stock history, low-stock bell</td>
     </tr>
-    <tr data-s="wait">
+    <tr data-s="done">
       <td>11</td><td>Sell screen and payment, the easy way</td>
-      <td><span class="tag t-wait">In progress</span></td>
-      <td class="mono strike">uncommitted</td>
-      <td><code>payExact</code> one-tap cash/GCash; retail cart vs ticket floor; VAT line on the slip. <b>Sales-history VAT column still to do.</b></td>
+      <td><span class="tag t-done">Complete</span></td>
+      <td class="mono">15cfa95</td>
+      <td><code>payExact</code> one-tap cash/GCash; retail cart vs ticket floor; VAT line on the slip; Sales-history VAT column</td>
     </tr>
-    <tr data-s="idle">
+    <tr data-s="done">
       <td>12</td><td>Promo codes</td>
-      <td><span class="tag t-idle">Not started</span></td>
-      <td class="mono">&mdash;</td>
+      <td><span class="tag t-done">Complete</span></td>
+      <td class="mono">3a331f7</td>
       <td><code>promo.ts</code>, owner-made codes staff can apply, one discount per sale, locked after first use</td>
     </tr>
     <tr data-s="idle">
@@ -236,29 +236,30 @@
 </table>
 </div>
 
-<h2>Task 11 in detail</h2>
-<p class="sub">9 files changed, +735 / &minus;377, plus 2 new test files. Nothing committed yet.</p>
+<h2>Task 12 in detail</h2>
+<p class="sub">Promo codes. Committed as <code>Owner-made promo codes that staff can apply; one discount per sale</code>.</p>
 <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr))">
   <div class="card">
     <h3 style="margin-top:0">Done and passing</h3>
     <ul class="tight">
-      <li><code>payExact(orderId, 'cash')</code> closes a &pob;150 cart with one 15000 payment</li>
-      <li>GCash refused without a <code>refNo</code>; closes with one &mdash; order stays open when refused</li>
-      <li>Retail flow: always one cart, first tap opens a walk-in, clear = discard</li>
-      <li>Ticket flow: the floor of open tickets, customer name/phone and plate</li>
-      <li><code>MenuGrid</code> &rarr; <code>ProductGrid</code>, category tabs, search by name or SKU</li>
-      <li>Slip prints <code>VAT (12%) included</code> under TOTAL, nothing on a non-VAT shop</li>
-      <li>Open-order rules: qty &le; 0 refused, a line at zero is removed, a paid order can't be discarded</li>
+      <li><code>promo.ts</code>: <code>normalizeCode</code>, <code>isValidCode</code>, <code>promoStatus</code> (active / scheduled / expired / off, <code>endsOn</code> inclusive), <code>findUsablePromo</code></li>
+      <li>Owner creates codes in Inventory &rarr; Promo codes: code, %, note, optional dates, status, sales used, turn on/off</li>
+      <li>One <b>Discount</b> button for everyone at payment; the manual % and &pob; sit behind the owner check</li>
+      <li>Staff can type a code; <code>" grand10 "</code> matches <code>GRAND10</code>, checked on the tablet so it works offline</li>
+      <li>One discount per sale: a code and an owner discount replace each other</li>
+      <li>A code is frozen on the first sale that closes with it &mdash; turn it off and make a new one</li>
+      <li>100% closes the sale at &pob;0.00, is numbered, and still takes the item off the shelf</li>
+      <li>Create, change and turn on/off are audited; codes ride in the backup file</li>
     </ul>
   </div>
   <div class="card">
-    <h3 style="margin-top:0">Still to do</h3>
+    <h3 style="margin-top:0">Decisions and still to do</h3>
     <ul class="tight">
-      <li><b>VAT column on the sales-history table</b> &mdash; <code>src/app/orders/page.tsx</code> has no VAT reference at all. Named in the brief, not started.</li>
-      <li>Wording still to change in that file: "Order no.", "Tender" (brief wants "Payment"), "Void" &rarr; "Cancel sale", "Search menu" &rarr; "Search items"</li>
-      <li>Sidebar still reads "New order"; the <code>POS@034</code> wordmark is Task 18's wording pass</li>
-      <li>Manual pass at 1280&times;800 on both presets (retail exact-cash flow, auto plate + GCash)</li>
-      <li>Commit: <code>Easy sell screen: one-tap payments, carts for retail, tickets for jobs and tables</code></li>
+      <li><b>Spec vs plan, resolved by you.</b> &sect;6.2a says removing a discount after payment relies on "payments must equal the total"; the plan said clear the payment. You chose <b>clear it</b> and toast &ldquo;Discount changed &mdash; enter the payment again.&rdquo; The stale cash-change window is now closed rather than detected at close.</li>
+      <li>That rewrote the H1 safeguard: it now asserts the payment is cleared and cannot close on it. The mismatch rule itself is still covered by the underpayment case.</li>
+      <li><code>setOwnerDiscountPercent</code>, the Task 4 temporary, is gone; <code>applyOwnerDiscount</code> replaces it</li>
+      <li>Owner discount can now be a fixed &pob; amount, which the plan asks for and the old temporary setter could not do</li>
+      <li>Manual pass at 1280&times;800 on the Discount sheet and the Promo codes tab</li>
     </ul>
   </div>
 </div>
@@ -308,9 +309,9 @@
     <td>Task 18</td>
   </tr>
   <tr>
-    <td>Several deferred test gaps (guards beyond two actions, a change landing while a batch is in flight, <code>setOwnerDiscountPercent</code> range checks)</td>
+    <td>Several deferred test gaps (guards beyond two actions, a change landing while a batch is in flight)</td>
     <td class="n">Carried</td>
-    <td>Task 12, final review</td>
+    <td>Final review</td>
   </tr>
   <tr>
     <td><code>vitest.config.ts</code> warns about ESM syntax in a CommonJS-loaded file on every run</td>
