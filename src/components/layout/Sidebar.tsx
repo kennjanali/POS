@@ -17,6 +17,7 @@ import {
 import { usePos } from '@/store/usePos';
 import { useAuth } from '@/store/useAuth';
 import { can, normalizePath, routesFor } from '@/lib/permissions';
+import { ticketWord } from '@/lib/presets';
 import { useShell } from './shell';
 import { cn } from '@/components/ui/cn';
 
@@ -35,6 +36,12 @@ export function Sidebar() {
   const session = useAuth((s) => s.session);
   const nav = routesFor(session);
   const canOpenOrders = can(session, 'sell');
+  // What the shop calls an open ticket. A retail shop has a single cart and no
+  // tickets to open, so the button would lie about what it does.
+  const ticketWordLower = usePos((s) =>
+    ticketWord(s.settings.shopType).toLowerCase(),
+  );
+  const usesTickets = usePos((s) => s.settings.features.openOrders);
   const openCount = usePos((s) =>
     s.orders.filter((o) => o.status === 'open' && o.branchId === s.activeBranchId)
       .length,
@@ -109,15 +116,15 @@ export function Sidebar() {
 
       {/* Actions */}
       <div className="flex shrink-0 flex-col gap-0.5 border-t border-rail-line p-1.5">
-        {canOpenOrders && (
+        {canOpenOrders && usesTickets && (
           <button
             type="button"
             onClick={openNewOrder}
-            title={railCollapsed ? 'New order' : undefined}
+            title={railCollapsed ? `New ${ticketWordLower}` : undefined}
             className="flex items-center gap-3 overflow-hidden rounded-md bg-accent px-3 py-2.5 text-[12.5px] font-bold whitespace-nowrap text-white transition-[filter] hover:brightness-110"
           >
             <PlusCircle size={16} className="shrink-0" aria-hidden />
-            {!railCollapsed && <span>New order</span>}
+            {!railCollapsed && <span>New {ticketWordLower}</span>}
           </button>
         )}
 

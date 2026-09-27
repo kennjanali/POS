@@ -29,14 +29,23 @@ const FILTERS: { key: OrderStatus | 'all'; label: string }[] = [
   { key: 'all', label: 'All' },
   { key: 'open', label: 'Open' },
   { key: 'closed', label: 'Closed' },
-  { key: 'voided', label: 'Voided' },
+  { key: 'voided', label: 'Cancelled' },
 ];
+
+/** Stored status names are internal; the shop reads "Cancelled", not "voided". */
+const STATUS_LABELS: Record<OrderStatus, string> = {
+  open: 'Open',
+  closed: 'Closed',
+  voided: 'Cancelled',
+};
 
 export default function OrdersPage() {
   const orders = usePos((s) => s.orders);
   const branches = usePos((s) => s.branches);
   const users = usePos((s) => s.users);
   const currency = usePos((s) => s.settings.currency);
+  /** A shop that is not VAT-registered never shows a VAT column. */
+  const vatRegistered = usePos((s) => s.settings.vatRegistered);
   const voidOrder = usePos((s) => s.voidOrder);
   // Unmaking a sale stays with the owner.
   const canVoid = useAuth((s) => can(s.session, 'sale.cancel'));
@@ -153,8 +162,8 @@ export default function OrdersPage() {
         />
         <input
           type="search"
-          aria-label="Search orders"
-          placeholder="Order no. or label"
+          aria-label="Search sales"
+          placeholder="Sale no. or label"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           className="h-10 min-w-[160px] flex-1 rounded-md border border-line bg-raised px-3 text-[13px]"
@@ -179,23 +188,26 @@ export default function OrdersPage() {
         {rows.length === 0 ? (
           <Empty
             icon={ClipboardList}
-            title="No orders match these filters"
+            title="No sales match these filters"
             action="Clear the filters to see the full history."
           />
         ) : (
           <table className="w-full border-collapse text-[12.5px]">
             <thead>
               <tr className="border-b border-line text-left text-[10.5px] tracking-wide text-ink-3 uppercase">
-                <th className="py-2 pr-3 font-bold">Order no.</th>
-                <th className="py-2 pr-3 font-bold">Order</th>
+                <th className="py-2 pr-3 font-bold">Sale no.</th>
+                <th className="py-2 pr-3 font-bold">Sale</th>
                 {branches.length > 1 && (
                   <th className="py-2 pr-3 font-bold">Branch</th>
                 )}
                 <th className="py-2 pr-3 font-bold">Time</th>
                 <th className="py-2 pr-3 font-bold">Served by</th>
                 <th className="py-2 pr-3 font-bold">Paid by</th>
-                <th className="py-2 pr-3 font-bold">Tender</th>
+                <th className="py-2 pr-3 font-bold">Payment</th>
                 <th className="py-2 pr-3 text-right font-bold">Total</th>
+                {vatRegistered && (
+                  <th className="py-2 pr-3 text-right font-bold">VAT</th>
+                )}
                 <th className="py-2 font-bold">Status</th>
                 <th className="py-2" />
               </tr>
@@ -239,6 +251,11 @@ export default function OrdersPage() {
                   <td className="tnum py-2 pr-3 text-right font-bold">
                     {peso(order.netCents, currency)}
                   </td>
+                  {vatRegistered && (
+                    <td className="tnum py-2 pr-3 text-right text-ink-2">
+                      {peso(order.vatCents, currency)}
+                    </td>
+                  )}
                   <td className="py-2">
                     <span
                       className={cn(
@@ -248,14 +265,14 @@ export default function OrdersPage() {
                         order.status === 'voided' && 'bg-bad/15 text-bad',
                       )}
                     >
-                      {order.status}
+                      {STATUS_LABELS[order.status]}
                     </span>
                   </td>
                   <td className="py-2 text-right whitespace-nowrap">
                     {order.status === 'closed' && (
                       <button
                         type="button"
-                        aria-label={`Order slip for ${order.invoiceNo ?? order.label}`}
+                        aria-label={`Sale slip for ${order.invoiceNo ?? order.label}`}
                         onClick={() => setReceiptFor(order.id)}
                         className="grid size-10 place-items-center rounded text-ink-3 hover:bg-raised hover:text-ink"
                       >
@@ -265,7 +282,7 @@ export default function OrdersPage() {
                     {canVoid && order.status !== 'voided' && (
                       <button
                         type="button"
-                        aria-label={`Void ${order.invoiceNo ?? order.label}`}
+                        aria-label={`Cancel sale ${order.invoiceNo ?? order.label}`}
                         onClick={() => setVoidTarget(order.id)}
                         className="grid size-10 place-items-center rounded text-ink-3 hover:bg-bad/10 hover:text-bad"
                       >
@@ -282,7 +299,7 @@ export default function OrdersPage() {
         {rows.length > visible.length && (
           <p className="mt-3 rounded-md border border-line bg-surface px-3 py-2.5 text-center text-[12px] text-ink-2">
             Showing the {visible.length} most recent of{' '}
-            <strong>{rows.length.toLocaleString('en-PH')}</strong> matching orders. Use
+            <strong>{rows.length.toLocaleString('en-PH')}</strong> matching sales. Use
             the date or the search box to reach the rest.
           </p>
         )}
@@ -295,7 +312,7 @@ export default function OrdersPage() {
       <Modal
         open={voidTarget !== null}
         onClose={() => setVoidTarget(null)}
-        title="Void this order"
+        title="Cancel this sale"
         width="sm"
         footer={
           <Button
@@ -304,13 +321,13 @@ export default function OrdersPage() {
             disabled={!voidReason.trim()}
             onClick={confirmVoid}
           >
-            Void order
+            Cancel sale
           </Button>
         }
       >
         <p className="mb-3 text-[12.5px] leading-relaxed text-ink-2">
-          The order is kept and marked voided, its stock is returned, and it drops out of
-          sales totals. Orders are never deleted — a missing sale looks the same as a
+          The sale is kept and marked cancelled, its stock is returned, and it drops out
+          of sales totals. Sales are never deleted — a missing sale looks the same as a
           hidden one at audit.
         </p>
         <Field
