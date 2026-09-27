@@ -35,6 +35,10 @@ const { DEFAULT_BRANCH, SAMPLE_MENU, DEFAULT_SETTINGS, OPENING_STOCK } =
   await load('seed');
 const { businessDate } = await load('format');
 
+// Today at 12:00, not the wall clock: the generator's "today" depends on the
+// hour it runs, and the checks must give the same answer at any hour.
+const NOON = new Date().setHours(12, 0, 0, 0);
+
 let failures = 0;
 function check(name, ok, detail = '') {
   if (!ok) failures++;
@@ -58,6 +62,7 @@ for (const settings of [
     mainBranch: DEFAULT_BRANCH,
     days,
     ordersPerDay,
+    now: NOON,
   });
 
   check('three branches generated', data.branches.length === 3, `got ${data.branches.length}`);
@@ -176,12 +181,13 @@ for (const settings of [
 console.log();
 console.log('— today —');
 {
-  const now = Date.now();
+  const now = NOON;
   const today = businessDate(now);
   const fresh = buildDemoData({
     products: SAMPLE_MENU,
     settings: DEFAULT_SETTINGS,
     mainBranch: DEFAULT_BRANCH,
+    now,
   });
   const closedToday = fresh.orders.filter(
     (o) => o.status === 'closed' && businessDate(o.closedAt ?? o.openedAt) === today,

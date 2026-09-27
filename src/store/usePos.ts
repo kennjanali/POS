@@ -415,6 +415,19 @@ function initialStock(products: Product[]): Record<string, Qty> {
   );
 }
 
+/**
+ * Reading saved data failed. The till keeps working in memory, but nothing is
+ * written for the rest of the session: what is in memory is not what is on
+ * disk, and saving it would write over the stored books (or, mid-upgrade,
+ * mark v8 rows as still needing the v7 migration). The error stays on screen.
+ */
+let loadFailed = false;
+
+function failLoad(persistError: string): void {
+  loadFailed = true;
+  usePos.setState({ hydrated: true, persistError });
+}
+
 export const usePos = create<PosState>()(
   persist(
     (set, get) => ({
@@ -1543,11 +1556,7 @@ export const usePos = create<PosState>()(
       }),
       onRehydrateStorage: () => (state, error) => {
         if (error) {
-          usePos.setState({
-            hydrated: true,
-            persistError:
-              'Could not read saved data. Work in this session may not be saved.',
-          });
+          failLoad('Could not read saved data. Work in this session may not be saved.');
           return;
         }
         state?.setActiveOrder(null);
@@ -1644,6 +1653,7 @@ let changedWhileSaving = false;
 /** Save everything not yet on disk: the blob and every changed row, as one batch. */
 function flush(): void {
   flushScheduled = false;
+  if (loadFailed) return;
   if (saving) {
     changedWhileSaving = true;
     return;
@@ -1737,6 +1747,7 @@ async function loadRows(rehydrated: PosState | undefined): Promise<void> {
       // quite time order, so sort by time and break ties by id.
       audit: audit.length > 0 ? [...audit].sort(newestFirst) : (rehydrated?.audit ?? []),
     };
+    loadFailed = false;
     usePos.setState({
       ...next,
       ...(upgrade ? resetNegativeStock({ ...next, stock: usePos.getState().stock }) : {}),
@@ -1745,18 +1756,14 @@ async function loadRows(rehydrated: PosState | undefined): Promise<void> {
     });
     void usePos.getState().checkLicense();
   } catch {
-    usePos.setState({
-      hydrated: true,
-      persistError:
-        'Could not read saved sales. Work in this session may not be saved.',
-    });
+    failLoad('Could not read saved sales. Work in this session may not be saved.');
   }
 }
 
 /**
- * v7 recorded overselling as a negative balance; v8 never lets stock go below
- * zero. At the upgrade each negative balance is counted back to zero, with a
- * count move and an audit entry, so the correction is on the record.
+ * v7 recorded overselling as a negative balance. Stock is not meant to go
+ * below zero, so at the upgrade each negative balance is counted back to zero,
+ * with a count move and an audit entry, so the correction is on the record.
  */
 function resetNegativeStock(
   s: Pick<PosState, 'stock' | 'stockMoves' | 'audit' | 'products'>,

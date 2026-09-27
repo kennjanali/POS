@@ -111,6 +111,26 @@ describe('saving', () => {
     expect(S().persistError).toBeNull();
   });
 
+  it('writes nothing for the rest of the session once the saved rows could not be read', async () => {
+    let writes = 0;
+    setStorageBackend({
+      ...recording,
+      readRows: () => Promise.reject(new Error('read failed')),
+      writeBatch: async () => {
+        writes++;
+      },
+    });
+    usePos.setState({ hydrated: false });
+    await usePos.persist.rehydrate();
+    await settle();
+
+    sale();
+    await settle();
+
+    expect(writes).toBe(0);
+    expect(S().persistError).toEqual(expect.any(String));
+  });
+
   it('removes the audit row that falls off the 2000-entry cap', async () => {
     const full: AuditEntry[] = Array.from({ length: 2000 }, (_, i) =>
       entry(`a${String(2000 - i).padStart(4, '0')}`, 2000 - i),

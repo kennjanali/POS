@@ -19,7 +19,7 @@ import { peso, fmtDate } from '@/lib/format';
 import { backupFileName, saveBackup } from '@/lib/backup';
 import { canShareFiles, SAVE_LOCATION, shareSavedFile } from '@/lib/files';
 import { PRESETS, type Features } from '@/lib/presets';
-import { formatQty, qty } from '@/lib/qty';
+import { formatQty, parseQty } from '@/lib/qty';
 import type { DataSnapshot, Settings } from '@/lib/types';
 import { usePos } from '@/store/usePos';
 
@@ -41,6 +41,17 @@ export default function SettingsPage() {
     if (!result.ok) toast(result.error, 'danger');
   };
   const licensed = usePos((s) => s.licensed !== null);
+  // Typed freely, saved on leaving the field: a half-typed number is not a setting.
+  const [lowStockInput, setLowStockInput] = useState(() => formatQty(settings.lowStockAt));
+  function saveLowStock() {
+    const lowStockAt = parseQty(lowStockInput, false);
+    if (lowStockAt === null) {
+      toast('Enter a whole number of units above 0', 'danger');
+      setLowStockInput(formatQty(settings.lowStockAt));
+      return;
+    }
+    update({ lowStockAt });
+  }
   const exportSnapshot = usePos((s) => s.exportSnapshot);
   const importSnapshot = usePos((s) => s.importSnapshot);
   const resetAll = usePos((s) => s.resetAll);
@@ -199,11 +210,11 @@ export default function SettingsPage() {
           />
           <Field
             label="Low stock warning at"
-            type="number"
-            min={0}
+            inputMode="numeric"
             suffix="units"
-            value={formatQty(settings.lowStockAt)}
-            onChange={(e) => update({ lowStockAt: qty(Number(e.target.value) || 0) })}
+            value={lowStockInput}
+            onChange={(e) => setLowStockInput(e.target.value)}
+            onBlur={saveLowStock}
           />
           <Toggle
             label="Training mode"
