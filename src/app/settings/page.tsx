@@ -18,6 +18,7 @@ import { cents } from '@/lib/money';
 import { peso, fmtDate } from '@/lib/format';
 import { backupFileName, saveBackup } from '@/lib/backup';
 import { canShareFiles, SAVE_LOCATION, shareSavedFile } from '@/lib/files';
+import { DEMO_BUSINESSES } from '@/lib/demo';
 import { PRESETS, type Features } from '@/lib/presets';
 import { formatQty, parseQty } from '@/lib/qty';
 import type { DataSnapshot, Settings } from '@/lib/types';
@@ -60,13 +61,14 @@ export default function SettingsPage() {
   const resetAll = usePos((s) => s.resetAll);
   const recordBackup = usePos((s) => s.recordBackup);
   const lastBackupAt = usePos((s) => s.lastBackupAt);
-  const loadDemoData = usePos((s) => s.loadDemoData);
+  const loadDemoBusiness = usePos((s) => s.loadDemoBusiness);
   const audit = usePos((s) => s.audit);
   const users = usePos((s) => s.users);
 
   const fileRef = useRef<HTMLInputElement>(null);
   const [confirmReset, setConfirmReset] = useState(false);
-  const [confirmDemo, setConfirmDemo] = useState(false);
+  // The demo business the owner picked, waiting for them to confirm.
+  const [confirmDemo, setConfirmDemo] = useState<(typeof DEMO_BUSINESSES)[number] | null>(null);
   const [confirmGoLive, setConfirmGoLive] = useState(false);
 
   // Live worked example so the owner can see what the tax settings actually do.
@@ -111,17 +113,16 @@ export default function SettingsPage() {
     reader.readAsText(file);
   }
 
-  function loadDemo() {
-    setConfirmDemo(false);
-    toast('Building a month of demo trading...');
-    // A month across three branches is a few thousand orders. Yield first so
-    // the toast actually paints before the main thread goes away.
+  function loadDemo(business: (typeof DEMO_BUSINESSES)[number]) {
+    setConfirmDemo(null);
+    toast(`Building the ${business.label} demo...`);
+    // Yield first so the toast paints before the work starts.
     window.setTimeout(() => {
-      const count = loadDemoData();
+      const count = loadDemoBusiness(business.shopType);
       toast(
         count > 0
-          ? `Loaded ${count.toLocaleString('en-PH')} demo orders`
-          : 'Only available in training mode',
+          ? `Loaded the ${business.label} demo: ${count.toLocaleString('en-PH')} sales`
+          : 'Only available in practice mode',
         count > 0 ? 'success' : 'danger',
       );
     }, 50);
@@ -293,36 +294,37 @@ export default function SettingsPage() {
               e.target.value = '';
             }}
           />
-          <Button
-            variant="secondary"
-            fullWidth
-            disabled={!settings.trainingMode}
-            onClick={() => setConfirmDemo(true)}
-            title={
-              settings.trainingMode
-                ? undefined
-                : 'Only available in training mode'
-            }
-          >
-            <FlaskConical size={14} aria-hidden />
-            Load demo data
-          </Button>
+          <div>
+            <p className="mb-1.5 flex items-center gap-1.5 text-[12px] font-semibold">
+              <FlaskConical size={14} aria-hidden />
+              Load demo business
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              {DEMO_BUSINESSES.map((business) => (
+                <Button
+                  key={business.shopType}
+                  variant="secondary"
+                  disabled={!settings.trainingMode}
+                  onClick={() => setConfirmDemo(business)}
+                  title={settings.trainingMode ? undefined : 'Only available in practice mode'}
+                >
+                  {business.label}
+                </Button>
+              ))}
+            </div>
+          </div>
           <Button
             variant="danger"
             fullWidth
             disabled={!settings.trainingMode}
             onClick={() => setConfirmReset(true)}
-            title={
-              settings.trainingMode
-                ? undefined
-                : 'Only available in training mode'
-            }
+            title={settings.trainingMode ? undefined : 'Only available in practice mode'}
           >
             Remove demo data
           </Button>
           {!settings.trainingMode && (
             <p className="text-[11px] leading-relaxed text-ink-3">
-              Demo data is a training-mode tool. This install is live, so sales
+              Demo data is a practice-mode tool. This install is live, so sales
               cannot be loaded or wiped from here — restore a backup instead.
             </p>
           )}
@@ -374,26 +376,26 @@ export default function SettingsPage() {
       </div>
 
       <Modal
-        open={confirmDemo}
-        onClose={() => setConfirmDemo(false)}
-        title="Load demo data"
+        open={confirmDemo !== null}
+        onClose={() => setConfirmDemo(null)}
+        title={`Load the ${confirmDemo?.label ?? ''} demo`}
         width="sm"
         footer={
-          <Button fullWidth onClick={loadDemo}>
-            Load demo data
+          <Button fullWidth onClick={() => confirmDemo && loadDemo(confirmDemo)}>
+            Load demo business
           </Button>
         }
       >
         <p className="text-[12.5px] leading-relaxed text-ink-2">
-          Writes 30 days of pretend trading — roughly 40 orders a day across three
-          branches, with some owner discounts, every tender type, a few
-          voided sales, and live tables on the floor right now. Today is included,
-          so Today and This month have something to show straight away.
+          Three weeks of pretend trading for a {confirmDemo?.label.toLowerCase()}: its
+          sample items, sales with the <strong>DEMO10</strong> promo code, a few cancelled
+          sales, three open quotations, and a couple of items running low. Today is
+          included, so Today and This month have something to show straight away.
         </p>
         <p className="mt-2 text-[12.5px] leading-relaxed text-ink-2">
-          <strong>Every order, stock movement and order number already on this
-          device is replaced.</strong>{' '}
-          Menu items and settings are kept, and branches you added yourself stay.
+          <strong>The shop type, items, sales, stock, quotations and promo codes on this
+          device are replaced.</strong>{' '}
+          Staff, the license and the rest of Settings stay.
         </p>
       </Modal>
 
@@ -448,7 +450,7 @@ export default function SettingsPage() {
               toast(
                 cleared
                   ? 'Demo data removed'
-                  : 'Only available in training mode',
+                  : 'Only available in practice mode',
                 cleared ? 'success' : 'danger',
               );
             }}

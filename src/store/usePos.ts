@@ -6,7 +6,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import { APP_VERSION, LICENSE_SERVER_URL, PRODUCT_NAME } from '@/lib/brand';
 import { buildClose, inWindow, signClose } from '@/lib/closes';
 import { createBackupKey, sealBackup, uploadBackup, type BackupKey } from '@/lib/cloudBackup';
-import { buildDemoData } from '@/lib/demo';
+import { buildDemoData, DEMO_BUSINESSES } from '@/lib/demo';
 import { deviceFingerprint } from '@/lib/device';
 import { verifyLicense, type License } from '@/lib/license';
 import {
@@ -310,7 +310,9 @@ interface PosState {
    * Replace sales history with a generated demo month. Training mode only —
    * returns the number of orders written, or 0 if the install is locked.
    */
-  loadDemoData: (options?: { days?: number; ordersPerDay?: number }) => number;
+  /** Practice mode only: replaces the shop with a demo business of this type.
+   *  Returns the number of sales written, or 0 when refused. */
+  loadDemoBusiness: (shopType: ShopType, options?: { days?: number; salesPerDay?: number }) => number;
   // ── monthly archive ─────────────────────────────────────────────────
   /** Finished months still held on this device, newest first. */
   archivableMonths: () => { month: string; orders: number; net: Centavos }[];
@@ -2334,77 +2336,51 @@ export const usePos = create<PosState>()(
         return { ok: true };
       },
 
-      loadDemoData: (options) => {
+      loadDemoBusiness: (shopType, options) => {
         const state = get();
-        // Same lock as trainingMode itself: a BIR-registered install must not
-        // be able to write fabricated sales over its books.
+        // Same lock as practice mode itself: a live install must never be
+        // able to write fabricated sales over its books.
         if (!state.settings.trainingMode) return 0;
+        if (guard('settings.manage')) return 0;
 
-        const mainBranch = state.branches[0] ?? DEFAULT_BRANCH;
-        // Demo sales need something to sell. An install that turned the sample
-        // down gets the catalog for the shop type it is, along with the demo.
-        const products =
-          state.products.length > 0 ? state.products : seedCatalog(state.settings.shopType).products;
+        const branch = state.branches[0] ?? DEFAULT_BRANCH;
         const demo = buildDemoData({
-          products,
+          shopType,
           settings: state.settings,
-          mainBranch,
+          branch,
           days: options?.days,
-          ordersPerDay: options?.ordersPerDay,
+          salesPerDay: options?.salesPerDay,
         });
-
-        // Branches the owner made themselves are left alone; the demo ones are
-        // added beside them. Stock is merged for the same reason.
-        //
-        // A demo branch is only added if both its id and its BIR branch code
-        // are still free. The code is what prefixes an invoice number, so two
-        // branches sharing one issue the same invoice number twice — the very
-        // thing the Add branch form refuses. A demo branch that cannot be
-        // added takes its orders and stock with it rather than leaving them
-        // attached to the owner's branch of the same id.
-        const byId = new Map(state.branches.map((b) => [b.id, b]));
-        const usedCodes = new Set(state.branches.map((b) => b.branchCode));
-        for (const branch of demo.branches) {
-          if (byId.has(branch.id) || usedCodes.has(branch.branchCode)) continue;
-          byId.set(branch.id, branch);
-          usedCodes.add(branch.branchCode);
-        }
-
-        const kept = new Set(
-          demo.branches.filter((b) => byId.get(b.id) === b).map((b) => b.id),
-        );
-        kept.add(mainBranch.id);
-        const orders = demo.orders.filter((o) => kept.has(o.branchId));
-        const stockMoves = demo.stockMoves.filter((m) => kept.has(m.branchId));
-        const stock = Object.fromEntries(
-          Object.entries(demo.stock).filter(([id]) => kept.has(id)),
-        );
-        const invoiceSeq = Object.fromEntries(
-          Object.entries(demo.invoiceSeq).filter(([id]) => kept.has(id)),
-        );
+        const sales = demo.orders.filter((o) => o.status !== 'open').length;
+        const label = DEMO_BUSINESSES.find((b) => b.shopType === shopType)?.label ?? PRESETS[shopType].label;
 
         set((s) => ({
           ...s,
-          branches: [...byId.values()],
-          products,
-          orders,
-          stock: { ...s.stock, ...stock },
-          stockMoves,
-          // Closes describe the sales being replaced; they go with them.
+          // One install is one shop: the demo business trades at the main
+          // branch. Branches the owner added stay, empty.
+          activeBranchId: branch.id,
+          settings: { ...s.settings, shopType, features: applyPreset(shopType) },
+          products: demo.products,
+          orders: demo.orders,
+          stock: demo.stock,
+          stockMoves: demo.stockMoves,
+          quotes: demo.quotes,
+          quoteSeq: demo.quoteSeq,
+          promos: demo.promos,
+          // Summaries describe the sales being replaced; they go with them.
           closes: [],
-          invoiceSeq,
-          activeBranchId: mainBranch.id,
+          invoiceSeq: demo.invoiceSeq,
+          lowStockAlerts: [],
           activeOrderId: null,
           audit: log(
             s.audit,
             'demo.load',
-            `Loaded demo data — ${orders.length} orders across ` +
-              `${kept.size} branches`,
+            `Loaded the ${label} demo business — ${sales} sales`,
             'warn',
-            mainBranch.id,
+            branch.id,
           ),
         }));
-        return orders.length;
+        return sales;
       },
 
       // ── monthly archive ───────────────────────────────────────────
