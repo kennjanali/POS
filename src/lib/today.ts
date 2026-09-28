@@ -28,9 +28,10 @@ export interface DaySummary {
 }
 
 /**
- * One day's figures. A sale belongs to the day it was paid, and a cancellation
- * to the day it was cancelled — the same rule the report and the close use, so
- * a void never erases a day it did not happen on.
+ * One day's figures. A paid sale counts on the day it was paid; once it is
+ * cancelled it is no longer a sale on any day, and the cancellation is shown
+ * on the day it happened. Today's summary, which is frozen, carries a late
+ * cancellation of an earlier day's sale as its own line instead.
  */
 export function daySummary(orders: Order[], day: string): DaySummary {
   const collected = Object.fromEntries(TENDER_METHODS.map((m) => [m, 0])) as Record<TenderMethod, number>;

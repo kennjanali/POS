@@ -42,6 +42,8 @@ const STATUS_LABELS: Record<OrderStatus, string> = {
 export default function OrdersPage() {
   const orders = usePos((s) => s.orders);
   const branches = usePos((s) => s.branches);
+  // Only a shop with a serve step has anyone "serving"; elsewhere it is who paid.
+  const serveStep = usePos((s) => s.settings.features.serveStep);
   const users = usePos((s) => s.users);
   const currency = usePos((s) => s.settings.currency);
   /** A shop that is not VAT-registered never shows a VAT column. */
@@ -200,12 +202,12 @@ export default function OrdersPage() {
             <thead>
               <tr className="border-b border-line text-left text-[10.5px] tracking-wide text-ink-3 uppercase">
                 <th className="py-2 pr-3 font-bold">Sale no.</th>
-                <th className="py-2 pr-3 font-bold">Sale</th>
+                <th className="py-2 pr-3 font-bold">Name</th>
                 {branches.length > 1 && (
                   <th className="py-2 pr-3 font-bold">Branch</th>
                 )}
                 <th className="py-2 pr-3 font-bold">Time</th>
-                <th className="py-2 pr-3 font-bold">Served by</th>
+                {serveStep && <th className="py-2 pr-3 font-bold">Served by</th>}
                 <th className="py-2 pr-3 font-bold">Paid by</th>
                 <th className="py-2 pr-3 font-bold">Payment</th>
                 <th className="py-2 pr-3 text-right font-bold">Total</th>
@@ -247,7 +249,7 @@ export default function OrdersPage() {
                   <td className="py-2 pr-3 text-ink-2">
                     {fmtTime(order.closedAt ?? order.openedAt)}
                   </td>
-                  <td className="py-2 pr-3 text-ink-2">{staffName(order.servedBy)}</td>
+                  {serveStep && <td className="py-2 pr-3 text-ink-2">{staffName(order.servedBy)}</td>}
                   <td className="py-2 pr-3 text-ink-2">{staffName(order.paidBy)}</td>
                   <td className="py-2 pr-3 text-ink-2">
                     {order.tenders.map((t) => TENDER_LABELS[t.method]).join(' + ') || '—'}

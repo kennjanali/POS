@@ -59,7 +59,7 @@ Full detail: <code>docs/superpowers/specs/2026-09-27-pos-034-design.md</code> (s
 <h2>1. What it is</h2>
 <div class="grid">
   <div class="card"><b>Sell</b><br>Inventory → orders → payment → printed slip. Works with no internet.</div>
-  <div class="card"><b>Any small shop</b><br>Restaurant, hardware, auto parts &amp; service, car wash, general — via presets.</div>
+  <div class="card"><b>Any small shop</b><br>One general POS: Inventory holds goods and services side by side, and a few switches turn on what a shop needs.</div>
   <div class="card"><b>Owner in control</b><br>Only the owner sets stock, prices, discounts, promo codes and VAT.</div>
   <div class="card"><b>Pay once</b><br>One-time license per tablet + optional yearly updates. No sales fee.</div>
 </div>
@@ -89,26 +89,25 @@ Full detail: <code>docs/superpowers/specs/2026-09-27-pos-034-design.md</code> (s
   <tr><td>Reports (This month, Sales), settings, VAT, users</td><td class="yes">✓</td><td class="no">—</td></tr>
 </table></div>
 
-<h2>4. Presets (feature switches)</h2>
+<h2>4. Switches (one general POS)</h2>
 <div class="scroll"><table>
-  <tr><th>Switch</th><th>Restaurant</th><th>Retail / Hardware</th><th>Auto &amp; Tire</th><th>Car Wash</th></tr>
-  <tr><td>Open tickets</td><td>Table</td><td>—</td><td>Job</td><td>Queue</td></tr>
-  <tr><td>Serve step</td><td class="yes">✓</td><td>—</td><td>—</td><td>—</td></tr>
-  <tr><td>Services (labor, never stocked)</td><td>—</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
-  <tr><td>Quotations</td><td>—</td><td class="yes">✓</td><td class="yes">✓</td><td>—</td></tr>
-  <tr><td>Plate number</td><td>—</td><td>—</td><td class="yes">✓</td><td class="yes">✓</td></tr>
-  <tr><td>Decimal qty (m, kg)</td><td>—</td><td class="yes">✓</td><td>—</td><td>—</td></tr>
+  <tr><th>Switch</th><th>Every shop starts</th><th>Restaurant demo</th><th>Hardware demo</th><th>Auto demo</th><th>Car Wash demo</th></tr>
+  <tr><td>Keep sales open until paid</td><td>—</td><td>Table</td><td>—</td><td>Job</td><td>Queue</td></tr>
+  <tr><td>Serve step</td><td>—</td><td class="yes">✓</td><td>—</td><td>—</td><td>—</td></tr>
+  <tr><td>Quotations</td><td class="yes">✓</td><td>—</td><td class="yes">✓</td><td class="yes">✓</td><td>—</td></tr>
+  <tr><td>Plate number</td><td>—</td><td>—</td><td>—</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+  <tr><td>Decimal qty (m, kg)</td><td class="yes">✓</td><td>—</td><td class="yes">✓</td><td>—</td><td>—</td></tr>
 </table></div>
-<p class="sub">“General” = retail defaults. Owner can change any switch in Settings → More options. Presets are data, not code paths.</p>
+<p class="sub">Revision 2 (2026-09-28): there are no shop types. Every shop starts on the first column and the owner changes any switch in Settings → More options. Services are always in Inventory. The four demos show the same POS with other switches on.</p>
 
 <h2>5. Screens &amp; flows</h2>
 <div class="grid">
-  <div class="card"><b>Setup (4 questions)</b><ol><li>Shop type</li><li>Shop name</li><li>Owner name + PIN</li><li>Products: sample / spreadsheet / empty</li></ol>Then recovery code → Today, with a “Finish setting up” checklist (printer, address, VAT, license, staff).</div>
+  <div class="card"><b>Setup (3 questions)</b><ol><li>Shop name</li><li>Owner name + PIN</li><li>Start with: sample items / spreadsheet / empty</li></ol>Then recovery code → Today, with a “Finish setting up” checklist (printer, address, VAT, license, staff).</div>
   <div class="card"><b>Sell</b><br>Tap items → Discount (promo code / owner) → <span class="pill">Exact cash</span><span class="pill">GCash</span><span class="pill">Other / split</span> → number assigned, stock deducted, slip printed.</div>
   <div class="card"><b>Quotes</b><br>Save cart as <code>Q-0001</code> (valid 7 days) → print/share → convert at quoted prices (stock checked).</div>
   <div class="card"><b>Inventory (owner)</b><br>Products · Services · Promo codes · Add stock · Count · Damage · CSV import/export · Low-stock list.</div>
   <div class="card"><b>Today / This month</b><br>Sales, discounts (promo vs owner), VAT, money collected by method, expected cash. End-of-day summary runs itself at 23:59, hash-chained.</div>
-  <div class="card"><b>Practice mode</b><br>Watermarked. “Load demo business”: Restaurant, Hardware, Auto, Car Wash. Going live needs a license and is one-way.</div>
+  <div class="card"><b>Practice mode</b><br>Watermarked. “Load demo business”: Restaurant, Hardware, Auto, Car Wash — one POS, four kinds of shop. Going live needs a license, is one-way, and clears the practice data.</div>
 </div>
 
 <h2>6. Data flow</h2>
@@ -206,7 +205,7 @@ Full detail: <code>docs/superpowers/specs/2026-09-27-pos-034-design.md</code> (s
   <tr><td>4</td><td>Remove Senior/PWD, data v8 + migration</td><td>13</td><td>Quotations</td></tr>
   <tr><td>5</td><td>Owner / Staff roles, enforced in store</td><td>14</td><td>Today, This month, Today's summary</td></tr>
   <tr><td>6</td><td>Atomic saves + new tables</td><td>15</td><td>4-question setup + checklist</td></tr>
-  <tr><td>7</td><td>Presets &amp; feature switches</td><td>16</td><td>CSV import / export</td></tr>
+  <tr><td>7</td><td>Feature switches</td><td>16</td><td>CSV import / export</td></tr>
   <tr><td>8</td><td>Decimal quantities, product kind/SKU</td><td>17</td><td>Demo businesses</td></tr>
   <tr><td>9</td><td>Stock rules: holds, ≥ 0, numbers at payment</td><td>18</td><td>Tips, plain words, README</td></tr>
 </table></div>

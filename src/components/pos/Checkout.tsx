@@ -176,24 +176,33 @@ export function Checkout({ order, open, onClose, onPaid, onQuoted }: CheckoutPro
       // Cash: the customer may hand over more than the balance.
       const applied = cents(Math.min(requested, Math.max(balance, 0)));
       const change = cents(requested - applied);
-      addTender(order.id, {
-        method,
-        amountCents: applied,
-        tenderedCents: requested,
-        changeCents: change,
-        refNo: null,
-      });
+      const taken = showRefusal(
+        addTender(order.id, {
+          method,
+          amountCents: applied,
+          tenderedCents: requested,
+          changeCents: change,
+          refNo: null,
+        }),
+      );
+      if (!taken.ok) return;
       if (change > 0) {
         toast(`Change due ${peso(change, settings.currency)}`, 'success');
       }
     } else {
-      addTender(order.id, {
-        method,
-        amountCents: requested,
-        tenderedCents: null,
-        changeCents: null,
-        refNo: refNo.trim() || null,
-      });
+      if (
+        !showRefusal(
+          addTender(order.id, {
+            method,
+            amountCents: requested,
+            tenderedCents: null,
+            changeCents: null,
+            refNo: refNo.trim() || null,
+          }),
+        ).ok
+      ) {
+        return;
+      }
     }
 
     setAmountInput('');

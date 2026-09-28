@@ -1,8 +1,7 @@
 # POS-034
 
-Offline point of sale for small Philippine shops — restaurants, hardware and retail stores,
-auto parts and service shops, car washes — by kennali.com. It runs on an Android tablet with a
-Bluetooth receipt printer. One tablet is one shop.
+Offline point of sale for any small Philippine shop — goods, services or both — by kennali.com.
+It runs on an Android tablet with a Bluetooth receipt printer. One tablet is one shop.
 
 **Status:** the app side of the redesign (Plan A) is built. The kennali.com platform (Plan B) and
 the updates pipeline (Plan C) come next. The design is in

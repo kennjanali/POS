@@ -47,7 +47,10 @@ export function orderTypesFor(features: Features): OrderType[] {
   return features.serveStep ? ['dine-in', 'takeout', 'delivery'] : ['walk-in', 'pickup', 'delivery'];
 }
 
-/** What an open sale is called on screen: "Sale", or the owner's own word. */
-export function ticketWord(settings: Pick<Settings, 'ticketLabel'>): string {
+/** What an open sale is called on screen: the owner's own word while sales
+ *  stay open, "Sale" otherwise — a "Table" left over from an old setting
+ *  would name a sale in a shop with no tables. */
+export function ticketWord(settings: Pick<Settings, 'ticketLabel' | 'features'>): string {
+  if (!settings.features.openOrders) return DEFAULT_TICKET_LABEL;
   return settings.ticketLabel?.trim() || DEFAULT_TICKET_LABEL;
 }

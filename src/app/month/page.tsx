@@ -193,7 +193,7 @@ export default function MonthPage() {
             <span className="text-ink-2">
               This branch has {stats.onDevice.toLocaleString('en-PH')} on the device
               overall — pick a wider range above to see them. Only paid-up sales
-              count here, so tables still open on the floor are not included.
+              count here, so sales still open are not included.
             </span>
           </p>
         )}

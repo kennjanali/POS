@@ -182,6 +182,8 @@ describe('daySummary', () => {
   });
 });
 
+const tick = () => new Promise((resolve) => setTimeout(resolve, 3));
+
 describe('daySummary through the till (the plan scenario)', () => {
   beforeEach(async () => {
     resetStore();
@@ -246,6 +248,9 @@ describe('daySummary through the till (the plan scenario)', () => {
   it('lets only the owner close the day with a count; the nightly close needs nobody', async () => {
     item('three', 300);
     expect(S().payExact(sale('three'), 'cash').ok).toBe(true);
+    // A close covers what was paid before it; a person never sells and closes
+    // in the same millisecond, so the test waits like the till would.
+    await tick();
     signInAs('staff');
     expect(await S().closeDay(cents(30000))).toBeNull();
     useAuth.setState({ session: null });
@@ -255,6 +260,7 @@ describe('daySummary through the till (the plan scenario)', () => {
   it("refuses a negative count, and the slip reads Today's summary", async () => {
     item('three', 300);
     expect(S().payExact(sale('three'), 'cash').ok).toBe(true);
+    await tick();
     expect(await S().closeDay(cents(-100))).toBeNull();
 
     const close = await S().closeDay(cents(30000));

@@ -37,7 +37,7 @@ export function DamageModal({ product, onClose }: { product: Product; onClose: (
     <Modal
       open
       onClose={onClose}
-      title={`Damage / spoilage: ${product.name}`}
+      title={`Damaged or lost: ${product.name}`}
       width="sm"
       footer={
         <Button fullWidth variant="danger" onClick={save} disabled={!input.trim() || !note.trim()}>

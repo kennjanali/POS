@@ -120,7 +120,6 @@ export function renderQuote(q: Quote, settings: Settings, width: number = COLUMN
   if (settings.receiptFooter) out.push(centre(settings.receiptFooter));
   out.push('');
   out.push(centre('PRICES HOLD UNTIL THE DATE ABOVE.'));
-  out.push(centre('PLEASE CONFIRM BEFORE WORK BEGINS.'));
   if (settings.trainingMode) out.push(centre('*** PRACTICE MODE ***'));
 
   return out.join('\n');

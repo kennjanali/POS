@@ -33,9 +33,12 @@ describe('orderTypesFor and ticketWord', () => {
   });
 
   it('calls an open sale a Sale unless the owner renamed it', () => {
-    expect(ticketWord({ ticketLabel: 'Sale' })).toBe('Sale');
-    expect(ticketWord({ ticketLabel: ' Job ' })).toBe('Job');
-    expect(ticketWord({ ticketLabel: '   ' })).toBe('Sale');
+    const open = { ...DEFAULT_FEATURES, openOrders: true };
+    expect(ticketWord({ ticketLabel: 'Sale', features: open })).toBe('Sale');
+    expect(ticketWord({ ticketLabel: ' Job ', features: open })).toBe('Job');
+    expect(ticketWord({ ticketLabel: '   ', features: open })).toBe('Sale');
+    // A word left over from when sales stayed open does not name a counter sale.
+    expect(ticketWord({ ticketLabel: 'Table', features: DEFAULT_FEATURES })).toBe('Sale');
   });
 });
 

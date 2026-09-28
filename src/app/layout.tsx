@@ -5,7 +5,7 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: PRODUCT_NAME,
-  description: 'Offline-first point of sale for Philippine restaurants.',
+  description: 'Offline-first point of sale for small Philippine shops.',
 };
 
 export const viewport: Viewport = {

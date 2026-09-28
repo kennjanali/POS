@@ -75,11 +75,11 @@ export const SAMPLE_CATALOG: CatalogItem[] = [
   { name: 'Cooking Oil 1L', category: 'Groceries', price: 120, cost: 98, unit: 'pcs', opening: 12 },
   { name: 'Laundry Soap', category: 'Household', price: 30, cost: 22, unit: 'pcs', opening: 40 },
   { name: 'Batteries AA (pair)', category: 'Household', price: 60, cost: 40, unit: 'pcs', opening: 20 },
-  { name: 'Padlock', category: 'Hardware', price: 180, cost: 120, unit: 'pcs', opening: 12 },
-  { name: 'Electrical Wire (per m)', category: 'Hardware', price: 28, cost: 18, unit: 'm', opening: 100 },
-  { name: 'Nylon Rope (per m)', category: 'Hardware', price: 15, cost: 8, unit: 'm', opening: 60 },
+  { name: 'Padlock', category: 'Tools & Supplies', price: 180, cost: 120, unit: 'pcs', opening: 12 },
+  { name: 'Electrical Wire (per m)', category: 'Tools & Supplies', price: 28, cost: 18, unit: 'm', opening: 100 },
+  { name: 'Nylon Rope (per m)', category: 'Tools & Supplies', price: 15, cost: 8, unit: 'm', opening: 60 },
   { name: 'Delivery', category: 'Services', price: 50, cost: 0, unit: 'job', opening: 0 },
-  { name: 'Repair Labor (per hour)', category: 'Services', price: 250, cost: 0, unit: 'hr', opening: 0 },
+  { name: 'Repair Labor (per hour)', category: 'Services', price: 250, cost: 0, unit: 'hour', opening: 0 },
   { name: 'Gift Wrapping', category: 'Services', price: 30, cost: 5, unit: 'job', opening: 0 },
 ].map(byOpening);
 

@@ -18,7 +18,6 @@ import { usePos } from '@/store/usePos';
 import { useAuth } from '@/store/useAuth';
 import { can } from '@/lib/permissions';
 import { orderTypesFor, ticketWord } from '@/lib/features';
-import { QUICK_LABELS } from '@/lib/seed';
 import { ORDER_TYPE_LABELS, type OrderType } from '@/lib/types';
 import { cn } from '@/components/ui/cn';
 
@@ -32,8 +31,10 @@ function NewOrderDialog() {
   const askPlate = settings.features.vehiclePlate;
   const orderTypes = orderTypesFor(settings.features);
   const word = ticketWord(settings);
-  // Table shortcuts only where food is served at tables.
-  const quickLabels = settings.features.serveStep ? QUICK_LABELS : [];
+  // Numbered shortcuts where sales are served at a place, e.g. "Table 1".
+  const quickLabels = settings.features.serveStep
+    ? Array.from({ length: 6 }, (_, i) => `${word} ${i + 1}`)
+    : [];
   const takenLabels = orders
     .filter((o) => o.status === 'open' && o.branchId === activeBranchId)
     .map((o) => o.label);

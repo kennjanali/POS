@@ -29,7 +29,7 @@ const FEATURE_LABELS: Record<keyof Features, string> = {
   openOrders: 'Keep sales open until paid (tables, jobs, a queue)',
   serveStep: 'Serve items before payment',
   quotes: 'Make quotations',
-  vehiclePlate: 'Write the plate number on tickets',
+  vehiclePlate: 'Ask for a vehicle plate number on open sales',
   measuredUnits: 'Sell by the metre or kilo (2.5 m, 0.75 kg)',
 };
 
@@ -205,7 +205,7 @@ export default function SettingsPage() {
         </Section>
 
         {/* ── Floor ────────────────────────────────────────────── */}
-        <Section title="Floor">
+        <Section title="Selling">
           <Toggle
             label="Show stock on item tiles"
             checked={settings.showStock}
@@ -298,6 +298,9 @@ export default function SettingsPage() {
               <FlaskConical size={14} aria-hidden />
               Load demo business
             </p>
+            <p className="mb-2 text-[11.5px] leading-relaxed text-ink-3">
+              See the same POS set up for four different kinds of shop. Practice mode only.
+            </p>
             <div className="grid grid-cols-2 gap-2">
               {DEMO_BUSINESSES.map((business) => (
                 <Button
@@ -335,7 +338,10 @@ export default function SettingsPage() {
             Every shop starts with the same switches. Turn on what yours needs; products and
             services are always in Inventory.
           </p>
-          {(Object.keys(FEATURE_LABELS) as (keyof Features)[]).map((key) => (
+          {(Object.keys(FEATURE_LABELS) as (keyof Features)[])
+            // The plate is asked for on open sales, so it waits for them.
+            .filter((key) => key !== 'vehiclePlate' || settings.features.openOrders)
+            .map((key) => (
             <Toggle
               key={key}
               label={FEATURE_LABELS[key]}
@@ -397,15 +403,16 @@ export default function SettingsPage() {
         }
       >
         <p className="text-[12.5px] leading-relaxed text-ink-2">
-          Three weeks of pretend trading for a {confirmDemo?.label.toLowerCase()}: its
+          Three weeks of pretend trading for {confirmDemo?.noun}: its
           sample items, sales with the <strong>DEMO10</strong> promo code, a few cancelled
           sales, open quotations where the shop makes them, and a couple of items running
           low. Today is included, so Today and This month have something to show straight
-          away. Going live removes all of it, DEMO10 included.
+          away.
         </p>
         <p className="mt-2 text-[12.5px] leading-relaxed text-ink-2">
           <strong>The switches, items, sales, stock, quotations and promo codes on this
-          device are replaced.</strong>{' '}
+          device are replaced.</strong> Remove demo data, or going live, takes it all
+          away again and puts your own items and switches back.{' '}
           Staff, the license and the rest of Settings stay.
         </p>
       </Modal>
@@ -471,10 +478,11 @@ export default function SettingsPage() {
         }
       >
         <p className="text-[12.5px] leading-relaxed text-ink-2">
-          Removes every sale and stock movement on this device, leaving an empty
-          till to practise on. Items, branches, staff and settings all stay,
-          the activity log keeps a note that this happened, and invoice numbers
-          carry on rather than restarting. This cannot be undone.
+          Removes every sale, quotation and stock movement on this device, leaving
+          a till to practise on with a fresh practice count on the shelf. If a demo
+          business is loaded, your own items and switches come back. Branches, staff
+          and settings stay, the activity log keeps a note that this happened, and
+          sale numbers carry on rather than restarting. This cannot be undone.
         </p>
       </Modal>
     </div>

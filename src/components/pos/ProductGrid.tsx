@@ -181,7 +181,11 @@ export function ProductGrid({ getOrderId, onRefused }: ProductGridProps) {
 
         {visible.length === 0 && (
           <p className="col-span-full py-8 text-center text-[13px] text-ink-3">
-            No items match “{query}”.
+            {sold.length > 0
+              ? `No items match “${query}”.`
+              : canManage
+                ? 'No items yet. Add one here or in Inventory.'
+                : 'No items yet. Ask the owner to add them in Inventory.'}
           </p>
         )}
       </div>

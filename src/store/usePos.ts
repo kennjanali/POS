@@ -48,10 +48,10 @@ import {
   migrateSnapshot,
   settingsFromSaved,
 } from '@/lib/migrate';
-import { DEFAULT_FEATURES, DEFAULT_TICKET_LABEL, ticketWord } from '@/lib/features';
+import { DEFAULT_FEATURES, DEFAULT_TICKET_LABEL, ticketWord, type Features } from '@/lib/features';
 import { findUsablePromo, isValidCode, normalizeCode } from '@/lib/promo';
 import { addDays, nextQuoteNo, quoteStatus } from '@/lib/quotes';
-import { QTY_ONE, formatQty, lineTotal, type Qty } from '@/lib/qty';
+import { QTY_ONE, decimalsAllowed, formatQty, lineTotal, type Qty } from '@/lib/qty';
 import { computeBill, type BillBreakdown } from '@/lib/tax';
 import { UPGRADE_RESET_NOTE } from '@/lib/stockHistory';
 import { DEFAULT_BRANCH, DEFAULT_SETTINGS } from '@/lib/seed';
@@ -125,6 +125,23 @@ export interface OrderExtra {
   vehiclePlate?: string;
 }
 
+/** Back to the shop's own codes after a demo: the ones set aside, and any the
+ *  owner made while the demo was loaded. Only the demo's own code goes. */
+function ownPromos(own: PreDemo | null, current: Promo[]): Promo[] {
+  const demo = (p: Promo) => p.code === DEMO_PROMO_CODE && p.note.startsWith('Demo');
+  if (!own) return current.filter((p) => !demo(p));
+  const kept = new Set(own.promos.map((p) => p.id));
+  return [...own.promos, ...current.filter((p) => !kept.has(p.id) && !demo(p))];
+}
+
+/** See `PosState.preDemo`. */
+export interface PreDemo {
+  products: Product[];
+  promos: Promo[];
+  features: Features;
+  ticketLabel: string;
+}
+
 /** What the first-run wizard collects. Three questions, and the recovery code
  *  it shows on the way out. There is no kind-of-shop question: every shop
  *  starts on the general switches. The address and the VAT question are a new
@@ -180,6 +197,11 @@ interface PosState {
   activeOrderId: string | null;
   /** When a backup was last saved. The device is the only copy until then. */
   lastBackupAt: number | null;
+  /** The shop as it was before a demo business was loaded: its own items,
+   *  codes, switches and ticket word. Removing the demo data, or going live,
+   *  puts them back, so trying the Restaurant demo does not leave a
+   *  restaurant behind. Null when no demo is loaded. */
+  preDemo: PreDemo | null;
   hydrated: boolean;
   persistError: string | null;
   /** Set by the v7 migration: the order and stock-move rows still count whole
@@ -230,10 +252,12 @@ interface PosState {
   /** The owner alone. A cancelled quote can never be converted. */
   cancelQuote: (quoteId: string, reason: string) => UserResult;
 
+  /** Refused when the amount is not a whole positive number of centavos, or
+   *  cash change does not add up to what was handed over. */
   addTender: (
     orderId: string,
     tender: Omit<Tender, 'id' | 'takenAt'>,
-  ) => void;
+  ) => UserResult;
   removeTender: (orderId: string, tenderId: string) => void;
   closeOrder: (orderId: string) => UserResult;
   /** One payment of whatever is still due, then close. GCash needs its reference. */
@@ -679,9 +703,13 @@ function describeBadSnapshot(snapshot: DataSnapshot): string | null {
 
 /** When each sale the next close would cover happened: settled, or (for a
  *  sale from an earlier close) voided. */
-function unclosedTimes({ orders, closes }: Pick<PosState, 'orders' | 'closes'>): number[] {
+/** Sales and late cancellations waiting for a summary, up to (not including) `until`. */
+function unclosedTimes(
+  { orders, closes }: Pick<PosState, 'orders' | 'closes'>,
+  until = Date.now() + 1,
+): number[] {
   const since = closes.at(-1)?.closedAt ?? 0;
-  const now = Date.now() + 1;
+  const now = until;
   const times: number[] = [];
   for (const o of orders) {
     if (o.status === 'closed' && inWindow(o.closedAt, since, now)) times.push(o.closedAt as number);
@@ -739,6 +767,7 @@ export const usePos = create<PosState>()(
       activeBranchId: DEFAULT_BRANCH.id,
       activeOrderId: null,
       lastBackupAt: null,
+      preDemo: null,
       hydrated: false,
       persistError: null,
       rowsNeedV8: false,
@@ -766,6 +795,8 @@ export const usePos = create<PosState>()(
 
       // ── order lifecycle ───────────────────────────────────────────
       openOrder: (label, type, extra) => {
+        // Nobody signed in, nothing opened: '' is an order no action can find.
+        if (guard('sell')) return '';
         const id = uuidv7();
         set((state) => {
           // No number yet. Numbers are gapless, so one is given only to a sale
@@ -783,6 +814,8 @@ export const usePos = create<PosState>()(
       setActiveOrder: (id) => set({ activeOrderId: id }),
 
       addLine: (orderId, productId, qty = QTY_ONE) => {
+        const refused = guard('sell');
+        if (refused) return refused;
         const state = get();
         const order = state.orders.find((o) => o.id === orderId);
         if (!order || order.status !== 'open') {
@@ -793,6 +826,9 @@ export const usePos = create<PosState>()(
         }
         const product = state.products.find((p) => p.id === productId);
         if (!product?.active) return { ok: false, error: 'That item is no longer sold.' };
+        if (qty % QTY_ONE !== 0 && !decimalsAllowed(product.unit, state.settings.features)) {
+          return { ok: false, error: `${product.name} is sold in whole ${product.unit}.` };
+        }
         if (product.kind === 'stock') {
           const left = availableIn(state, order.branchId, productId);
           if (qty > left) return { ok: false, error: `Only ${formatQty(left)} left.` };
@@ -854,6 +890,9 @@ export const usePos = create<PosState>()(
         const line = order.lines.find((l) => l.lineNo === lineNo);
         if (!line || line.served || line.voided) {
           return { ok: false, error: 'That line can no longer be changed.' };
+        }
+        if (delta % QTY_ONE !== 0 && !decimalsAllowed(line.unit, state.settings.features)) {
+          return { ok: false, error: `${line.name} is sold in whole ${line.unit}.` };
         }
         if (delta > 0 && line.kind === 'stock') {
           const left = availableIn(state, order.branchId, line.productId);
@@ -1022,7 +1061,7 @@ export const usePos = create<PosState>()(
             return { ok: false, error: 'Enter an amount more than 0.' };
           }
           const order = get().order(orderId);
-          if (order && discount.fixedCents > orderGross(order)) {
+          if (order && discount.fixedCents > billOf(order, get().settings).gross) {
             return { ok: false, error: 'That is more than the sale.' };
           }
         }
@@ -1274,8 +1313,10 @@ export const usePos = create<PosState>()(
         if (get().orders.some((o) => o.status === 'open' && holds(o.discount))) {
           return { ok: false, error: 'An open sale is using this code. Finish or clear that sale first.' };
         }
-        // An open quote converts at the code and percent written on it.
-        if (get().quotes.some((q) => q.status === 'open' && holds(q.discount))) {
+        // An open quote converts at the code and percent written on it. With
+        // quotations switched off nobody can convert one, so it holds nothing.
+        const quoting = get().settings.features.quotes;
+        if (quoting && get().quotes.some((q) => q.status === 'open' && holds(q.discount))) {
           return { ok: false, error: 'An open quotation is using this code. Turn it off and make a new one.' };
         }
         const invalid = badPromoInput(
@@ -1334,7 +1375,17 @@ export const usePos = create<PosState>()(
         ).length,
 
       addTender: (orderId, tender) => {
-        if (guard('order.pay')) return;
+        const refused = guard('order.pay');
+        if (refused) return refused;
+        const whole = (n: number | null) => n !== null && Number.isSafeInteger(n) && n >= 0;
+        const cashAddsUp =
+          tender.method !== 'cash' ||
+          (whole(tender.tenderedCents) &&
+            whole(tender.changeCents) &&
+            tender.tenderedCents! - tender.changeCents! === tender.amountCents);
+        if (!Number.isSafeInteger(tender.amountCents) || tender.amountCents <= 0 || !cashAddsUp) {
+          return { ok: false, error: 'That payment does not add up.' };
+        }
         set((state) => ({
           ...state,
           orders: state.orders.map((o) =>
@@ -1349,6 +1400,7 @@ export const usePos = create<PosState>()(
               : o,
           ),
         }));
+        return { ok: true };
       },
 
       removeTender: (orderId, tenderId) => {
@@ -2247,12 +2299,12 @@ export const usePos = create<PosState>()(
           ...state,
           activeBranchId: id,
           activeOrderId: null,
-          stock: state.stock[id]
-            ? state.stock
-            : { ...state.stock, [id]: initialStock(state.products) },
+          // A branch nobody has stocked has nothing on its shelf.
+          stock: state.stock[id] ? state.stock : { ...state.stock, [id]: {} },
         })),
 
-      upsertBranch: (branch) =>
+      upsertBranch: (branch) => {
+        if (guard('settings.manage')) return;
         set((state) => {
           const exists = state.branches.some((b) => b.id === branch.id);
           return {
@@ -2260,15 +2312,25 @@ export const usePos = create<PosState>()(
             branches: exists
               ? state.branches.map((b) => (b.id === branch.id ? branch : b))
               : [...state.branches, branch],
-            stock: state.stock[branch.id]
-              ? state.stock
-              : { ...state.stock, [branch.id]: initialStock(state.products) },
+            // A new branch starts with an empty shelf; stock arrives through
+            // Add stock, so every unit on it has a move behind it.
+            stock: state.stock[branch.id] ? state.stock : { ...state.stock, [branch.id]: {} },
           };
-        }),
+        });
+      },
 
       updateSettings: (patch) => {
         const refused = guard('settings.manage');
         if (refused) return refused;
+        // With open sales off there is one cart, and it would pick up an old
+        // table's bill. They are paid or cancelled first.
+        const open = get().orders.filter((o) => o.status === 'open').length;
+        if (patch.features && !patch.features.openOrders && get().settings.features.openOrders && open > 0) {
+          return {
+            ok: false,
+            error: `Pay or cancel the ${open} open sale${open === 1 ? '' : 's'} first.`,
+          };
+        }
         set((state) => {
           const settings = { ...state.settings, ...patch };
           // Setting the VAT switch either way answers the checklist's question.
@@ -2311,9 +2373,17 @@ export const usePos = create<PosState>()(
               `${state.orders.length} practice sale${state.orders.length === 1 ? '' : 's'}, ` +
               `${state.stockMoves.length} stock movements, ${state.closes.length} summaries ` +
               `and ${state.quotes.length} quotations`;
+            // A demo's items, codes and switches are practice data too.
+            const own = state.preDemo;
+            if (own) {
+              settings.features = { ...own.features };
+              settings.ticketLabel = own.ticketLabel;
+            }
             return {
               ...state,
               settings,
+              products: own?.products ?? state.products,
+              preDemo: null,
               orders: [],
               stockMoves: [],
               closes: [],
@@ -2323,9 +2393,7 @@ export const usePos = create<PosState>()(
               activeOrderId: null,
               // The owner's codes stay. The demo's DEMO10 is practice data, and
               // left on a live till it would be 10% off for anyone who types it.
-              promos: state.promos
-                .filter((p) => !(p.code === DEMO_PROMO_CODE && p.note.startsWith('Demo')))
-                .map((p) => ({ ...p, firstUsedAt: null })),
+              promos: ownPromos(own, state.promos).map((p) => ({ ...p, firstUsedAt: null })),
               audit: log(
                 log(audit, 'data.reset', `Went live: cleared ${cleared}`, 'danger', state.activeBranchId),
                 'settings.golive',
@@ -2381,6 +2449,13 @@ export const usePos = create<PosState>()(
           quotes: demo.quotes,
           quoteSeq: demo.quoteSeq,
           promos: demo.promos,
+          // Only the first demo sets the shop aside; a second demo replaces the first.
+          preDemo: s.preDemo ?? {
+            products: s.products,
+            promos: s.promos,
+            features: s.settings.features,
+            ticketLabel: s.settings.ticketLabel,
+          },
           closes,
           invoiceSeq: { ...s.invoiceSeq, ...demo.invoiceSeq },
           lowStockAlerts: [],
@@ -2414,6 +2489,8 @@ export const usePos = create<PosState>()(
       },
 
       pruneArchivedMonth: (archive) => {
+        const refused = guard('settings.manage');
+        if (refused) return refused;
         const problem = describeBadArchive(archive);
         if (problem) return { ok: false, error: problem };
 
@@ -2481,6 +2558,11 @@ export const usePos = create<PosState>()(
         // A restore replaces the books wholesale, so the file has to earn it.
         // Checking only that `products` was an array let a truncated or
         // hand-edited export through, and it reported success either way.
+        // A fresh tablet restoring its backup has nobody to sign in yet.
+        if (get().users.length > 0) {
+          const refused = guard('settings.manage');
+          if (refused) return refused;
+        }
         const problem = describeBadSnapshot(file);
         if (problem) return { ok: false, error: problem };
         const snapshot = migrateSnapshot(file);
@@ -2493,6 +2575,8 @@ export const usePos = create<PosState>()(
 
           const restored = {
             ...state,
+            // The backup is the shop now; there is no demo to take back.
+            preDemo: null,
             branches: snapshot.branches ?? state.branches,
             // An empty or missing user list is never restored over a working
             // one — a pre-logins backup would leave nobody able to sign in.
@@ -2535,38 +2619,68 @@ export const usePos = create<PosState>()(
       },
 
       resetAll: () => {
-        // Same lock as loadDemoData. Clearing the books on a registered POS is
-        // not a thing the owner may do; corrections go through a void, and a
-        // fresh start goes through Restore from a backup.
+        // Same lock as the demo businesses. Clearing the books on a live POS
+        // is not a thing the owner may do; corrections go through a
+        // cancellation, and a fresh start goes through Restore from a backup.
         if (!get().settings.trainingMode) return false;
+        if (guard('settings.manage')) return false;
 
-        set((state) => ({
-          ...state,
-          orders: [],
-          stockMoves: [],
-          closes: [],
-          activeOrderId: null,
-          // Codes stay, but the practice sales that locked them are gone, so
-          // they are editable again.
-          promos: state.promos.map((p) => ({ ...p, firstUsedAt: null })),
-          // The menu is the owner's and stays; only its stock starts over.
-          stock: { [state.activeBranchId]: initialStock(state.products) },
-          // The invoice sequence is deliberately NOT reset. Restarting it at 1
-          // reissues numbers that have already been on a printed receipt, and
-          // a duplicated invoice number is worse than a large one.
-          //
-          // The audit log is deliberately NOT cleared either. Wiping the
-          // record along with the data leaves nothing to say the wipe ever
-          // happened, which is precisely the pattern an audit looks for.
-          audit: log(
-            state.audit,
-            'data.reset',
-            `Cleared ${state.orders.length} sales and ` +
-              `${state.stockMoves.length} stock movements`,
-            'danger',
-            state.activeBranchId,
-          ),
-        }));
+        set((state) => {
+          // A demo's items and switches go with its sales.
+          const own = state.preDemo;
+          const products = own?.products ?? state.products;
+          const bid = state.activeBranchId;
+          const at = Date.now();
+          // The shelf starts over at a practice count, on the record like any
+          // other count, so the ledger adds up to what the shelf says.
+          const stock = initialStock(products);
+          const stockMoves: StockMove[] = Object.entries(stock).map(([productId, delta]) => ({
+            id: uuidv7(),
+            branchId: bid,
+            productId,
+            delta,
+            reason: 'opening' as const,
+            refOrderId: null,
+            note: 'Practice stock after clearing',
+            at,
+            actorUserId: actorId(),
+            ...NO_DELIVERY,
+          }));
+          return {
+            ...state,
+            orders: [],
+            stockMoves,
+            closes: [],
+            quotes: [],
+            activeOrderId: null,
+            products,
+            settings: own
+              ? { ...state.settings, features: { ...own.features }, ticketLabel: own.ticketLabel }
+              : state.settings,
+            // Codes stay, but the practice sales that locked them are gone, so
+            // they are editable again.
+            promos: (own ? ownPromos(own, state.promos) : state.promos).map((p) => ({ ...p, firstUsedAt: null })),
+            preDemo: null,
+            stock: Object.fromEntries(state.branches.map((b) => [b.id, b.id === bid ? stock : {}])),
+            lowStockAlerts: [],
+            // The invoice sequence is deliberately NOT reset. Restarting it at 1
+            // reissues numbers that have already been on a printed receipt, and
+            // a duplicated invoice number is worse than a large one.
+            //
+            // The audit log is deliberately NOT cleared either. Wiping the
+            // record along with the data leaves nothing to say the wipe ever
+            // happened, which is precisely the pattern an audit looks for.
+            audit: log(
+              state.audit,
+              'data.reset',
+              `Cleared ${state.orders.length} sales and ` +
+                `${state.stockMoves.length} stock movements` +
+                (own ? '; put back the items and switches from before the demo' : ''),
+              'danger',
+              bid,
+            ),
+          };
+        });
         return true;
       },
 
@@ -2623,7 +2737,12 @@ export const usePos = create<PosState>()(
         // The nightly close runs by itself, signed in or not. A close with a
         // count is the owner's, taken by hand.
         if (countedCashCents != null && guard('reports.view')) return null;
-        if (get().unclosedSales() === 0) return null;
+        // The same instant decides what is waiting and what the close covers,
+        // so a close is never taken with nothing in it. The close ends at now,
+        // never later: a sale paid this very millisecond goes into the next
+        // close, where it cannot fall between two windows.
+        const now = Date.now();
+        if (unclosedTimes(get(), now).length === 0) return null;
         // The count is hashed into the chain and can never be corrected.
         if (countedCashCents != null && (!Number.isSafeInteger(countedCashCents) || countedCashCents < 0)) {
           return null;
@@ -2634,7 +2753,7 @@ export const usePos = create<PosState>()(
             id: uuidv7(),
             orders: get().orders,
             previous,
-            now: Date.now(),
+            now,
             actor: actorId(),
             countedCashCents,
           }),
@@ -2696,6 +2815,7 @@ export const usePos = create<PosState>()(
         lastCloudBackupAt: state.lastCloudBackupAt,
         activeBranchId: state.activeBranchId,
         lastBackupAt: state.lastBackupAt,
+        preDemo: state.preDemo,
       }),
       onRehydrateStorage: () => (state, error) => {
         if (error) {

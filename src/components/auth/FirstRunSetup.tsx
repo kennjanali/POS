@@ -149,7 +149,7 @@ export function FirstRunSetup() {
               </p>
               <Field
                 label="Shop name"
-                placeholder="Aling Nena's Store"
+                placeholder="e.g. Santos Trading"
                 value={businessName}
                 autoFocus
                 onChange={(e) => setBusinessName(e.target.value)}
@@ -229,7 +229,7 @@ export function FirstRunSetup() {
 
           {!restoring && step === 'products' && (
             <div className="flex flex-col gap-4">
-              <h1 className="text-[15px] leading-snug font-bold">What does the shop sell?</h1>
+              <h1 className="text-[15px] leading-snug font-bold">What should Inventory start with?</h1>
               <div className="flex flex-col gap-2" role="radiogroup" aria-label="Starting products">
                 <CatalogChoice
                   icon={<PackageOpen size={16} className="shrink-0 text-accent" aria-hidden />}

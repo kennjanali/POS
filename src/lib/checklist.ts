@@ -2,7 +2,7 @@
  * "Finish setting up": what a new owner still has to do, and how each job is
  * judged finished.
  *
- * The wizard asks four questions and stops there. These are the ones it left,
+ * The wizard asks three questions and stops there. These are the ones it left,
  * because the honest answers are only the owner's to give — and because none
  * of them should hold up the till while they think about it.
  */

@@ -26,7 +26,6 @@ import { type Centavos, addC, cents } from './money';
 import { orderTypesFor, type Features } from './features';
 import { addDays, nextQuoteNo } from './quotes';
 import { decimalsAllowed, lineTotal, qty, type Qty } from './qty';
-import { QUICK_LABELS } from './seed';
 import { computeBill } from './tax';
 import type {
   Branch,
@@ -50,6 +49,8 @@ export type DemoId = 'restaurant' | 'hardware' | 'auto' | 'carwash';
 export interface DemoBusiness {
   id: DemoId;
   label: string;
+  /** The label in a sentence: "a restaurant", "an auto parts and service shop". */
+  noun: string;
   items: CatalogItem[];
   /** The switches this kind of shop would turn on; loading the demo applies them. */
   features: Features;
@@ -134,7 +135,7 @@ const AUTO_ITEMS: CatalogItem[] = [
   { name: 'Tire Vulcanization (large)', category: 'Service', price: 500, cost: 180, unit: 'pcs', opening: 0 },
   { name: 'Wheel Alignment', category: 'Service', price: 800, cost: 250, unit: 'pcs', opening: 0 },
   { name: 'Wheel Balancing', category: 'Service', price: 300, cost: 80, unit: 'pcs', opening: 0 },
-  { name: 'Labor (per hour)', category: 'Service', price: 200, cost: 0, unit: 'hr', opening: 0 },
+  { name: 'Labor (per hour)', category: 'Service', price: 200, cost: 0, unit: 'hour', opening: 0 },
   { name: 'Engine Oil 10W-40', category: 'Supplies', price: 380, cost: 290, unit: 'L', opening: 40 },
   { name: 'Oil Filter', category: 'Supplies', price: 250, cost: 160, unit: 'pcs', opening: 30 },
 ].map(byOpening);
@@ -161,6 +162,7 @@ export const DEMO_BUSINESSES: DemoBusiness[] = [
   {
     id: 'restaurant',
     label: 'Restaurant',
+    noun: 'a restaurant',
     items: RESTAURANT_ITEMS,
     features: { openOrders: true, serveStep: true, quotes: false, vehiclePlate: false, measuredUnits: false },
     ticketLabel: 'Table',
@@ -169,6 +171,7 @@ export const DEMO_BUSINESSES: DemoBusiness[] = [
   {
     id: 'hardware',
     label: 'Hardware Store',
+    noun: 'a hardware store',
     items: HARDWARE_ITEMS,
     features: { openOrders: false, serveStep: false, quotes: true, vehiclePlate: false, measuredUnits: true },
     ticketLabel: 'Sale',
@@ -177,6 +180,7 @@ export const DEMO_BUSINESSES: DemoBusiness[] = [
   {
     id: 'auto',
     label: 'Auto Parts & Service',
+    noun: 'an auto parts and service shop',
     items: AUTO_ITEMS,
     features: { openOrders: true, serveStep: false, quotes: true, vehiclePlate: true, measuredUnits: false },
     ticketLabel: 'Job',
@@ -185,6 +189,7 @@ export const DEMO_BUSINESSES: DemoBusiness[] = [
   {
     id: 'carwash',
     label: 'Car Wash',
+    noun: 'a car wash',
     items: CARWASH_ITEMS,
     features: { openOrders: true, serveStep: false, quotes: false, vehiclePlate: true, measuredUnits: false },
     ticketLabel: 'Queue',
@@ -558,7 +563,7 @@ function startOfDay(ts: number): number {
 
 function labelFor(rand: () => number, type: OrderType, business: DemoId): string {
   if (type === 'delivery') return business === 'restaurant' ? pick(rand, ['GrabFood', 'FoodPanda']) : 'Delivery';
-  if (type === 'dine-in') return pick(rand, QUICK_LABELS);
+  if (type === 'dine-in') return `Table ${1 + Math.floor(rand() * 6)}`;
   return rand() < 0.5 ? 'Walk-in' : pick(rand, CUSTOMERS);
 }
 

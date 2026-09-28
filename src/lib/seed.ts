@@ -2,15 +2,6 @@ import { DEFAULT_FEATURES, DEFAULT_TICKET_LABEL } from './features';
 import { qty } from './qty';
 import type { Branch, Settings } from './types';
 
-export const QUICK_LABELS = [
-  'Table 1',
-  'Table 2',
-  'Table 3',
-  'Table 4',
-  'Table 5',
-  'Table 6',
-];
-
 export const BRANCH_COLORS = [
   '#ff5c1a',
   '#2563eb',
