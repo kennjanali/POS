@@ -1802,6 +1802,17 @@ export const usePos = create<PosState>()(
         if (preview.rows.length === 0) {
           return { ok: false, error: 'There is nothing to import in that file.' };
         }
+        // The preview was read against Inventory as it was then. If an item it
+        // updates is gone, or a SKU it adds has since been taken, it is stale.
+        const { products: shelf } = get();
+        const stale = preview.rows.some((row) =>
+          row.matchId === null
+            ? row.product.sku !== null && shelf.some((p) => p.sku === row.product.sku)
+            : !shelf.some((p) => p.id === row.matchId),
+        );
+        if (stale) {
+          return { ok: false, error: 'Inventory changed since this file was read. Choose the file again.' };
+        }
         set((s) => {
           const bid = s.activeBranchId;
           const now = Date.now();
@@ -1818,6 +1829,8 @@ export const usePos = create<PosState>()(
               const current = products[at]!;
               products[at] = {
                 ...current,
+                // A file that names a removed item brings it back.
+                active: true,
                 category: row.product.category,
                 unit: row.product.unit,
                 priceCents: row.product.priceCents,
@@ -2405,7 +2418,7 @@ export const usePos = create<PosState>()(
           // closed — otherwise the one-way lock is one file import wide.
           if (!state.settings.trainingMode) settings.trainingMode = false;
 
-          return {
+          const restored = {
             ...state,
             branches: snapshot.branches ?? state.branches,
             // An empty or missing user list is never restored over a working
@@ -2440,6 +2453,9 @@ export const usePos = create<PosState>()(
             license: snapshot.license ?? state.license,
             activeOrderId: null,
           };
+          // A v7 backup recorded overselling as a negative balance; it comes
+          // back to zero on the record, exactly as it does at the upgrade.
+          return { ...restored, ...resetNegativeStock(restored) };
         });
         void get().checkLicense();
         return { ok: true };

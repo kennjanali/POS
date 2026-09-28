@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { KeyRound, PackageOpen, ShieldCheck, ShoppingCart, Upload } from 'lucide-react';
 
 import { PinPad } from './PinPad';
@@ -9,9 +9,11 @@ import { Button } from '@/components/ui/Button';
 import { cn } from '@/components/ui/cn';
 import { Field, Toggle } from '@/components/ui/Field';
 import { toast } from '@/components/ui/Toast';
+import { ImportSummary } from '@/components/inventory/ImportExport';
 import { SAMPLE_CATALOGS } from '@/lib/catalogs';
 import { generateRecoveryCode, PIN_LENGTH } from '@/lib/crypto';
-import { PRESETS, type ShopType } from '@/lib/presets';
+import { previewImport, type ImportPreview } from '@/lib/csv';
+import { applyPreset, PRESETS, type ShopType } from '@/lib/presets';
 import { usePos, type SetupInput } from '@/store/usePos';
 import { useAuth } from '@/store/useAuth';
 
@@ -59,7 +61,13 @@ export function FirstRunSetup() {
   // switch in the app follows from it.
   const [shopType, setShopType] = useState<ShopType | null>(null);
   const [businessName, setBusinessName] = useState('');
-  const [catalog, setCatalog] = useState<SetupInput['catalog']>('sample');
+  // "Import" sets the shop up empty and then imports the file, once the owner
+  // is signed in and the import is theirs to make.
+  const [start, setStart] = useState<SetupInput['catalog'] | 'import'>('sample');
+  const [imported, setImported] = useState<{ fileName: string; preview: ImportPreview } | null>(
+    null,
+  );
+  const fileRef = useRef<HTMLInputElement>(null);
   const [ownerName, setOwnerName] = useState('');
   const [pin, setPin] = useState('');
   const [recoveryCode] = useState(generateRecoveryCode);
@@ -85,6 +93,19 @@ export function FirstRunSetup() {
     return true;
   }
 
+  function readFile(file: File) {
+    if (!shopType) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      // Nothing is on the shelf yet, so every good row is a new item.
+      const preview = previewImport(String(reader.result), [], applyPreset(shopType));
+      setImported({ fileName: file.name, preview });
+      setStart('import');
+    };
+    reader.onerror = () => toast('Could not read that file', 'danger');
+    reader.readAsText(file);
+  }
+
   async function finish() {
     if (!shopType) return;
     setBusy(true);
@@ -94,7 +115,7 @@ export function FirstRunSetup() {
       ownerName,
       pin,
       recoveryCode,
-      catalog,
+      catalog: start === 'sample' ? 'sample' : 'none',
     });
     if (!result.ok) {
       setBusy(false);
@@ -104,6 +125,15 @@ export function FirstRunSetup() {
     // Straight in, rather than handing back the keypad they just used.
     const signedIn = await signIn(pin, usePos.getState().users);
     if (signedIn.ok) recordLogin(signedIn.user.id);
+    if (start === 'import' && imported && signedIn.ok) {
+      const done = usePos.getState().applyImport(imported.preview);
+      if (!done.ok) {
+        toast(`${done.error} Import it again from Inventory.`, 'danger');
+        return;
+      }
+      toast(`Welcome, ${ownerName.trim()}. ${imported.preview.rows.length} items imported.`, 'success');
+      return;
+    }
     toast(`Welcome, ${ownerName.trim()}`, 'success');
   }
 
@@ -254,25 +284,55 @@ export function FirstRunSetup() {
                   icon={<PackageOpen size={16} className="shrink-0 text-accent" aria-hidden />}
                   title={`Start from a ${PRESETS[shopType].label} sample`}
                   hint={`${SAMPLE_CATALOGS[shopType].length} ordinary items you can edit or delete. None of them is locked in.`}
-                  selected={catalog === 'sample'}
-                  onClick={() => setCatalog('sample')}
+                  selected={start === 'sample'}
+                  onClick={() => setStart('sample')}
                 />
                 <CatalogChoice
-                  icon={<Upload size={16} className="shrink-0 text-ink-3" aria-hidden />}
+                  icon={<Upload size={16} className="shrink-0 text-accent" aria-hidden />}
                   title="Import a spreadsheet"
-                  hint="Comes with the import screen, and runs as soon as this tablet is set up."
-                  disabled
+                  hint={
+                    imported
+                      ? `${imported.fileName} — tap to choose another file.`
+                      : 'A CSV with name, sku, category, kind, unit, price, cost, reorder_level, opening_qty.'
+                  }
+                  selected={start === 'import'}
+                  onClick={() => fileRef.current?.click()}
                 />
                 <CatalogChoice
                   icon={<ShoppingCart size={16} className="shrink-0 text-ink-3" aria-hidden />}
                   title="Start empty"
                   hint="Nothing until you add it. You can type items in from the sell screen."
-                  selected={catalog === 'none'}
-                  onClick={() => setCatalog('none')}
+                  selected={start === 'none'}
+                  onClick={() => setStart('none')}
                 />
               </div>
-              <Button fullWidth size="lg" onClick={() => setStep('recovery')}>
-                Next
+              <input
+                ref={fileRef}
+                type="file"
+                accept=".csv,text/csv"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) readFile(file);
+                  e.target.value = '';
+                }}
+              />
+              {start === 'import' && imported && (
+                <ImportSummary
+                  preview={imported.preview}
+                  fileName={imported.fileName}
+                  currency={usePos.getState().settings.currency}
+                />
+              )}
+              <Button
+                fullWidth
+                size="lg"
+                disabled={start === 'import' && !imported?.preview.rows.length}
+                onClick={() => setStep('recovery')}
+              >
+                {start === 'import' && imported?.preview.rows.length
+                  ? `Next — import ${imported.preview.rows.length} items`
+                  : 'Next'}
               </Button>
               <BackLink
                 onClick={() => {

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { CSV_COLUMNS, previewImport } from '@/lib/csv';
+import { CSV_COLUMNS, exportProducts, parseCsv, previewImport, toCsv } from '@/lib/csv';
 import { qty } from '@/lib/qty';
 import type { Product } from '@/lib/types';
 import { usePos } from '@/store/usePos';
@@ -16,7 +16,12 @@ function file(...rows: string[]): string {
 /** Preview the file against what is on the shelf right now, as the screen does. */
 function preview(text: string) {
   const state = S();
-  return previewImport(text, state.products, state.settings.features);
+  return previewImport(
+    text,
+    state.products,
+    state.settings.features,
+    state.stock[state.activeBranchId] ?? {},
+  );
 }
 
 const byName = (name: string): Product => {
@@ -121,5 +126,75 @@ describe('applyImport', () => {
     const result = S().applyImport(preview(file('Cement,CE-01,Hardware,stock,pcs,70,60,10,40')));
     expect(result).toEqual({ ok: false, error: 'Only the owner can do that.' });
     expect(S().products.some((p) => p.name === 'Cement')).toBe(false);
+  });
+
+  it('round-trips: export, change a price in the spreadsheet, import — nothing doubles', async () => {
+    await ownerShop();
+    const before = S().products.length;
+    const stockBefore = { ...S().stock[S().activeBranchId] };
+    const first = S().products[0]!;
+
+    // The sample catalog has no SKUs, which is the case that has to work.
+    expect(S().products.every((p) => p.sku === null)).toBe(true);
+    const table = parseCsv(exportProducts(S().products, S().stock[S().activeBranchId] ?? {}));
+    const priceAt = table[0]!.indexOf('price');
+    const row = table.findIndex((r) => r[0] === first.name);
+    table[row]![priceAt] = '999.50';
+
+    expect(S().applyImport(preview(toCsv(table))).ok).toBe(true);
+    expect(S().products).toHaveLength(before);
+    expect(S().stock[S().activeBranchId]).toEqual(stockBefore);
+    expect(byName(first.name).priceCents).toBe(99950);
+  });
+
+  it('brings back a removed item that the file names', async () => {
+    await ownerShop();
+    const item = S().products[0]!;
+    S().removeProduct(item.id);
+    expect(byName(item.name).active).toBe(false);
+
+    S().applyImport(preview(file(`${item.name},,Food,${item.kind},${item.unit},80,40,,`)));
+    expect(byName(item.name).active).toBe(true);
+  });
+
+  it('refuses a preview that Inventory has moved past', async () => {
+    await ownerShop();
+    const stale = preview(file('Cement,CE-01,Hardware,stock,pcs,70,60,10,40'));
+    S().upsertProduct({
+      id: 'c',
+      name: 'Cement bag',
+      kind: 'stock',
+      sku: 'CE-01',
+      category: 'Hardware',
+      unit: 'pcs',
+      priceCents: 7000 as Product['priceCents'],
+      costCents: 6000 as Product['costCents'],
+      vatExempt: false,
+      active: true,
+      reorderLevel: null,
+    });
+    expect(S().applyImport(stale)).toEqual({
+      ok: false,
+      error: 'Inventory changed since this file was read. Choose the file again.',
+    });
+    expect(S().products.filter((p) => p.sku === 'CE-01')).toHaveLength(1);
+  });
+});
+
+describe('importSnapshot', () => {
+  beforeEach(resetStore);
+
+  it('counts a negative balance in a restored backup back to zero, on the record', async () => {
+    await ownerShop();
+    const snapshot = S().exportSnapshot();
+    const branch = S().activeBranchId;
+    const item = S().products.find((p) => p.kind === 'stock')!;
+    snapshot.stock = { ...snapshot.stock, [branch]: { ...snapshot.stock?.[branch], [item.id]: qty(-2) } };
+
+    expect(S().importSnapshot(snapshot).ok).toBe(true);
+    expect(onHand(item.id)).toBe(0);
+    const move = S().stockMoves.find((m) => m.productId === item.id && m.reason === 'count');
+    expect(move?.delta).toBe(qty(2));
+    expect(S().audit.some((a) => a.kind === 'stock.reset')).toBe(true);
   });
 });

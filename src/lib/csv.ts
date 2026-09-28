@@ -123,6 +123,24 @@ export interface ImportPreview {
 const KINDS: readonly string[] = ['stock', 'service'];
 
 /**
+ * An amount as a spreadsheet writes one: `25`, `1,250.50`, `₱25`, `PHP 25`.
+ * parsePesos reads far more than that — `12abc` as 12, `ask me` as 0 — so the
+ * cell is checked before it is read.
+ */
+function isAmount(text: string): boolean {
+  return /^-?(?:₱|php)?\s*-?(?:\d[\d,]*)?(?:\.\d+)?$/i.test(text) && /\d/.test(text);
+}
+
+/** A quantity cell: blank or zero means none; anything else goes through parseQty. */
+function readQty(text: string, decimals: boolean): Qty | null {
+  if (text === '' || /^0*(?:\.0*)?$/.test(text)) return qty(0);
+  return parseQty(text, decimals);
+}
+
+/** Names match the way an owner reads them: ignoring case and stray spaces. */
+const nameKey = (name: string) => name.trim().replace(/\s+/g, ' ').toLowerCase();
+
+/**
  * Read a file into rows and errors without touching anything.
  *
  * A file is somebody's day of work typed into a spreadsheet, so one bad line
@@ -133,6 +151,7 @@ export function previewImport(
   text: string,
   existing: Product[],
   features: Features,
+  onHand: Record<string, Qty> = {},
 ): ImportPreview {
   const table = parseCsv(text);
   if (table.length === 0) {
@@ -154,8 +173,17 @@ export function previewImport(
 
   const rows: ImportRow[] = [];
   const errors: { row: number; message: string }[] = [];
-  const bySku = new Map(existing.map((p) => [p.sku, p]));
+  const bySku = new Map(existing.filter((p) => p.sku !== null).map((p) => [p.sku, p]));
+  // An item without a SKU is found by its name — the export writes items
+  // without one, and importing that file back must update them, not copy them.
+  const byName = new Map<string, Product[]>();
+  for (const p of existing) {
+    if (p.sku !== null) continue;
+    const key = nameKey(p.name);
+    byName.set(key, [...(byName.get(key) ?? []), p]);
+  }
   const seen = new Set<string>();
+  const seenNames = new Set<string>();
 
   for (let i = 1; i < table.length; i += 1) {
     const source = table[i]!;
@@ -180,36 +208,62 @@ export function previewImport(
     // parsePesos reads ₱25 and 1,250 happily, and turns anything else into 0 —
     // which on a shelf of a hundred items is not a shrug, it is a giveaway.
     if (priceText === '') add('Price is missing.');
-    else if (!/\d/.test(priceText)) add('Price is not a number.');
+    else if (!isAmount(priceText)) add('Price is not a number.');
     else if (priceCents < 0) add('Price cannot be negative.');
 
     const costText = cell(source, 'cost');
     const costCents = parsePesos(costText === '' ? '0' : costText);
-    if (costCents < 0) add('Cost cannot be negative.');
+    if (costText !== '' && !isAmount(costText)) add('Cost is not a number.');
+    else if (costCents < 0) add('Cost cannot be negative.');
+
+    const quantityProblem = (text: string) =>
+      decimals ? `${text} is not a quantity of ${unit}.` : `${text} is not a whole number of ${unit}.`;
 
     // A service is never on a shelf, so it has no reorder level to read.
     const levelText = cell(source, 'reorder_level');
     let reorderLevel: Qty | null = null;
     if (kind === 'stock' && levelText !== '') {
-      reorderLevel = parseQty(levelText, decimals);
-      if (reorderLevel === null) add(`${levelText} is not a whole number of ${unit}.`);
-    }
-
-    const openingText = cell(source, 'opening_qty');
-    let openingQty: Qty = qty(0);
-    if (kind === 'stock' && openingText !== '') {
-      const parsed = parseQty(openingText, decimals);
-      if (parsed === null) add(`${openingText} is not a whole number of ${unit}.`);
-      else openingQty = parsed;
+      reorderLevel = readQty(levelText, decimals);
+      if (reorderLevel === null) add(quantityProblem(levelText));
     }
 
     const sku = cell(source, 'sku');
-    let matchId: string | null = null;
+    let match: Product | null = null;
     if (sku !== '') {
       if (seen.has(sku)) add(`SKU ${sku} appears twice in this file.`);
       seen.add(sku);
-      matchId = bySku.get(sku)?.id ?? null;
+      match = bySku.get(sku) ?? null;
+    } else if (name !== '') {
+      const key = nameKey(name);
+      if (seenNames.has(key)) add(`${name} appears twice in this file. Give one of them a SKU.`);
+      seenNames.add(key);
+      const named = byName.get(key) ?? [];
+      if (named.length > 1) add(`More than one item is called ${name}. Give it a SKU to choose one.`);
+      match = named.length === 1 ? named[0]! : null;
     }
+
+    if (match && kind !== null && match.kind !== kind) {
+      // Sales and the stock ledger are filed under the kind; a stocked item
+      // turned into a service would strand what is on the shelf.
+      add(`${match.name} is a ${match.kind === 'stock' ? 'stock item' : 'service'} and stays one.`);
+    }
+    if (match && match.kind === 'stock' && unit !== match.unit && !decimals) {
+      const held = onHand[match.id] ?? qty(0);
+      if (held % 1000 !== 0) {
+        add(`${formatQty(held)} ${match.unit} is on hand, which is not a whole number of ${unit}.`);
+      }
+    }
+
+    // A matched item has been counted already: its opening_qty is not read, or
+    // importing the same file twice would double the shelf.
+    const openingText = cell(source, 'opening_qty');
+    let openingQty: Qty = qty(0);
+    if (kind === 'stock' && match === null) {
+      const parsed = readQty(openingText, decimals);
+      if (parsed === null) add(quantityProblem(openingText));
+      else openingQty = parsed;
+    }
+    const matchId = match?.id ?? null;
 
     if (problems.length > 0) {
       for (const message of problems) errors.push({ row: line, message });
@@ -237,9 +291,15 @@ export function previewImport(
   return { rows, errors };
 }
 
+/**
+ * Excel opens a CSV as the PC's own code page unless the file starts with a
+ * UTF-8 BOM, and then Ñ and ₱ come out garbled. parseCsv takes it off again.
+ */
+const BOM = '﻿';
+
 /** A blank file with the right columns, so "Download template" is something to fill in. */
 export function csvTemplate(): string {
-  return toCsv([CSV_COLUMNS as unknown as string[]]);
+  return BOM + toCsv([CSV_COLUMNS as unknown as string[]]);
 }
 
 /**
@@ -248,7 +308,7 @@ export function csvTemplate(): string {
  * spreadsheet, and import the file back over the top.
  */
 export function exportProducts(products: Product[], stock: Record<string, Qty>): string {
-  return toCsv([
+  return BOM + toCsv([
     CSV_COLUMNS as unknown as string[],
     ...products.map((p) => [
       p.name,

@@ -24,6 +24,9 @@ function existing(over: Partial<Product> = {}): Product {
   };
 }
 
+/** What Excel needs at the front of a file to read it as UTF-8. */
+const BOM = '﻿';
+
 /** The template header, so a test never drifts from the real columns. */
 const HEADER = CSV_COLUMNS.join(',');
 
@@ -253,10 +256,89 @@ describe('previewImport', () => {
   });
 });
 
+describe('previewImport matching', () => {
+  it('finds an item without a SKU by its name, ignoring case and spacing', () => {
+    const shelf = [existing({ id: 'rice', name: 'Rice  Plain', sku: null })];
+    const preview = previewImport(file('rice plain,,Grains,stock,pcs,20,10,,5'), shelf, FEATURES);
+    expect(preview.errors).toEqual([]);
+    expect(preview.rows[0]?.matchId).toBe('rice');
+  });
+
+  it('will not guess between two items with the same name and no SKU', () => {
+    const shelf = [
+      existing({ id: 'a', name: 'Rice', sku: null }),
+      existing({ id: 'b', name: 'Rice', sku: null }),
+    ];
+    const preview = previewImport(file('Rice,,Grains,stock,pcs,20,10,,5'), shelf, FEATURES);
+    expect(preview.errors[0]?.message).toBe(
+      'More than one item is called Rice. Give it a SKU to choose one.',
+    );
+  });
+
+  it('refuses the same name twice in a file when neither row has a SKU', () => {
+    const preview = previewImport(
+      file('Rice,,Grains,stock,pcs,20,10,,5', 'rice,,Grains,stock,pcs,21,10,,5'),
+      [],
+      FEATURES,
+    );
+    expect(preview.rows).toHaveLength(1);
+    expect(preview.errors).toEqual([
+      { row: 3, message: 'rice appears twice in this file. Give one of them a SKU.' },
+    ]);
+  });
+
+  it('will not turn a stock item into a service', () => {
+    const preview = previewImport(
+      file('Nails,NA-01,Hardware,service,job,18,9,,'),
+      [existing()],
+      FEATURES,
+    );
+    expect(preview.errors[0]?.message).toBe('Nails, 2" is a stock item and stays one.');
+  });
+
+  it('does not read opening_qty on a matched item, so a 0 or a leftover negative cannot block a price edit', () => {
+    const preview = previewImport(
+      file('Nails,NA-01,Hardware,stock,pcs,18,9,,0', 'Wire,W-1,Hardware,stock,pcs,5,1,,-2'),
+      [existing(), existing({ id: 'w', name: 'Wire', sku: 'W-1' })],
+      FEATURES,
+    );
+    expect(preview.errors).toEqual([]);
+    expect(preview.rows.map((r) => r.matchId)).toEqual(['p1', 'w']);
+  });
+
+  it('reads an opening quantity of 0 on a new item as nothing on the shelf', () => {
+    const preview = previewImport(file('Cement,CE-01,Hardware,stock,pcs,70,60,,0'), [], FEATURES);
+    expect(preview.errors).toEqual([]);
+    expect(preview.rows[0]?.openingQty).toBe(0);
+  });
+
+  it('refuses a unit change that would leave part of a unit on hand', () => {
+    const wire = existing({ id: 'w', name: 'Wire', sku: 'W-1', unit: 'm' });
+    const preview = previewImport(file('Wire,W-1,Hardware,stock,pcs,5,1,,'), [wire], FEATURES, {
+      w: qty(2.5),
+    });
+    expect(preview.errors[0]?.message).toBe(
+      '2.5 m is on hand, which is not a whole number of pcs.',
+    );
+  });
+
+  it('refuses a price or a cost with letters in it rather than reading the digits', () => {
+    const preview = previewImport(
+      file('A,A-1,X,stock,pcs,12abc,1,,', 'B,B-1,X,stock,pcs,12,xyz,,'),
+      [],
+      FEATURES,
+    );
+    expect(preview.errors).toEqual([
+      { row: 2, message: 'Price is not a number.' },
+      { row: 3, message: 'Cost is not a number.' },
+    ]);
+  });
+});
+
 describe('exportProducts', () => {
   it('writes the same columns, with the on-hand count in opening_qty', () => {
     expect(exportProducts([existing({ unit: 'm' })], { p1: qty(2.4) })).toBe(
-      `${HEADER}\r\n"Nails, 2""",NA-01,Hardware,stock,m,15.00,9.00,,2.4\r\n`,
+      `${BOM}${HEADER}\r\n"Nails, 2""",NA-01,Hardware,stock,m,15.00,9.00,,2.4\r\n`,
     );
   });
 
@@ -268,7 +350,7 @@ describe('exportProducts', () => {
 
   it('exports a service with a job unit and nothing to count', () => {
     expect(exportProducts([existing({ kind: 'service', sku: null, unit: 'job' })], {})).toBe(
-      `${HEADER}\r\n"Nails, 2""",,Hardware,service,job,15.00,9.00,,0\r\n`,
+      `${BOM}${HEADER}\r\n"Nails, 2""",,Hardware,service,job,15.00,9.00,,0\r\n`,
     );
   });
 
