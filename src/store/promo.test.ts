@@ -185,6 +185,26 @@ describe('applyPromo', () => {
     expect(S().promoUses(promoIdOf('GRAND10'))).toBe(1);
   });
 
+  it('will not edit a code while an open sale is holding it', () => {
+    const id = cart();
+    S().applyPromo(id, 'GRAND10');
+    asOwner();
+    expect(S().updatePromo(promoIdOf('GRAND10'), { code: 'GRAND20', percent: 20 })).toEqual({
+      ok: false,
+      error: 'An open sale is using this code. Finish or clear that sale first.',
+    });
+  });
+
+  it('unlocks the codes when practice sales are cleared', () => {
+    const id = cart();
+    S().applyPromo(id, 'GRAND10');
+    S().payExact(id, 'cash');
+    expect(S().promos.find((p) => p.code === 'GRAND10')!.firstUsedAt).not.toBeNull();
+    asOwner();
+    expect(S().resetAll()).toBe(true);
+    expect(S().promos.find((p) => p.code === 'GRAND10')!.firstUsedAt).toBeNull();
+  });
+
   it('does not count a sale still open, or one cancelled, as a use', () => {
     const open = cart();
     S().applyPromo(open, 'GRAND10');

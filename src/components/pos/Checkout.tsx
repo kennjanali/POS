@@ -53,6 +53,9 @@ export function Checkout({ order, open, onClose, onPaid, onQuoted }: CheckoutPro
   const [codeInput, setCodeInput] = useState('');
   const [ownerPercentInput, setOwnerPercentInput] = useState('');
   const [ownerAmountInput, setOwnerAmountInput] = useState('');
+  // Spec 6.2a: a code replaces an owner discount, and the other way round,
+  // only after the cashier says yes.
+  const [replacing, setReplacing] = useState<{ run: () => void; with: string } | null>(null);
   /** Other / split: every method, part payments and change. */
   const [splitPicked, setSplitPicked] = useState(false);
   /** GCash picked: waiting for its reference number. */
@@ -94,8 +97,15 @@ export function Checkout({ order, open, onClose, onPaid, onQuoted }: CheckoutPro
       : order.discount.kind === 'owner'
         ? order.discount.percent !== null
           ? `Owner discount ${order.discount.percent}%`
-          : `Owner discount ${settings.currency}${(order.discount.fixedCents ?? 0) / 100}`
+          : `Owner discount ${peso(order.discount.fixedCents ?? cents(0), settings.currency)}`
         : 'None';
+
+  /** Apply now, or ask first when it would replace the other kind of discount. */
+  function applyDiscount(kind: 'promo' | 'owner', label: string, run: () => void) {
+    const current = order.discount.kind;
+    if (current !== 'none' && current !== kind) setReplacing({ run, with: label });
+    else run();
+  }
 
   function showRefusal(result: UserResult) {
     if (!result.ok) toast(result.error, 'danger');
@@ -502,7 +512,10 @@ export function Checkout({ order, open, onClose, onPaid, onQuoted }: CheckoutPro
         owner discount and the other way round. */}
     <Modal
       open={discountOpen}
-      onClose={() => setDiscountOpen(false)}
+      onClose={() => {
+        setReplacing(null);
+        setDiscountOpen(false);
+      }}
       title="Discount"
       width="md"
       footer={
@@ -529,14 +542,39 @@ export function Checkout({ order, open, onClose, onPaid, onQuoted }: CheckoutPro
           On this sale now: <span className="font-semibold text-ink">{discountLabel}</span>
         </p>
 
+        {replacing && (
+          <div className="rounded-md border border-warn/40 bg-warn/5 p-3 text-[12.5px]">
+            <p>
+              One discount per sale. Replace <strong>{discountLabel}</strong> with{' '}
+              <strong>{replacing.with}</strong>?
+            </p>
+            <div className="mt-2 flex gap-2">
+              <Button
+                size="sm"
+                onClick={() => {
+                  replacing.run();
+                  setReplacing(null);
+                }}
+              >
+                Replace
+              </Button>
+              <Button size="sm" variant="secondary" onClick={() => setReplacing(null)}>
+                Keep it
+              </Button>
+            </div>
+          </div>
+        )}
+
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            const result = showRefusal(applyPromo(order.id, codeInput));
-            if (result.ok) {
-              setCodeInput('');
-              setDiscountOpen(false);
-            }
+            applyDiscount('promo', `code ${codeInput.trim().toUpperCase()}`, () => {
+              const result = showRefusal(applyPromo(order.id, codeInput));
+              if (result.ok) {
+                setCodeInput('');
+                setDiscountOpen(false);
+              }
+            });
           }}
         >
           <Field
@@ -562,13 +600,15 @@ export function Checkout({ order, open, onClose, onPaid, onQuoted }: CheckoutPro
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                const result = showRefusal(
-                  applyOwnerDiscount(order.id, { percent: Number(ownerPercentInput) || 0 }),
-                );
-                if (result.ok) {
-                  setOwnerPercentInput('');
-                  setDiscountOpen(false);
-                }
+                applyDiscount('owner', `an owner discount of ${ownerPercentInput}%`, () => {
+                  const result = showRefusal(
+                    applyOwnerDiscount(order.id, { percent: Number(ownerPercentInput) || 0 }),
+                  );
+                  if (result.ok) {
+                    setOwnerPercentInput('');
+                    setDiscountOpen(false);
+                  }
+                });
               }}
             >
               <Field
@@ -588,13 +628,15 @@ export function Checkout({ order, open, onClose, onPaid, onQuoted }: CheckoutPro
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                const result = showRefusal(
-                  applyOwnerDiscount(order.id, { fixedCents: parsePesos(ownerAmountInput) }),
-                );
-                if (result.ok) {
-                  setOwnerAmountInput('');
-                  setDiscountOpen(false);
-                }
+                applyDiscount('owner', `an owner discount of ${settings.currency}${ownerAmountInput}`, () => {
+                  const result = showRefusal(
+                    applyOwnerDiscount(order.id, { fixedCents: parsePesos(ownerAmountInput) }),
+                  );
+                  if (result.ok) {
+                    setOwnerAmountInput('');
+                    setDiscountOpen(false);
+                  }
+                });
               }}
             >
               <Field

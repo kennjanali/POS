@@ -1257,6 +1257,14 @@ export const usePos = create<PosState>()(
         if (current.firstUsedAt !== null) {
           return { ok: false, error: 'This code has been used. Turn it off and make a new one.' };
         }
+        // An open sale carries the code and percent it was given; changing them
+        // underneath it would lock the code on values no sale used.
+        const held = get().orders.some(
+          (o) => o.status === 'open' && o.discount.kind === 'promo' && o.discount.promoId === id,
+        );
+        if (held) {
+          return { ok: false, error: 'An open sale is using this code. Finish or clear that sale first.' };
+        }
         const invalid = badPromoInput(
           get().promos.filter((p) => p.id !== id),
           input,
@@ -2511,6 +2519,9 @@ export const usePos = create<PosState>()(
           stockMoves: [],
           closes: [],
           activeOrderId: null,
+          // Codes stay, but the practice sales that locked them are gone, so
+          // they are editable again.
+          promos: state.promos.map((p) => ({ ...p, firstUsedAt: null })),
           // The menu is the owner's and stays; only its stock starts over.
           stock: { [state.activeBranchId]: initialStock(state.products) },
           // The invoice sequence is deliberately NOT reset. Restarting it at 1
