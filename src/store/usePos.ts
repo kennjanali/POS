@@ -2591,6 +2591,7 @@ export const usePos = create<PosState>()(
         lowStockAlerts: state.lowStockAlerts,
         settings: state.settings,
         invoiceSeq: state.invoiceSeq,
+        quoteSeq: state.quoteSeq,
         recovery: state.recovery,
         installId: state.installId,
         license: state.license,
@@ -2786,7 +2787,7 @@ async function loadRows(rehydrated: PosState | undefined): Promise<void> {
       closes,
       products,
       promos,
-      quotes: quotes.length > 0 ? quotes : (rehydrated?.quotes ?? []),
+      quotes,
       audit,
     };
     for (const store of SAVED) {
@@ -2807,13 +2808,18 @@ async function loadRows(rehydrated: PosState | undefined): Promise<void> {
       closes,
       products: products.length > 0 ? products : (rehydrated?.products ?? []),
       promos,
+      quotes,
       // The log is kept newest first. Rows come back in id order, which is not
       // quite time order, so sort by time and break ties by id.
       audit: audit.length > 0 ? [...audit].sort(newestFirst) : (rehydrated?.audit ?? []),
     };
     loadFailed = false;
+    // A blob saved before `quoteSeq` was kept restarts at 1; never hand out a
+    // number a stored quote already has.
+    const highestQuote = Math.max(0, ...quotes.map((q) => Number(q.quoteNo.slice(2)) || 0));
     usePos.setState({
       ...next,
+      quoteSeq: Math.max(usePos.getState().quoteSeq, highestQuote + 1),
       ...(upgrade ? resetNegativeStock({ ...next, stock: usePos.getState().stock }) : {}),
       rowsNeedV8: false,
       hydrated: true,

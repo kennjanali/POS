@@ -285,3 +285,77 @@ describe('saving', () => {
     expect(S().audit.map((a) => a.id)).toEqual(['a-new', 'b-tie', 'a-tie', 'z-old']);
   });
 });
+
+describe('reloading', () => {
+  const rows: Record<string, Map<string, { id: string }>> = {};
+  const kv = new Map<string, string>();
+  const disk: StorageBackend = {
+    getItem: async (name) => kv.get(name) ?? null,
+    removeItem: async (name) => {
+      kv.delete(name);
+    },
+    readRows: async <T,>(store: string) => [...(rows[store]?.values() ?? [])] as T[],
+    writeBatch: async (batch) => {
+      for (const item of batch.kv) kv.set(item.name, item.value);
+      for (const r of batch.rows) {
+        const table = (rows[r.store] ??= new Map());
+        for (const row of r.changed) table.set(row.id, row);
+        for (const id of r.removed) table.delete(id);
+      }
+    },
+  };
+
+  /** Drop the in-memory store and read everything back from `disk`. */
+  async function reload(): Promise<void> {
+    resetStore();
+    await usePos.persist.rehydrate();
+    await settle();
+    await settle();
+  }
+
+  beforeEach(async () => {
+    for (const store of Object.keys(rows)) delete rows[store];
+    kv.clear();
+    setStorageBackend(disk);
+    await reload();
+    await ownerShop();
+    usePos.setState((s) => ({
+      settings: { ...s.settings, features: { ...s.settings.features, quotes: true } },
+    }));
+  });
+
+  afterEach(() => setStorageBackend(null));
+
+  function quote(): string {
+    const id = S().openOrder('T1', 'walk-in');
+    S().addLine(id, S().products[0]!.id);
+    const saved = S().saveOrderAsQuote(id);
+    if (!saved.ok) throw new Error(saved.error);
+    return saved.quoteId;
+  }
+
+  it('keeps quotations and their numbering across a restart', async () => {
+    const first = quote();
+    await settle();
+
+    await reload();
+    expect(S().quotes.map((q) => q.id)).toEqual([first]);
+    expect(S().quoteSeq).toBe(2);
+
+    // Any change triggers a save; it must not delete the quote from disk.
+    usePos.setState({ quoteSeq: S().quoteSeq });
+    await settle();
+    expect(rows[ROWS.quotes]?.has(first)).toBe(true);
+  });
+
+  it('never reuses a stored quote number, even when the blob has no counter', async () => {
+    quote();
+    await settle();
+    const blob = JSON.parse(kv.get('pos034-v7')!);
+    delete blob.state.quoteSeq;
+    kv.set('pos034-v7', JSON.stringify(blob));
+
+    await reload();
+    expect(S().quoteSeq).toBe(2);
+  });
+});
