@@ -1,10 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { cents } from '@/lib/money';
-import { applyPreset, type ShopType } from '@/lib/presets';
 import { qty, type Qty } from '@/lib/qty';
 import type { Product } from '@/lib/types';
-import { ownerShop, resetStore, signInAs } from '@/test/store';
+import { JOBS, ownerShop, resetStore, signInAs, withFeatures } from '@/test/store';
 import { usePos } from './usePos';
 
 const S = () => usePos.getState();
@@ -34,12 +33,6 @@ const LABOR: Product = {
   priceCents: cents(30000),
   costCents: cents(0),
 };
-
-function preset(shopType: ShopType) {
-  usePos.setState((s) => ({
-    settings: { ...s.settings, shopType, features: applyPreset(shopType) },
-  }));
-}
 
 function stock(productId: string, onHand: Qty) {
   usePos.setState((s) => ({
@@ -73,7 +66,7 @@ describe('saveOrderAsQuote', () => {
   beforeEach(async () => {
     resetStore();
     await ownerShop();
-    preset('auto');
+    withFeatures(JOBS);
     S().upsertProduct(TIRE);
     S().upsertProduct(LABOR);
     S().receiveStock({ lines: [{ productId: 'tire', qty: qty(4) }] });
@@ -112,7 +105,7 @@ describe('convertQuote', () => {
   beforeEach(async () => {
     resetStore();
     await ownerShop();
-    preset('auto');
+    withFeatures(JOBS);
     S().upsertProduct(TIRE);
     S().upsertProduct(LABOR);
     S().receiveStock({ lines: [{ productId: 'tire', qty: qty(4) }] });
@@ -178,7 +171,7 @@ describe('convertQuote', () => {
   });
 
   it('refuses to quote when the shop has quotations switched off', () => {
-    preset('retail');
+    withFeatures({});
     usePos.setState((s) => ({
       settings: { ...s.settings, features: { ...s.settings.features, quotes: false } },
     }));
@@ -238,7 +231,7 @@ describe('requote', () => {
   beforeEach(async () => {
     resetStore();
     await ownerShop();
-    preset('auto');
+    withFeatures(JOBS);
     S().upsertProduct(TIRE);
     S().upsertProduct(LABOR);
     S().receiveStock({ lines: [{ productId: 'tire', qty: qty(4) }] });
@@ -264,7 +257,7 @@ describe('cancelQuote', () => {
   beforeEach(async () => {
     resetStore();
     await ownerShop();
-    preset('auto');
+    withFeatures(JOBS);
     S().upsertProduct(TIRE);
     S().upsertProduct(LABOR);
     S().receiveStock({ lines: [{ productId: 'tire', qty: qty(4) }] });

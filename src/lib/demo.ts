@@ -1,6 +1,9 @@
 /**
- * Demo businesses — a few weeks of trading for one shop type, for practice
- * mode and the web demo. Deliberately not part of any real path:
+ * Demo businesses — a few weeks of trading for one kind of shop, for practice
+ * mode and the web demo. POS-034 is one general POS; these four show what it
+ * does for a restaurant, a hardware store, an auto shop and a car wash, each
+ * with its own items, switches and name for an open sale. Deliberately not
+ * part of any real path:
  *
  *  - Only reachable while practice mode is on. A live install can never be
  *    switched back, so fake sales can never land over real books.
@@ -14,13 +17,13 @@
  * One install is one shop, so the demo is one branch: the install's own.
  */
 
-import { seedCatalog } from './catalogs';
+import { byOpening, seedCatalog, stockLine, type CatalogItem } from './catalogs';
 import { buildClose, signClose } from './closes';
 import { businessDate } from './format';
 import { uuidv7 } from './id';
 import { discountRequest } from './migrate';
 import { type Centavos, addC, cents } from './money';
-import { applyPreset, PRESETS, ticketWord, type ShopType } from './presets';
+import { orderTypesFor, type Features } from './features';
 import { addDays, nextQuoteNo } from './quotes';
 import { decimalsAllowed, lineTotal, qty, type Qty } from './qty';
 import { QUICK_LABELS } from './seed';
@@ -42,9 +45,23 @@ import type {
   TenderMethod,
 } from './types';
 
+export type DemoId = 'restaurant' | 'hardware' | 'auto' | 'carwash';
+
+export interface DemoBusiness {
+  id: DemoId;
+  label: string;
+  items: CatalogItem[];
+  /** The switches this kind of shop would turn on; loading the demo applies them. */
+  features: Features;
+  /** What its open sales are called. */
+  ticketLabel: string;
+  /** The random seed, so each business has its own, stable weeks. */
+  seed: number;
+}
+
 export interface DemoOptions {
-  shopType: ShopType;
-  /** The install's settings; the shop type's preset switches are laid over them. */
+  business: DemoId;
+  /** The install's settings; the demo's switches and ticket word are laid over them. */
   settings: Settings;
   /** The install's own branch. */
   branch: Branch;
@@ -71,13 +88,113 @@ export interface DemoDataset {
 /** The promo code every demo business runs, used on some of its sales. */
 export const DEMO_PROMO_CODE = 'DEMO10';
 
+const RESTAURANT_ITEMS: CatalogItem[] = [
+  { name: 'Chicken Paa', category: '', price: 89, cost: 50, unit: 'pcs', opening: 30 },
+  { name: 'Chicken Pecho', category: '', price: 99, cost: 55, unit: 'pcs', opening: 30 },
+  { name: 'Half Chicken', category: '', price: 175, cost: 95, unit: 'pcs', opening: 20 },
+  { name: 'Pork BBQ', category: '', price: 35, cost: 18, unit: 'pcs', opening: 100 },
+  { name: 'Pork Chop BBQ', category: '', price: 120, cost: 65, unit: 'pcs', opening: 30 },
+  { name: 'Liempo', category: '', price: 150, cost: 80, unit: 'pcs', opening: 20 },
+  { name: 'Kanin (1 cup)', category: '', price: 15, cost: 6, unit: 'cup', opening: 60 },
+  { name: 'Garlic Rice', category: '', price: 25, cost: 10, unit: 'cup', opening: 60 },
+  { name: 'Coke 1.5L', category: '', price: 85, cost: 45, unit: 'btl', opening: 24 },
+  { name: 'Softdrinks', category: '', price: 35, cost: 18, unit: 'pcs', opening: 60 },
+  { name: 'Atchara', category: '', price: 20, cost: 8, unit: 'serving', opening: 40 },
+  { name: 'Sawsawan Set', category: '', price: 15, cost: 5, unit: 'set', opening: 40 },
+].map(stockLine);
+
+/** A hardware store sells by the piece and by the measure. */
+const HARDWARE_ITEMS: CatalogItem[] = [
+  { name: 'Wire 1.0mm', category: 'Electrical', price: 18, cost: 11, unit: 'm', opening: 500 },
+  { name: 'Wire 2.0mm', category: 'Electrical', price: 28, cost: 19, unit: 'm', opening: 300 },
+  { name: 'Insulation Tape', category: 'Electrical', price: 35, cost: 20, unit: 'roll', opening: 80 },
+  { name: 'Nails 1 inch', category: 'Fasteners', price: 95, cost: 62, unit: 'kg', opening: 50 },
+  { name: 'Nails 2 inch', category: 'Fasteners', price: 110, cost: 74, unit: 'kg', opening: 40 },
+  { name: 'Common Nails 3 inch', category: 'Fasteners', price: 125, cost: 85, unit: 'kg', opening: 40 },
+  { name: 'Screw Assortment', category: 'Fasteners', price: 90, cost: 52, unit: 'box', opening: 30 },
+  { name: 'Cutting Disc 4"', category: 'Hardware', price: 55, cost: 28, unit: 'pcs', opening: 50 },
+  { name: 'Sandpaper 80 grit', category: 'Paint', price: 25, cost: 12, unit: 'pcs', opening: 60 },
+  { name: 'Paint (white, 1L)', category: 'Paint', price: 380, cost: 290, unit: 'btl', opening: 24 },
+  { name: 'Paint (white, 4L)', category: 'Paint', price: 1350, cost: 1050, unit: 'pail', opening: 10 },
+  { name: 'Cement', category: 'Building', price: 65, cost: 48, unit: 'kg', opening: 200 },
+  { name: 'Sand', category: 'Building', price: 35, cost: 22, unit: 'kg', opening: 300 },
+  { name: 'PVC Pipe 1/2"', category: 'Plumbing', price: 75, cost: 52, unit: 'm', opening: 60 },
+].map(stockLine);
+
+/** Tires by size, mags, and the work done to fit them. */
+const AUTO_ITEMS: CatalogItem[] = [
+  { name: 'Tire 185/65 R14', category: 'Tires', price: 3200, cost: 2450, unit: 'pcs', opening: 20 },
+  { name: 'Tire 195/65 R15', category: 'Tires', price: 3850, cost: 3000, unit: 'pcs', opening: 16 },
+  { name: 'Tire 205/55 R16', category: 'Tires', price: 4600, cost: 3600, unit: 'pcs', opening: 12 },
+  { name: 'Tire 215/60 R17', category: 'Tires', price: 5800, cost: 4550, unit: 'pcs', opening: 8 },
+  { name: 'Alloy Mag 14"', category: 'Wheels', price: 8500, cost: 6200, unit: 'pcs', opening: 6 },
+  { name: 'Alloy Mag 15"', category: 'Wheels', price: 9800, cost: 7200, unit: 'pcs', opening: 4 },
+  { name: 'Steel Mag 14"', category: 'Wheels', price: 3200, cost: 2100, unit: 'pcs', opening: 6 },
+  { name: 'Tire Vulcanization (small)', category: 'Service', price: 350, cost: 120, unit: 'pcs', opening: 0 },
+  { name: 'Tire Vulcanization (large)', category: 'Service', price: 500, cost: 180, unit: 'pcs', opening: 0 },
+  { name: 'Wheel Alignment', category: 'Service', price: 800, cost: 250, unit: 'pcs', opening: 0 },
+  { name: 'Wheel Balancing', category: 'Service', price: 300, cost: 80, unit: 'pcs', opening: 0 },
+  { name: 'Labor (per hour)', category: 'Service', price: 200, cost: 0, unit: 'hr', opening: 0 },
+  { name: 'Engine Oil 10W-40', category: 'Supplies', price: 380, cost: 290, unit: 'L', opening: 40 },
+  { name: 'Oil Filter', category: 'Supplies', price: 250, cost: 160, unit: 'pcs', opening: 30 },
+].map(byOpening);
+
+/** Wash sizes, wax, and the inside of the car. */
+const CARWASH_ITEMS: CatalogItem[] = [
+  { name: 'Regular Wash', category: 'Wash', price: 250, cost: 60, unit: 'pcs', opening: 0 },
+  { name: 'SUV Wash', category: 'Wash', price: 350, cost: 90, unit: 'pcs', opening: 0 },
+  { name: 'Van Wash', category: 'Wash', price: 450, cost: 120, unit: 'pcs', opening: 0 },
+  { name: 'Engine Wash', category: 'Wash', price: 600, cost: 180, unit: 'pcs', opening: 0 },
+  { name: 'Underbody Wash', category: 'Wash', price: 500, cost: 160, unit: 'pcs', opening: 0 },
+  { name: 'Wax (car)', category: 'Wax', price: 700, cost: 200, unit: 'pcs', opening: 0 },
+  { name: 'Wax (SUV)', category: 'Wax', price: 950, cost: 280, unit: 'pcs', opening: 0 },
+  { name: 'Tire Shine', category: 'Wax', price: 150, cost: 40, unit: 'pcs', opening: 0 },
+  { name: 'Interior Vacuum', category: 'Interior', price: 200, cost: 50, unit: 'pcs', opening: 0 },
+  { name: 'Interior Detailing', category: 'Interior', price: 1200, cost: 350, unit: 'pcs', opening: 0 },
+  { name: 'Dashboard Wax', category: 'Interior', price: 400, cost: 110, unit: 'pcs', opening: 0 },
+  { name: 'Shampoo', category: 'Supplies', price: 120, cost: 70, unit: 'L', opening: 40 },
+  { name: 'Microfiber Towel', category: 'Supplies', price: 80, cost: 35, unit: 'pcs', opening: 60 },
+].map(byOpening);
+
 /** The four businesses the Settings screen offers. */
-export const DEMO_BUSINESSES: { shopType: ShopType; label: string }[] = [
-  { shopType: 'restaurant', label: 'Restaurant' },
-  { shopType: 'retail', label: 'Hardware Store' },
-  { shopType: 'auto', label: 'Auto Parts & Service' },
-  { shopType: 'carwash', label: 'Car Wash' },
+export const DEMO_BUSINESSES: DemoBusiness[] = [
+  {
+    id: 'restaurant',
+    label: 'Restaurant',
+    items: RESTAURANT_ITEMS,
+    features: { openOrders: true, serveStep: true, quotes: false, vehiclePlate: false, measuredUnits: false },
+    ticketLabel: 'Table',
+    seed: 0x4b52414d,
+  },
+  {
+    id: 'hardware',
+    label: 'Hardware Store',
+    items: HARDWARE_ITEMS,
+    features: { openOrders: false, serveStep: false, quotes: true, vehiclePlate: false, measuredUnits: true },
+    ticketLabel: 'Sale',
+    seed: 0x48415244,
+  },
+  {
+    id: 'auto',
+    label: 'Auto Parts & Service',
+    items: AUTO_ITEMS,
+    features: { openOrders: true, serveStep: false, quotes: true, vehiclePlate: true, measuredUnits: false },
+    ticketLabel: 'Job',
+    seed: 0x4155544f,
+  },
+  {
+    id: 'carwash',
+    label: 'Car Wash',
+    items: CARWASH_ITEMS,
+    features: { openOrders: true, serveStep: false, quotes: false, vehiclePlate: true, measuredUnits: false },
+    ticketLabel: 'Queue',
+    seed: 0x57415348,
+  },
 ];
+
+export function demoBusiness(id: DemoId): DemoBusiness {
+  return DEMO_BUSINESSES.find((b) => b.id === id)!;
+}
 
 /**
  * mulberry32. Seeded so a demo is reproducible — two people looking at the
@@ -121,23 +238,15 @@ const CUSTOMERS = ['Aling Nena', 'Kuya Boy', 'Ate Mheg', 'Tito Ram', 'Sir Dodong
 
 const VOID_REASONS = ['Rung up twice', 'Customer changed their mind', 'Wrong item'];
 
-/** Seeds per shop type, so each business has its own, stable month. */
-const SEEDS: Record<ShopType, number> = {
-  restaurant: 0x4b52414d,
-  retail: 0x48415244,
-  auto: 0x4155544f,
-  carwash: 0x57415348,
-  general: 0x47454e4c,
-};
-
 export function buildDemoData(options: DemoOptions): DemoDataset {
-  const { shopType, branch, days = 21, salesPerDay = 30, now = Date.now(), invoiceSeq = 0, quoteSeq = 1 } = options;
-  const features = applyPreset(shopType);
-  const settings: Settings = { ...options.settings, shopType, features };
-  const rand = rng(SEEDS[shopType]);
+  const { branch, days = 21, salesPerDay = 30, now = Date.now(), invoiceSeq = 0, quoteSeq = 1 } = options;
+  const business = demoBusiness(options.business);
+  const { features, ticketLabel } = business;
+  const settings: Settings = { ...options.settings, features, ticketLabel };
+  const rand = rng(business.seed);
   const bid = branch.id;
 
-  const { products, opening } = seedCatalog(shopType);
+  const { products, opening } = seedCatalog(business.items);
   const stocked = products.filter((p) => p.kind === 'stock');
   const onHand: Record<string, Qty> = {};
   const stockMoves: StockMove[] = [];
@@ -182,7 +291,7 @@ export function buildDemoData(options: DemoOptions): DemoDataset {
   const orders: Order[] = [];
   let invoiceNo = invoiceSeq;
   const plates = features.vehiclePlate;
-  const orderTypes = PRESETS[shopType].orderTypes;
+  const orderTypes = orderTypesFor(features);
 
   for (let back = days - 1; back >= 0; back--) {
     const dayStart = startOfDay(now - back * 86_400_000);
@@ -221,7 +330,7 @@ export function buildDemoData(options: DemoOptions): DemoDataset {
       const openedAt = from + Math.floor(((i + rand()) / count) * (end - from));
       const lines = buildLines(rand, products, settings);
       for (const l of lines) if (l.kind === 'stock') demand.set(l.productId, (demand.get(l.productId) ?? 0) + l.qty);
-      const order = blankOrder(rand, bid, openedAt, lines, pick(rand, orderTypes), shopType, plates);
+      const order = blankOrder(rand, bid, openedAt, lines, pick(rand, orderTypes), business.id, plates);
       day.push({ order, closedAt: openedAt + (5 + Math.floor(rand() * 25)) * 60_000 });
     }
 
@@ -275,10 +384,10 @@ export function buildDemoData(options: DemoOptions): DemoDataset {
         (l) => l.kind !== 'stock' || available(onHand, orders, l.productId) >= l.qty,
       );
       if (lines.length === 0) continue;
-      const order = blankOrder(rand, bid, openedAt, lines, pick(rand, orderTypes), shopType, plates);
+      const order = blankOrder(rand, bid, openedAt, lines, pick(rand, orderTypes), business.id, plates);
       order.status = 'open';
       opened += 1;
-      order.label = `${ticketWord(shopType)} ${opened}`;
+      order.label = `${ticketLabel} ${opened}`;
       order.lines = order.lines.map((line, n) => {
         // With a serve step the first line has gone out; served stock is taken.
         const served = features.serveStep && n === 0;
@@ -405,14 +514,14 @@ function blankOrder(
   openedAt: number,
   lines: OrderLine[],
   type: OrderType,
-  shopType: ShopType,
+  business: DemoId,
   plates: boolean,
 ): Order {
   return {
     id: uuidv7(),
     invoiceNo: null,
     branchId,
-    label: labelFor(rand, type, shopType),
+    label: labelFor(rand, type, business),
     type,
     status: 'closed',
     customerName: null,
@@ -447,9 +556,9 @@ function startOfDay(ts: number): number {
   return d.getTime();
 }
 
-function labelFor(rand: () => number, type: OrderType, shopType: ShopType): string {
-  if (type === 'delivery') return shopType === 'restaurant' ? pick(rand, ['GrabFood', 'FoodPanda']) : 'Delivery';
-  if (shopType === 'restaurant' && type === 'dine-in') return pick(rand, QUICK_LABELS);
+function labelFor(rand: () => number, type: OrderType, business: DemoId): string {
+  if (type === 'delivery') return business === 'restaurant' ? pick(rand, ['GrabFood', 'FoodPanda']) : 'Delivery';
+  if (type === 'dine-in') return pick(rand, QUICK_LABELS);
   return rand() < 0.5 ? 'Walk-in' : pick(rand, CUSTOMERS);
 }
 

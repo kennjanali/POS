@@ -68,14 +68,12 @@ export function QuickAdd({
           value={price}
           onChange={(e) => setPrice(e.target.value)}
         />
-        {settings.features.services && (
-          <Select
-            label="Kind"
-            value={kind}
-            options={Object.entries(KIND_LABELS)}
-            onChange={(k) => setKind(k as ProductKind)}
-          />
-        )}
+        <Select
+          label="Kind"
+          value={kind}
+          options={Object.entries(KIND_LABELS)}
+          onChange={(k) => setKind(k as ProductKind)}
+        />
         <Select
           label="Unit"
           value={unit}

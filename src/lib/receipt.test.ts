@@ -1,10 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { cents } from '@/lib/money';
-import { applyPreset } from '@/lib/presets';
 import { qty } from '@/lib/qty';
 import type { Product } from '@/lib/types';
-import { ownerShop, resetStore } from '@/test/store';
+import { JOBS, ownerShop, resetStore, withFeatures } from '@/test/store';
 import { usePos } from '@/store/usePos';
 import { renderQuote, renderReceipt } from './receipt';
 
@@ -37,7 +36,7 @@ describe('the slip', () => {
   beforeEach(async () => {
     resetStore();
     await ownerShop();
-    usePos.setState((s) => ({ settings: { ...s.settings, shopType: 'auto', features: applyPreset('auto') } }));
+    withFeatures(JOBS);
     S().upsertProduct(TIRE);
     S().receiveStock({ lines: [{ productId: 'tire', qty: qty(4) }] });
   });
@@ -93,7 +92,7 @@ describe('the quotation', () => {
   beforeEach(async () => {
     resetStore();
     await ownerShop();
-    usePos.setState((s) => ({ settings: { ...s.settings, shopType: 'auto', features: applyPreset('auto') } }));
+    withFeatures(JOBS);
     S().upsertProduct(TIRE);
     S().receiveStock({ lines: [{ productId: 'tire', qty: qty(4) }] });
   });

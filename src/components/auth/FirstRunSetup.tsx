@@ -10,43 +10,32 @@ import { cn } from '@/components/ui/cn';
 import { Field, Toggle } from '@/components/ui/Field';
 import { toast } from '@/components/ui/Toast';
 import { ImportSummary } from '@/components/inventory/ImportExport';
-import { SAMPLE_CATALOGS } from '@/lib/catalogs';
+import { SAMPLE_CATALOG } from '@/lib/catalogs';
 import { generateRecoveryCode, PIN_LENGTH } from '@/lib/crypto';
 import { previewImport, type ImportPreview } from '@/lib/csv';
-import { applyPreset, PRESETS, type ShopType } from '@/lib/presets';
+import { DEFAULT_FEATURES } from '@/lib/features';
 import { usePos, type SetupInput } from '@/store/usePos';
 import { useAuth } from '@/store/useAuth';
 
-const SHOP_TYPES = Object.keys(PRESETS) as ShopType[];
-
-/** What each shop type is for, in the owner's words rather than the switch's. */
-const SHOP_HINTS: Record<ShopType, string> = {
-  restaurant: 'Tables that stay open until paid',
-  retail: 'Sells by the piece and by the measure',
-  auto: 'Jobs by plate, with tires and mags',
-  carwash: 'A queue of vehicles out front',
-  general: 'A plain counter, nothing switched on but prices',
-};
-
-/** Four questions. The PIN is asked inside the third, and the recovery code
+/** Three questions. The PIN is asked inside the second, and the recovery code
  *  is shown on the way out, so both count as part of the question that led to
  *  them rather than as questions of their own. */
-type Step = 'type' | 'name' | 'owner' | 'pin' | 'confirm' | 'products' | 'recovery';
+type Step = 'name' | 'owner' | 'pin' | 'confirm' | 'products' | 'recovery';
 
 const STEP_NO: Record<Step, number> = {
-  type: 1,
-  name: 2,
-  owner: 3,
-  pin: 3,
-  confirm: 3,
-  products: 4,
-  recovery: 4,
+  name: 1,
+  owner: 2,
+  pin: 2,
+  confirm: 2,
+  products: 3,
+  recovery: 3,
 };
 
 /**
- * A fresh install has nobody on it and ships no default PIN. Four questions
- * later there is a shop: what it sells, what it is called, who owns it and
- * with what PIN, and whether it starts from a menu or from nothing.
+ * A fresh install has nobody on it and ships no default PIN. Three questions
+ * later there is a shop: what it is called, who owns it and with what PIN,
+ * and what it starts with. It never asks what kind of shop it is — Inventory
+ * holds whatever the shop sells, goods and services alike.
  *
  * Nothing is written until the last step. AuthGate swaps this screen out the
  * moment a user exists, so the recovery code has to be on screen first.
@@ -56,10 +45,7 @@ export function FirstRunSetup() {
   const recordLogin = usePos((s) => s.recordLogin);
   const signIn = useAuth((s) => s.signIn);
 
-  const [step, setStep] = useState<Step>('type');
-  // No default: this is the one answer that cannot be guessed, because every
-  // switch in the app follows from it.
-  const [shopType, setShopType] = useState<ShopType | null>(null);
+  const [step, setStep] = useState<Step>('name');
   const [businessName, setBusinessName] = useState('');
   // "Import" sets the shop up empty and then imports the file, once the owner
   // is signed in and the import is theirs to make.
@@ -94,11 +80,11 @@ export function FirstRunSetup() {
   }
 
   function readFile(file: File) {
-    if (!shopType) return;
     const reader = new FileReader();
     reader.onload = () => {
-      // Nothing is on the shelf yet, so every good row is a new item.
-      const preview = previewImport(String(reader.result), [], applyPreset(shopType));
+      // Nothing is on the shelf yet, so every good row is a new item. Setup
+      // starts every shop on the default switches, so the file is read by them.
+      const preview = previewImport(String(reader.result), [], DEFAULT_FEATURES);
       setImported({ fileName: file.name, preview });
       setStart('import');
     };
@@ -107,10 +93,8 @@ export function FirstRunSetup() {
   }
 
   async function finish() {
-    if (!shopType) return;
     setBusy(true);
     const result = await setupInstall({
-      shopType,
       businessName,
       ownerName,
       pin,
@@ -151,50 +135,11 @@ export function FirstRunSetup() {
             ? 'Restore a backup'
             : step === 'recovery'
               ? 'Recovery code'
-              : `Setup · step ${STEP_NO[step]} of 4`}
+              : `Setup · step ${STEP_NO[step]} of 3`}
         </p>
 
         <div className="mt-7 w-full rounded-xl bg-surface px-6 py-7">
           {restoring && <RestoreBackup onCancel={() => setRestoring(false)} />}
-
-          {!restoring && step === 'type' && (
-            <div className="flex flex-col gap-4">
-              <h1 className="text-[15px] leading-snug font-bold">What kind of shop is this?</h1>
-              <div className="flex flex-col gap-2" role="radiogroup" aria-label="Shop type">
-                {SHOP_TYPES.map((type) => (
-                  <button
-                    key={type}
-                    type="button"
-                    role="radio"
-                    aria-checked={shopType === type}
-                    onClick={() => {
-                      setShopType(type);
-                      setStep('name');
-                    }}
-                    className={cn(
-                      'flex min-h-12 w-full items-center gap-3 rounded-lg border px-3.5 py-2.5 text-left',
-                      shopType === type ? 'border-accent bg-accent/10' : 'border-line bg-raised hover:border-accent',
-                    )}
-                  >
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-[13px] font-bold">{PRESETS[type].label}</span>
-                      <span className="block text-[11.5px] text-ink-3">{SHOP_HINTS[type]}</span>
-                    </span>
-                    <span className="shrink-0 text-ink-3" aria-hidden>
-                      ›
-                    </span>
-                  </button>
-                ))}
-              </div>
-              <button
-                type="button"
-                onClick={() => setRestoring(true)}
-                className="min-h-10 self-center px-3 text-[12px] font-semibold text-ink-3 hover:text-accent"
-              >
-                Replacing a lost or broken tablet? Restore a backup
-              </button>
-            </div>
-          )}
 
           {!restoring && step === 'name' && (
             <div className="flex flex-col gap-4">
@@ -204,7 +149,7 @@ export function FirstRunSetup() {
               </p>
               <Field
                 label="Shop name"
-                placeholder="Sampalok Auto Shop"
+                placeholder="Aling Nena's Store"
                 value={businessName}
                 autoFocus
                 onChange={(e) => setBusinessName(e.target.value)}
@@ -220,7 +165,13 @@ export function FirstRunSetup() {
               >
                 Next
               </Button>
-              <BackLink onClick={() => setStep('type')} />
+              <button
+                type="button"
+                onClick={() => setRestoring(true)}
+                className="min-h-10 self-center px-3 text-[12px] font-semibold text-ink-3 hover:text-accent"
+              >
+                Replacing a lost or broken tablet? Restore a backup
+              </button>
             </div>
           )}
 
@@ -276,14 +227,14 @@ export function FirstRunSetup() {
             </div>
           )}
 
-          {!restoring && step === 'products' && shopType && (
+          {!restoring && step === 'products' && (
             <div className="flex flex-col gap-4">
-              <h1 className="text-[15px] leading-snug font-bold">What is on the shelf?</h1>
+              <h1 className="text-[15px] leading-snug font-bold">What does the shop sell?</h1>
               <div className="flex flex-col gap-2" role="radiogroup" aria-label="Starting products">
                 <CatalogChoice
                   icon={<PackageOpen size={16} className="shrink-0 text-accent" aria-hidden />}
-                  title={`Start from a ${PRESETS[shopType].label} sample`}
-                  hint={`${SAMPLE_CATALOGS[shopType].length} ordinary items you can edit or delete. None of them is locked in.`}
+                  title="Start with sample items"
+                  hint={`${SAMPLE_CATALOG.length} everyday goods and services to edit or delete. None of them is locked in.`}
                   selected={start === 'sample'}
                   onClick={() => setStart('sample')}
                 />

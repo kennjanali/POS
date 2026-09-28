@@ -1,10 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { cents } from '@/lib/money';
-import { applyPreset, type ShopType } from '@/lib/presets';
 import { qty, type Qty } from '@/lib/qty';
 import type { Product } from '@/lib/types';
-import { ownerShop, resetStore, signInAs } from '@/test/store';
+import { JOBS, ownerShop, resetStore, signInAs, withFeatures } from '@/test/store';
 import { useAuth } from './useAuth';
 import { usePos } from './usePos';
 
@@ -36,12 +35,6 @@ const LABOR: Product = {
   costCents: cents(0),
 };
 
-function preset(shopType: ShopType) {
-  usePos.setState((s) => ({
-    settings: { ...s.settings, shopType, features: applyPreset(shopType) },
-  }));
-}
-
 function cart(): string {
   const id = S().openOrder('Walk-in', 'walk-in');
   S().addLine(id, 'item');
@@ -52,7 +45,7 @@ describe('payExact', () => {
   beforeEach(async () => {
     resetStore();
     await ownerShop();
-    preset('retail');
+    withFeatures({});
     S().upsertProduct(ITEM);
     S().upsertProduct(LABOR);
     S().receiveStock({ lines: [{ productId: 'item', qty: qty(5) }] });
@@ -126,7 +119,7 @@ describe('payment needs someone signed in', () => {
   beforeEach(async () => {
     resetStore();
     await ownerShop();
-    preset('retail');
+    withFeatures({});
     S().upsertProduct(ITEM);
     S().receiveStock({ lines: [{ productId: 'item', qty: qty(5) }] });
   });
@@ -152,7 +145,7 @@ describe('open-order rules', () => {
   beforeEach(async () => {
     resetStore();
     await ownerShop();
-    preset('auto');
+    withFeatures(JOBS);
     S().upsertProduct(ITEM);
     S().upsertProduct(LABOR);
     S().receiveStock({ lines: [{ productId: 'item', qty: qty(5) }] });

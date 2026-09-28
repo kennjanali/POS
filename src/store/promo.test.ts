@@ -1,11 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { cents } from '@/lib/money';
-import { applyPreset, type ShopType } from '@/lib/presets';
 import { qty } from '@/lib/qty';
 import { renderReceipt } from '@/lib/receipt';
 import type { Product } from '@/lib/types';
-import { ownerShop, resetStore, signInAs } from '@/test/store';
+import { JOBS, ownerShop, resetStore, signInAs, withFeatures } from '@/test/store';
 import { useAuth } from './useAuth';
 import { usePos } from './usePos';
 
@@ -25,12 +24,6 @@ const ITEM: Product = {
   active: true,
   reorderLevel: null,
 };
-
-function preset(shopType: ShopType) {
-  usePos.setState((s) => ({
-    settings: { ...s.settings, shopType, features: applyPreset(shopType) },
-  }));
-}
 
 function setup() {
   S().upsertProduct(ITEM);
@@ -72,7 +65,7 @@ describe('createPromo', () => {
   beforeEach(async () => {
     resetStore();
     await ownerShop();
-    preset('retail');
+    withFeatures({});
   });
 
   it('lets the owner create GRAND10 at 10%', () => {
@@ -117,7 +110,7 @@ describe('applyPromo', () => {
   beforeEach(async () => {
     resetStore();
     await ownerShop();
-    preset('retail');
+    withFeatures({});
     setup();
     grand10();
     freeOne();
@@ -196,7 +189,7 @@ describe('applyPromo', () => {
   });
 
   it('will not edit a code an open quotation carries', () => {
-    preset('auto');
+    withFeatures(JOBS);
     const id = cart();
     S().applyPromo(id, 'GRAND10');
     expect(S().saveOrderAsQuote(id).ok).toBe(true);
@@ -264,7 +257,7 @@ describe('one discount per sale', () => {
   beforeEach(async () => {
     resetStore();
     await ownerShop();
-    preset('retail');
+    withFeatures({});
     setup();
     grand10();
   });

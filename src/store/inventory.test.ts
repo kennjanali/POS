@@ -1,11 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { cents } from '@/lib/money';
-import { applyPreset } from '@/lib/presets';
 import { qty, type Qty } from '@/lib/qty';
 import { computeBill } from '@/lib/tax';
 import type { Product } from '@/lib/types';
-import { ownerShop, resetStore, signInAs } from '@/test/store';
+import { ownerShop, resetStore, signInAs, withFeatures } from '@/test/store';
 import { orderGross, usePos } from './usePos';
 
 const S = () => usePos.getState();
@@ -44,7 +43,7 @@ describe('inventory', () => {
   beforeEach(async () => {
     resetStore();
     await ownerShop();
-    usePos.setState((s) => ({ settings: { ...s.settings, shopType: 'retail', features: applyPreset('retail') } }));
+    withFeatures({});
     S().upsertProduct(item('w'));
   });
 

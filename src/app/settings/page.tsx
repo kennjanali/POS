@@ -19,16 +19,15 @@ import { peso, fmtDate } from '@/lib/format';
 import { backupFileName, saveBackup } from '@/lib/backup';
 import { canShareFiles, SAVE_LOCATION, shareSavedFile } from '@/lib/files';
 import { DEMO_BUSINESSES } from '@/lib/demo';
-import { PRESETS, type Features } from '@/lib/presets';
+import { DEFAULT_TICKET_LABEL, type Features } from '@/lib/features';
 import { formatQty, parseQty } from '@/lib/qty';
 import type { DataSnapshot, Settings } from '@/lib/types';
 import { usePos } from '@/store/usePos';
 
 /** One toggle per switch, in plain words. */
 const FEATURE_LABELS: Record<keyof Features, string> = {
-  openOrders: 'Tables / jobs stay open until paid',
+  openOrders: 'Keep sales open until paid (tables, jobs, a queue)',
   serveStep: 'Serve items before payment',
-  services: 'Sell services, not only items',
   quotes: 'Make quotations',
   vehiclePlate: 'Write the plate number on tickets',
   measuredUnits: 'Sell by the metre or kilo (2.5 m, 0.75 kg)',
@@ -118,7 +117,7 @@ export default function SettingsPage() {
     toast(`Building the ${business.label} demo...`);
     // Yield first so the toast paints before the work starts.
     window.setTimeout(async () => {
-      const count = await loadDemoBusiness(business.shopType);
+      const count = await loadDemoBusiness(business.id);
       toast(
         count > 0
           ? `Loaded the ${business.label} demo: ${count.toLocaleString('en-PH')} sales`
@@ -302,7 +301,7 @@ export default function SettingsPage() {
             <div className="grid grid-cols-2 gap-2">
               {DEMO_BUSINESSES.map((business) => (
                 <Button
-                  key={business.shopType}
+                  key={business.id}
                   variant="secondary"
                   disabled={!settings.trainingMode}
                   onClick={() => setConfirmDemo(business)}
@@ -333,7 +332,8 @@ export default function SettingsPage() {
         {/* ── More options ─────────────────────────────────────── */}
         <Section title="More options">
           <p className="text-[12px] leading-relaxed text-ink-2">
-            Your shop type ({PRESETS[settings.shopType].label}) set these. Change any of them here.
+            Every shop starts with the same switches. Turn on what yours needs; products and
+            services are always in Inventory.
           </p>
           {(Object.keys(FEATURE_LABELS) as (keyof Features)[]).map((key) => (
             <Toggle
@@ -343,6 +343,16 @@ export default function SettingsPage() {
               onChange={(on) => update({ features: { ...settings.features, [key]: on } })}
             />
           ))}
+          {settings.features.openOrders && (
+            <Field
+              label="Call open sales"
+              placeholder={DEFAULT_TICKET_LABEL}
+              maxLength={20}
+              hint="What the button and each open sale are called, e.g. Table, Job or Queue."
+              value={settings.ticketLabel}
+              onChange={(e) => update({ ticketLabel: e.target.value })}
+            />
+          )}
         </Section>
 
         {/* ── Audit ────────────────────────────────────────────── */}

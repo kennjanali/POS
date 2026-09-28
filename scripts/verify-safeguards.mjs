@@ -34,7 +34,7 @@ function emit(name, file) {
   writeFileSync(join(dir, `${name}.js`), js);
 }
 
-for (const n of ['brand', 'money', 'qty', 'tax', 'format', 'id', 'presets', 'seed', 'catalogs', 'checklist', 'migrate', 'demo', 'crypto', 'idb', 'storage', 'printer', 'receipt', 'device', 'license', 'permissions', 'types', 'archive', 'files', 'backup', 'closes', 'cloudBackup', 'stockHistory', 'promo', 'quotes', 'csv'])
+for (const n of ['brand', 'money', 'qty', 'tax', 'format', 'id', 'features', 'seed', 'catalogs', 'checklist', 'migrate', 'demo', 'crypto', 'idb', 'storage', 'printer', 'receipt', 'device', 'license', 'permissions', 'types', 'archive', 'files', 'backup', 'closes', 'cloudBackup', 'stockHistory', 'promo', 'quotes', 'csv'])
   emit(n, `src/lib/${n}.ts`);
 for (const n of ['useAuth', 'usePos']) emit(n, `src/store/${n}.ts`);
 
@@ -42,7 +42,8 @@ const load = (n) => import(pathToFileURL(join(process.cwd(), dir, `${n}.js`)).hr
 const { usePos, orderGross } = await load('usePos');
 const { useAuth } = await load('useAuth');
 const { computeBill } = await load('tax');
-const { SAMPLE_CATALOGS, seedCatalog } = await load('catalogs');
+const { SAMPLE_CATALOG, seedCatalog } = await load('catalogs');
+const { DEFAULT_FEATURES } = await load('features');
 const { DEFAULT_BRANCH } = await load('seed');
 const { checklistItems } = await load('checklist');
 const { monthOf, orderMonth } = await load('archive');
@@ -50,9 +51,9 @@ const { backupIsDue, backupFileName, endOfDayDue, CUTOFF_MINUTES } = await load(
 const { verifyPin, generateRecoveryCode } = await load('crypto');
 const { qty } = await load('qty');
 
-// One restaurant catalog, minted once: product ids are what the checks below
+// The sample catalog, minted once: product ids are what the checks below
 // look products up by, so every call would hand back a different set.
-const SAMPLE_PRODUCTS = seedCatalog('restaurant').products;
+const SAMPLE_PRODUCTS = seedCatalog().products;
 
 let failures = 0;
 function check(name, ok, detail = '') {
@@ -83,7 +84,6 @@ const product = SAMPLE_PRODUCTS[0];
 const OWNER_PIN = '481902';
 const RECOVERY = generateRecoveryCode();
 const setupInput = {
-  shopType: 'restaurant',
   businessName: 'Test Carinderia',
   ownerName: 'Owner',
   pin: OWNER_PIN,
@@ -114,8 +114,8 @@ console.log('\n— First run: no shipped account, the wizard sets the install up
   check('the recovery code is stored only as a hash',
     S().recovery !== null && !JSON.stringify(S().recovery).includes(RECOVERY.replace(/-/g, '')));
   check('the business is named', S().settings.businessName === 'Test Carinderia');
-  check('the sample catalog was loaded', S().products.length === SAMPLE_CATALOGS.restaurant.length);
-  check('the shop type sets the switches', S().settings.shopType === 'restaurant');
+  check('the sample catalog was loaded', S().products.length === SAMPLE_CATALOG.length);
+  check('setup starts on the general switches', JSON.stringify(S().settings.features) === JSON.stringify(DEFAULT_FEATURES));
   check('a new install is in practice until the owner says otherwise',
     S().settings.trainingMode === true);
   check('its opening stock is on the ledger, not just in memory',
@@ -627,8 +627,8 @@ console.log('\n— Monthly archive: nothing leaves without a verified file —')
     'net ' + archive.totals.net + ' orders ' + archive.totals.orders);
   check('archive carries products and branches for later reading',
     archive.products.length > 0 && archive.branches.length > 0);
-  check('archive carries no PIN credentials',
-    JSON.stringify(archive).includes('pin') === false);
+  // A "pin" field, not the letters: an item called "Gift Wrapping" is not a PIN.
+  check('archive carries no PIN credentials', !/"pin"\s*:/.test(JSON.stringify(archive)));
 
   // Refusals.
   check('refuses a tampered version', S().pruneArchivedMonth({ ...archive, version: 99 }).ok === false);

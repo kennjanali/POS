@@ -1,11 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { cents } from '@/lib/money';
-import { applyPreset, type ShopType } from '@/lib/presets';
 import { qty, type Qty } from '@/lib/qty';
 import { computeBill } from '@/lib/tax';
 import type { Product } from '@/lib/types';
-import { ownerShop, resetStore, signInAs } from '@/test/store';
+import { TABLES, ownerShop, resetStore, signInAs, withFeatures } from '@/test/store';
 import { orderGross, usePos } from './usePos';
 
 const S = () => usePos.getState();
@@ -24,17 +23,11 @@ const WIDGET: Product = {
   reorderLevel: null,
 };
 
-function preset(shopType: ShopType) {
-  usePos.setState((s) => ({
-    settings: { ...s.settings, shopType, features: applyPreset(shopType) },
-  }));
-}
-
 /** The seeded catalog's first line, found by name: the setup wizard mints
  *  product ids, so nothing outside it can know one. It stands in for "some
  *  other stocked product the Widget is easy to tell apart from". */
 function seededId(): string {
-  const found = S().products.find((p) => p.name === 'Chicken Paa');
+  const found = S().products.find((p) => p.name === 'Laundry Soap');
   if (!found) throw new Error('the sample catalog was not loaded');
   return found.id;
 }
@@ -49,7 +42,7 @@ describe('stock rules', () => {
   beforeEach(async () => {
     resetStore();
     await ownerShop();
-    preset('retail');
+    withFeatures({});
     S().upsertProduct(WIDGET);
     S().receiveStock({ lines: [{ productId: 'w', qty: qty(3) }] });
   });
@@ -136,7 +129,7 @@ describe('stock rules', () => {
   });
 
   it('lets staff discard an unserved order but not a served one', () => {
-    preset('restaurant');
+    withFeatures(TABLES);
     const unserved = S().openOrder('T1', 'dine-in');
     S().addLine(unserved, 'w');
     const served = S().openOrder('T2', 'dine-in');
@@ -151,7 +144,7 @@ describe('stock rules', () => {
   });
 
   it('bills served lines only in a restaurant', () => {
-    preset('restaurant');
+    withFeatures(TABLES);
     const id = S().openOrder('T1', 'dine-in');
     S().addLine(id, 'w');
     S().serveAll(id);
@@ -161,11 +154,11 @@ describe('stock rules', () => {
     expect(S().closeOrder(id)).toEqual({ ok: true });
     expect(S().order(id)?.grossCents).toBe(10000);
     expect(S().stockOf('w')).toBe(qty(2));
-    expect(S().stockOf(seededId())).toBe(qty(30));
+    expect(S().stockOf(seededId())).toBe(qty(40));
   });
 
   it('refuses the whole serve when a line is short', () => {
-    preset('restaurant');
+    withFeatures(TABLES);
     const id = S().openOrder('T1', 'dine-in');
     S().addLine(id, 'w', qty(3));
     S().addLine(id, seededId());
@@ -173,11 +166,11 @@ describe('stock rules', () => {
 
     expect(S().serveAll(id)).toEqual({ ok: false, error: 'Widget: only 2 left.' });
     expect(S().order(id)?.lines.every((l) => !l.served)).toBe(true);
-    expect(S().stockOf(seededId())).toBe(qty(30));
+    expect(S().stockOf(seededId())).toBe(qty(40));
   });
 
   it('numbers an open order with served lines when the owner cancels it', () => {
-    preset('restaurant');
+    withFeatures(TABLES);
     const id = S().openOrder('T1', 'dine-in');
     S().addLine(id, 'w');
     S().serveAll(id);

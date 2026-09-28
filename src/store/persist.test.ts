@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { cents } from '@/lib/money';
-import { PRESETS } from '@/lib/presets';
+import { DEFAULT_FEATURES, orderTypesFor } from '@/lib/features';
 import { ROWS, setStorageBackend, type StorageBackend, type WriteBatch } from '@/lib/storage';
 import { computeBill } from '@/lib/tax';
 import type { AuditEntry, Product, Settings } from '@/lib/types';
@@ -181,34 +181,34 @@ describe('saving', () => {
 
   it('fills settings a version-8 blob lacks from the defaults, keeping what it has', async () => {
     const older: Partial<Settings> = { ...S().settings };
-    delete older.shopType;
     delete older.features;
     delete older.quoteValidDays;
+    delete (older as { ticketLabel?: string }).ticketLabel;
 
     await rehydrateWith(older);
 
-    expect(S().settings.shopType).toBe('restaurant');
-    expect(S().settings.features).toEqual({
-      openOrders: true,
-      serveStep: true,
-      services: false,
-      quotes: false,
-      vehiclePlate: false,
-      measuredUnits: false,
-    });
+    expect(S().settings.features).toEqual(DEFAULT_FEATURES);
+    expect(S().settings.ticketLabel).toBe('Sale');
     expect(S().settings.quoteValidDays).toBe(7);
     expect(S().settings.businessName).toBe('Test Shop');
-    // What the New order dialog reads first; it threw on the incomplete blob.
-    expect(() => PRESETS[S().settings.shopType].orderTypes).not.toThrow();
+    // What the New sale dialog reads first; it threw on an incomplete blob once.
+    expect(() => orderTypesFor(S().settings.features)).not.toThrow();
   });
 
-  it('gives saved settings without features the switches of their own shop type', async () => {
-    const older: Partial<Settings> = { ...S().settings, shopType: 'auto' };
-    delete older.features;
+  it('loads settings saved with a shop type: the type goes, its switches stay', async () => {
+    const jobs = { openOrders: true, serveStep: false, services: true, quotes: true, vehiclePlate: true, measuredUnits: false };
+    const older = { ...S().settings, shopType: 'auto', features: jobs } as unknown as Partial<Settings>;
 
     await rehydrateWith(older);
 
-    expect(S().settings.features).toEqual(PRESETS.auto.features);
+    expect('shopType' in S().settings).toBe(false);
+    expect(S().settings.features).toEqual({
+      openOrders: true,
+      serveStep: false,
+      quotes: true,
+      vehiclePlate: true,
+      measuredUnits: false,
+    });
   });
 
   it('upgrades a v7 install: thousandths, negative stock counted back to 0, all in one batch', async () => {

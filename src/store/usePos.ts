@@ -6,7 +6,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import { APP_VERSION, LICENSE_SERVER_URL, PRODUCT_NAME } from '@/lib/brand';
 import { buildClose, inWindow, signClose } from '@/lib/closes';
 import { createBackupKey, sealBackup, uploadBackup, type BackupKey } from '@/lib/cloudBackup';
-import { buildDemoData, closeDemoDays, DEMO_BUSINESSES, DEMO_PROMO_CODE } from '@/lib/demo';
+import { buildDemoData, closeDemoDays, DEMO_PROMO_CODE, demoBusiness, type DemoId } from '@/lib/demo';
 import { deviceFingerprint } from '@/lib/device';
 import { verifyLicense, type License } from '@/lib/license';
 import {
@@ -46,8 +46,9 @@ import {
   migrateMoveV7,
   migrateOrderV7,
   migrateSnapshot,
+  settingsFromSaved,
 } from '@/lib/migrate';
-import { applyPreset, PRESETS, ticketWord, type ShopType } from '@/lib/presets';
+import { DEFAULT_FEATURES, DEFAULT_TICKET_LABEL, ticketWord } from '@/lib/features';
 import { findUsablePromo, isValidCode, normalizeCode } from '@/lib/promo';
 import { addDays, nextQuoteNo, quoteStatus } from '@/lib/quotes';
 import { QTY_ONE, formatQty, lineTotal, type Qty } from '@/lib/qty';
@@ -124,11 +125,11 @@ export interface OrderExtra {
   vehiclePlate?: string;
 }
 
-/** What the first-run wizard collects. Four questions, and the recovery code
- *  it shows on the way out. The address and the VAT question are deliberately
- *  not here: they are a new owner's to answer, on the Today checklist. */
+/** What the first-run wizard collects. Three questions, and the recovery code
+ *  it shows on the way out. There is no kind-of-shop question: every shop
+ *  starts on the general switches. The address and the VAT question are a new
+ *  owner's to answer, on the Today checklist. */
 export interface SetupInput {
-  shopType: ShopType;
   businessName: string;
   ownerName: string;
   pin: string;
@@ -312,7 +313,7 @@ interface PosState {
    */
   /** Practice mode only: replaces the shop with a demo business of this type.
    *  Returns the number of sales written, or 0 when refused. */
-  loadDemoBusiness: (shopType: ShopType, options?: { days?: number; salesPerDay?: number }) => Promise<number>;
+  loadDemoBusiness: (id: DemoId, options?: { days?: number; salesPerDay?: number }) => Promise<number>;
   // ── monthly archive ─────────────────────────────────────────────────
   /** Finished months still held on this device, newest first. */
   archivableMonths: () => { month: string; orders: number; net: Centavos }[];
@@ -1123,7 +1124,7 @@ export const usePos = create<PosState>()(
         const order = blankOrder(
           uuidv7(),
           branchId,
-          ticketWord(state.settings.shopType),
+          ticketWord(state.settings),
           'walk-in',
           { customerName: quote.customerName ?? undefined, customerPhone: quote.customerPhone ?? undefined },
         );
@@ -2082,7 +2083,7 @@ export const usePos = create<PosState>()(
         // 'none' is a shop with nothing on the shelf yet: no products, and so
         // no opening count to book.
         const { products, opening } =
-          input.catalog === 'sample' ? seedCatalog(input.shopType) : { products: [], opening: {} };
+          input.catalog === 'sample' ? seedCatalog() : { products: [], opening: {} };
         const at = Date.now();
 
         set((state) => {
@@ -2092,8 +2093,8 @@ export const usePos = create<PosState>()(
             settings: {
               ...state.settings,
               businessName,
-              shopType: input.shopType,
-              features: applyPreset(input.shopType),
+              features: { ...DEFAULT_FEATURES },
+              ticketLabel: DEFAULT_TICKET_LABEL,
               // A brand-new till is in practice until the owner turns it off.
               trainingMode: true,
               // The checklist is a new owner's to work through, not one carried
@@ -2132,8 +2133,8 @@ export const usePos = create<PosState>()(
             audit: log(
               state.audit,
               'install.setup',
-              `Set up ${businessName} as a ${PRESETS[input.shopType].label} shop, ` +
-                `with ${ownerName} as owner and ${products.length} items on the shelf`,
+              `Set up ${businessName} with ${ownerName} as owner and ` +
+                `${products.length} items in Inventory`,
               'info',
               branch.id,
             ),
@@ -2340,7 +2341,7 @@ export const usePos = create<PosState>()(
         return { ok: true };
       },
 
-      loadDemoBusiness: async (shopType, options) => {
+      loadDemoBusiness: async (id, options) => {
         const state = get();
         // Same lock as practice mode itself: a live install must never be
         // able to write fabricated sales over its books.
@@ -2349,8 +2350,9 @@ export const usePos = create<PosState>()(
 
         const branch = state.branches[0] ?? DEFAULT_BRANCH;
         const now = Date.now();
+        const business = demoBusiness(id);
         const demo = buildDemoData({
-          shopType,
+          business: id,
           settings: state.settings,
           branch,
           days: options?.days,
@@ -2364,14 +2366,14 @@ export const usePos = create<PosState>()(
         // load covers today and not the whole demo.
         const closes = await closeDemoDays(demo.orders, now);
         const sales = demo.orders.filter((o) => o.status !== 'open').length;
-        const label = DEMO_BUSINESSES.find((b) => b.shopType === shopType)?.label ?? PRESETS[shopType].label;
+        const { label } = business;
 
         set((s) => ({
           ...s,
           // One install is one shop: the demo business trades at the main
           // branch. Branches the owner added stay, empty.
           activeBranchId: branch.id,
-          settings: { ...s.settings, shopType, features: applyPreset(shopType) },
+          settings: { ...s.settings, features: { ...business.features }, ticketLabel: business.ticketLabel },
           products: demo.products,
           orders: demo.orders,
           stock: demo.stock,
@@ -2484,7 +2486,7 @@ export const usePos = create<PosState>()(
         const snapshot = migrateSnapshot(file);
 
         set((state) => {
-          const settings = { ...state.settings, ...snapshot.settings };
+          const settings = settingsFromSaved(snapshot.settings, state.settings);
           // A backup must not be able to reopen the door updateSettings just
           // closed — otherwise the one-way lock is one file import wide.
           if (!state.settings.trainingMode) settings.trainingMode = false;
@@ -2671,9 +2673,7 @@ export const usePos = create<PosState>()(
       merge: (persisted, current) => {
         const p = persisted as Partial<PosState> | undefined;
         if (!p?.settings) return { ...current, ...p };
-        const settings = { ...DEFAULT_SETTINGS, ...p.settings };
-        settings.features = { ...applyPreset(settings.shopType), ...p.settings.features };
-        return { ...current, ...p, settings };
+        return { ...current, ...p, settings: settingsFromSaved(p.settings, DEFAULT_SETTINGS) };
       },
       storage: createJSONStorage(() => blobStorage),
       // Orders, stock moves, closes, products and the audit log are

@@ -1,10 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { brokenLink } from '@/lib/closes';
-import { buildDemoData, closeDemoDays, DEMO_BUSINESSES, DEMO_PROMO_CODE, type DemoDataset } from '@/lib/demo';
+import { buildDemoData, closeDemoDays, DEMO_BUSINESSES, DEMO_PROMO_CODE, demoBusiness, type DemoDataset, type DemoId } from '@/lib/demo';
 import { businessDate } from '@/lib/format';
 import { discountRequest } from '@/lib/migrate';
-import { applyPreset, type ShopType } from '@/lib/presets';
 import { lineTotal } from '@/lib/qty';
 import { DEFAULT_BRANCH, DEFAULT_SETTINGS } from '@/lib/seed';
 import { computeBill } from '@/lib/tax';
@@ -15,9 +14,9 @@ import { ownerShop, resetStore, signInAs } from '@/test/store';
 /** Today at noon: the generator's "today" depends on the hour, so it is pinned. */
 const NOON = new Date().setHours(12, 0, 0, 0);
 
-function build(shopType: ShopType, now = NOON, vatRegistered = false, lowStockAt = DEFAULT_SETTINGS.lowStockAt): DemoDataset {
+function build(business: DemoId, now = NOON, vatRegistered = false, lowStockAt = DEFAULT_SETTINGS.lowStockAt): DemoDataset {
   return buildDemoData({
-    shopType,
+    business,
     settings: { ...DEFAULT_SETTINGS, vatRegistered, lowStockAt },
     branch: DEFAULT_BRANCH,
     now,
@@ -26,9 +25,8 @@ function build(shopType: ShopType, now = NOON, vatRegistered = false, lowStockAt
 
 const settled = (d: DemoDataset) => d.orders.filter((o) => o.status !== 'open');
 
-describe.each(DEMO_BUSINESSES)('the $label demo', ({ shopType }) => {
-  const data = build(shopType);
-  const features = applyPreset(shopType);
+describe.each(DEMO_BUSINESSES)('the $label demo', ({ id, features }) => {
+  const data = build(id);
   const bid = DEFAULT_BRANCH.id;
 
   it('never takes a product below zero, replaying the moves in time order', () => {
@@ -139,13 +137,13 @@ describe.each(DEMO_BUSINESSES)('the $label demo', ({ shopType }) => {
       }).length;
     expect(lowIn(data, DEFAULT_SETTINGS.lowStockAt)).toBeGreaterThanOrEqual(2);
     // A reorder level in part-units still gets its two low items.
-    expect(lowIn(build(shopType, NOON, false, 2500 as never), 2500)).toBeGreaterThanOrEqual(2);
+    expect(lowIn(build(id, NOON, false, 2500 as never), 2500)).toBeGreaterThanOrEqual(2);
   });
 
   it('sells on today, and dates nothing after now at any hour', () => {
     for (const [h, m] of [[0, 5], [8, 10], [12, 0], [23, 55]] as const) {
       const now = new Date().setHours(h, m, 0, 0);
-      const d = build(shopType, now);
+      const d = build(id, now);
       const stamps = (o: Order) => [o.openedAt, o.closedAt, o.voidedAt, ...o.lines.map((l) => l.servedAt), ...o.tenders.map((t) => t.takenAt)];
       const all = [
         ...d.orders.flatMap(stamps),
@@ -161,13 +159,13 @@ describe.each(DEMO_BUSINESSES)('the $label demo', ({ shopType }) => {
   });
 
   it('gives the same money every time it is built', () => {
-    const again = build(shopType);
+    const again = build(id);
     const net = (d: DemoDataset) => settled(d).map((o) => o.netCents);
     expect(net(again)).toEqual(net(data));
   });
 
   it('works out VAT on a VAT-registered shop', () => {
-    const vat = build(shopType, NOON, true);
+    const vat = build(id, NOON, true);
     expect(settled(vat).some((o) => o.vatCents > 0)).toBe(true);
   });
 });
@@ -183,8 +181,8 @@ describe('loadDemoBusiness', () => {
   it('replaces the shop with the demo business and its switches', async () => {
     const written = await S().loadDemoBusiness('auto', { days: 3, salesPerDay: 5 });
     expect(written).toBeGreaterThan(0);
-    expect(S().settings.shopType).toBe('auto');
-    expect(S().settings.features).toEqual(applyPreset('auto'));
+    expect(S().settings.features).toEqual(demoBusiness('auto').features);
+    expect(S().settings.ticketLabel).toBe('Job');
     expect(S().products.some((p) => p.name === 'Wheel Alignment')).toBe(true);
     expect(S().promos.map((p) => p.code)).toEqual([DEMO_PROMO_CODE]);
     expect(S().quotes).toHaveLength(3);
@@ -196,7 +194,7 @@ describe('loadDemoBusiness', () => {
   it('carries sale and quote numbers on from what was already issued', async () => {
     const bid = S().activeBranchId;
     usePos.setState((s) => ({ invoiceSeq: { ...s.invoiceSeq, [bid]: 41 }, quoteSeq: 7 }));
-    await S().loadDemoBusiness('retail', { days: 2, salesPerDay: 3 });
+    await S().loadDemoBusiness('hardware', { days: 2, salesPerDay: 3 });
     const first = S()
       .orders.filter((o) => o.invoiceNo !== null)
       .sort((a, b) => a.closedAt! - b.closedAt!)[0]!;
@@ -205,7 +203,7 @@ describe('loadDemoBusiness', () => {
   });
 
   it("takes DEMO10 away when the shop goes live, and keeps the owner's own codes", async () => {
-    await S().loadDemoBusiness('retail', { days: 2, salesPerDay: 3 });
+    await S().loadDemoBusiness('hardware', { days: 2, salesPerDay: 3 });
     expect(S().createPromo({ code: 'GRAND10', percent: 10 }).ok).toBe(true);
     usePos.setState({ licensed: { licenseId: 'LIC-TEST' } as never });
     S().updateSettings({ trainingMode: false });
@@ -214,10 +212,10 @@ describe('loadDemoBusiness', () => {
 
   it('refuses a live install, and staff', async () => {
     signInAs('staff');
-    expect(await S().loadDemoBusiness('retail')).toBe(0);
+    expect(await S().loadDemoBusiness('hardware')).toBe(0);
     usePos.setState((s) => ({ settings: { ...s.settings, trainingMode: false } }));
     signInAs('superadmin');
-    expect(await S().loadDemoBusiness('retail')).toBe(0);
-    expect(S().settings.shopType).toBe('restaurant');
+    expect(await S().loadDemoBusiness('hardware')).toBe(0);
+    expect(S().settings.features).toEqual(DEFAULT_SETTINGS.features);
   });
 });

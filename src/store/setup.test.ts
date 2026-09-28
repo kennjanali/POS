@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { SAMPLE_CATALOGS, type CatalogItem } from '@/lib/catalogs';
+import { SAMPLE_CATALOG, type CatalogItem } from '@/lib/catalogs';
+import { DEFAULT_FEATURES } from '@/lib/features';
 import { checklistItems } from '@/lib/checklist';
 import { qty } from '@/lib/qty';
 import { DEFAULT_SETTINGS } from '@/lib/seed';
@@ -11,8 +12,7 @@ import { ownerShop, resetStore } from '@/test/store';
 const S = () => usePos.getState();
 
 const INPUT: SetupInput = {
-  shopType: 'auto',
-  businessName: 'Sampalok Auto Shop',
+  businessName: "Aling Nena's Store",
   ownerName: 'Nena',
   pin: '481902',
   recoveryCode: 'ABCD-EFGH-JKLM',
@@ -29,7 +29,7 @@ async function setup(over: Partial<SetupInput> = {}) {
   });
 }
 
-function item(name: string, from: CatalogItem[] = SAMPLE_CATALOGS.auto): CatalogItem {
+function item(name: string, from: CatalogItem[] = SAMPLE_CATALOG): CatalogItem {
   const found = from.find((i) => i.name === name);
   if (!found) throw new Error(`no sample item called ${name}`);
   return found;
@@ -38,15 +38,16 @@ function item(name: string, from: CatalogItem[] = SAMPLE_CATALOGS.auto): Catalog
 describe('first-run setup', () => {
   beforeEach(resetStore);
 
-  it('turns on the switches the chosen shop type needs', async () => {
+  it('starts every shop on the general switches, without asking what kind of shop it is', async () => {
     await setup();
-    expect(S().settings.shopType).toBe('auto');
-    expect(S().settings.features.vehiclePlate).toBe(true);
+    expect(S().settings.features).toEqual(DEFAULT_FEATURES);
+    expect(S().settings.ticketLabel).toBe('Sale');
+    expect('shopType' in S().settings).toBe(false);
   });
 
   it('names the business and its owner', async () => {
     await setup();
-    expect(S().settings.businessName).toBe('Sampalok Auto Shop');
+    expect(S().settings.businessName).toBe("Aling Nena's Store");
     const [owner] = S().users;
     expect(owner?.name).toBe('Nena');
     expect(owner?.role).toBe('superadmin');
@@ -57,15 +58,16 @@ describe('first-run setup', () => {
     expect(S().settings.trainingMode).toBe(true);
   });
 
-  it('loads the sample catalog for that shop type, services and all', async () => {
+  it('loads the sample catalog: goods and services in one Inventory', async () => {
     await setup();
-    expect(S().products).toHaveLength(SAMPLE_CATALOGS.auto.length);
-    expect(S().products.find((p) => p.name === 'Wheel Alignment')?.kind).toBe('service');
+    expect(S().products).toHaveLength(SAMPLE_CATALOG.length);
+    expect(S().products.find((p) => p.name === 'Delivery')?.kind).toBe('service');
+    expect(S().products.find((p) => p.name === 'Padlock')?.kind).toBe('stock');
   });
 
   it('carries the catalog prices and costs onto the products', async () => {
     await setup();
-    const tire = item('Tire 185/65 R14');
+    const tire = item('Padlock');
     const product = S().products.find((p) => p.name === tire.name);
     expect(product?.priceCents).toBe(tire.priceCents);
     expect(product?.costCents).toBe(tire.costCents);
@@ -73,7 +75,7 @@ describe('first-run setup', () => {
 
   it('puts every stocked item on the shelf at its opening quantity', async () => {
     await setup();
-    for (const line of SAMPLE_CATALOGS.auto.filter((i) => i.kind === 'stock')) {
+    for (const line of SAMPLE_CATALOG.filter((i) => i.kind === 'stock')) {
       const product = S().products.find((p) => p.name === line.name);
       if (!product) throw new Error(`no product called ${line.name}`);
       expect(S().stockOf(product.id)).toBe(line.openingQty);
@@ -82,7 +84,7 @@ describe('first-run setup', () => {
 
   it('books that opening stock as opening moves, one per stocked item', async () => {
     await setup();
-    const stocked = SAMPLE_CATALOGS.auto.filter((i) => i.kind === 'stock');
+    const stocked = SAMPLE_CATALOG.filter((i) => i.kind === 'stock');
     const opening = S().stockMoves.filter((m) => m.reason === 'opening');
     expect(opening).toHaveLength(stocked.length);
     for (const move of opening) {
@@ -123,16 +125,21 @@ describe('first-run setup', () => {
     expect(S().settings.vatRegistered).toBe(false);
   });
 
-  it('offers a catalog for every shop type', () => {
-    for (const [shopType, lines] of Object.entries(SAMPLE_CATALOGS)) {
-      expect(lines.length, shopType).toBeGreaterThanOrEqual(10);
-      expect(lines.length, shopType).toBeLessThanOrEqual(15);
-    }
-    // The measured shops sell by the metre and the kilogram.
-    const units = SAMPLE_CATALOGS.retail.map((i) => i.unit);
+  it('offers 10-12 everyday goods and 2-3 services, some sold by measure', () => {
+    const goods = SAMPLE_CATALOG.filter((i) => i.kind === 'stock');
+    const services = SAMPLE_CATALOG.filter((i) => i.kind === 'service');
+    expect(goods.length).toBeGreaterThanOrEqual(10);
+    expect(goods.length).toBeLessThanOrEqual(12);
+    expect(services.length).toBeGreaterThanOrEqual(2);
+    expect(services.length).toBeLessThanOrEqual(3);
+    const units = goods.map((i) => i.unit);
     expect(units).toContain('m');
     expect(units).toContain('kg');
-    expect(SAMPLE_CATALOGS.auto.some((i) => i.kind === 'service' && i.unit === 'hr')).toBe(true);
+  });
+
+  it('opens a new shop with nothing on the Running low list', async () => {
+    await setup();
+    expect(S().lowStock()).toEqual([]);
   });
 });
 

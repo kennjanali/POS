@@ -18,7 +18,7 @@ import {
 import { usePos } from '@/store/usePos';
 import { useAuth } from '@/store/useAuth';
 import { can, normalizePath, routesFor } from '@/lib/permissions';
-import { ticketWord } from '@/lib/presets';
+import { ticketWord } from '@/lib/features';
 import { useShell } from './shell';
 import { cn } from '@/components/ui/cn';
 
@@ -43,7 +43,7 @@ export function Sidebar() {
   // What the shop calls an open ticket. A retail shop has a single cart and no
   // tickets to open, so the button would lie about what it does.
   const ticketWordLower = usePos((s) =>
-    ticketWord(s.settings.shopType).toLowerCase(),
+    ticketWord(s.settings).toLowerCase(),
   );
   const usesTickets = usePos((s) => s.settings.features.openOrders);
   const openCount = usePos((s) =>

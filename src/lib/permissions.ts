@@ -12,7 +12,7 @@
  * against a determined insider.
  */
 
-import type { Features } from './presets';
+import type { Features } from './features';
 import type { Role } from './types';
 
 export type Permission =

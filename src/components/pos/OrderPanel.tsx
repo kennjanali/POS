@@ -10,7 +10,7 @@ import { Field } from '@/components/ui/Field';
 import { toast } from '@/components/ui/Toast';
 import { peso } from '@/lib/format';
 import { addC, cents, type Centavos } from '@/lib/money';
-import { ticketWord } from '@/lib/presets';
+import { ticketWord } from '@/lib/features';
 import { QTY_ONE, formatQty, lineTotal, type Qty } from '@/lib/qty';
 import { billedLines, staysOnRecord, usePos, type UserResult } from '@/store/usePos';
 import { useAuth } from '@/store/useAuth';
@@ -26,7 +26,7 @@ interface OrderPanelProps {
 export function OrderPanel({ order, onCheckout }: OrderPanelProps) {
   const currency = usePos((s) => s.settings.currency);
   const { serveStep, openOrders } = usePos((s) => s.settings.features);
-  const word = usePos((s) => ticketWord(s.settings.shopType));
+  const word = usePos((s) => ticketWord(s.settings));
   const changeQty = usePos((s) => s.changeQty);
   const serveAll = usePos((s) => s.serveAll);
   const voidLine = usePos((s) => s.voidLine);

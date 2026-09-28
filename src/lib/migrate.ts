@@ -5,7 +5,7 @@
  * than a second migration somewhere else.
  */
 
-import { applyPreset } from './presets';
+import { withDefaults } from './features';
 import { qty, type Qty } from './qty';
 import type { DiscountRequest } from './tax';
 import type {
@@ -113,15 +113,27 @@ function migrateProductV7(product: Product): Product {
 // ── settings ─────────────────────────────────────────────────────────────
 
 /**
+ * Settings as this build reads them, from a blob or a backup: every field
+ * present, only the switches this build knows, and nothing left from the
+ * shop-type presets that came before the general POS. `base` supplies what
+ * the saved copy lacks.
+ */
+export function settingsFromSaved(saved: Partial<Settings> | undefined, base: Settings): Settings {
+  const kept = { ...(saved ?? {}) } as Partial<Settings> & { shopType?: unknown };
+  delete kept.shopType;
+  return { ...base, ...kept, features: withDefaults(saved?.features ?? base.features) };
+}
+
+/**
  * Prices always include VAT now, so the old switch has nothing to say. Every
- * v7 install was a restaurant, the only shop the app knew, so it keeps the
- * restaurant switches.
+ * v7 install was a restaurant, the only shop the app knew, so it keeps
+ * working as one: tickets called tables, served before they are paid.
  */
 function migrateSettingsV7(settings: Settings): Settings {
   const next: Settings & { pricesIncludeVat?: boolean } = {
     ...settings,
-    shopType: 'restaurant',
-    features: applyPreset('restaurant'),
+    features: { openOrders: true, serveStep: true, quotes: false, vehiclePlate: false, measuredUnits: false },
+    ticketLabel: 'Table',
     contactNumber: '',
     quoteValidDays: 7,
     checklistDismissed: [],

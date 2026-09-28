@@ -3,7 +3,7 @@
  * piece is 1000. Like centavos, so quantity maths never touches a float.
  */
 
-import type { Features } from './presets';
+import type { Features } from './features';
 import { roundCents, type Centavos } from './money';
 
 /** Branded type so a raw count can't be passed where thousandths are expected. */

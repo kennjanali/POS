@@ -10,7 +10,7 @@
  * — so the owner always sees what a file will do before it does it.
  */
 
-import type { Features } from './presets';
+import type { Features } from './features';
 import { parsePesos } from './money';
 import { decimalsAllowed, formatQty, parseQty, qty, type Qty } from './qty';
 import type { Product, ProductKind } from './types';

@@ -1,6 +1,6 @@
 import type { PinCredential } from './crypto';
 import type { Centavos } from './money';
-import type { Features, ShopType } from './presets';
+import type { Features } from './features';
 import type { ReceiptPrinter } from './printer';
 import type { Qty } from './qty';
 import type { TaxProfile } from './tax';
@@ -290,10 +290,11 @@ export interface Settings extends TaxProfile {
   trainingMode: boolean;
   /** The paired Bluetooth printer (Android app only). Absent until chosen. */
   printer?: ReceiptPrinter | null;
-  /** The preset the switches started from. The switches decide behaviour, not this. */
-  shopType: ShopType;
-  /** Set by the shop type; the owner changes them in Settings → More options. */
+  /** Every shop starts on the general defaults; the owner changes them in
+   *  Settings → More options. */
   features: Features;
+  /** What an open sale is called on screen, e.g. "Table" or "Job". "Sale" by default. */
+  ticketLabel: string;
   contactNumber: string;
   /** How many days a quotation stays valid. */
   quoteValidDays: number;

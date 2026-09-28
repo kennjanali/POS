@@ -13,7 +13,7 @@ import { OrderPanel } from '@/components/pos/OrderPanel';
 import { ReceiptModal } from '@/components/pos/Receipt';
 import { QuoteSlip } from '@/components/quotes/QuoteSlip';
 import { useShell } from '@/components/layout/shell';
-import { ticketWord } from '@/lib/presets';
+import { ticketWord } from '@/lib/features';
 import type { Order } from '@/lib/types';
 import { usePos } from '@/store/usePos';
 
@@ -123,7 +123,7 @@ function TicketFloor({ onCheckout }: { onCheckout: (orderId: string) => void }) 
   const activeOrderId = usePos((s) => s.activeOrderId);
   const setActiveOrder = usePos((s) => s.setActiveOrder);
   const currency = usePos((s) => s.settings.currency);
-  const word = usePos((s) => ticketWord(s.settings.shopType));
+  const word = usePos((s) => ticketWord(s.settings));
 
   const openOrders = openIn(orders, activeBranchId);
   const activeOrder = openOrders.find((o) => o.id === activeOrderId);

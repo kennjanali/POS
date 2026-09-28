@@ -17,7 +17,7 @@ import { Toaster, toast } from '@/components/ui/Toast';
 import { usePos } from '@/store/usePos';
 import { useAuth } from '@/store/useAuth';
 import { can } from '@/lib/permissions';
-import { PRESETS, ticketWord } from '@/lib/presets';
+import { orderTypesFor, ticketWord } from '@/lib/features';
 import { QUICK_LABELS } from '@/lib/seed';
 import { ORDER_TYPE_LABELS, type OrderType } from '@/lib/types';
 import { cn } from '@/components/ui/cn';
@@ -28,11 +28,12 @@ function NewOrderDialog() {
   const openOrder = usePos((s) => s.openOrder);
   const orders = usePos((s) => s.orders);
   const activeBranchId = usePos((s) => s.activeBranchId);
-  const shopType = usePos((s) => s.settings.shopType);
-  const askPlate = usePos((s) => s.settings.features.vehiclePlate);
-  const { orderTypes, ticketLabel } = PRESETS[shopType];
-  const word = ticketWord(shopType);
-  const quickLabels = ticketLabel === 'Table' ? QUICK_LABELS : [];
+  const settings = usePos((s) => s.settings);
+  const askPlate = settings.features.vehiclePlate;
+  const orderTypes = orderTypesFor(settings.features);
+  const word = ticketWord(settings);
+  // Table shortcuts only where food is served at tables.
+  const quickLabels = settings.features.serveStep ? QUICK_LABELS : [];
   const takenLabels = orders
     .filter((o) => o.status === 'open' && o.branchId === activeBranchId)
     .map((o) => o.label);
@@ -42,7 +43,7 @@ function NewOrderDialog() {
   const [customerPhone, setCustomerPhone] = useState('');
   const [plate, setPlate] = useState('');
   const [picked, setPicked] = useState<OrderType | null>(null);
-  // The shop type can change under an open dialog (hydration, Settings).
+  // The switches can change under an open dialog (hydration, Settings).
   const type = picked !== null && orderTypes.includes(picked) ? picked : orderTypes[0]!;
 
   const vehiclePlate = askPlate ? plate.trim() : '';

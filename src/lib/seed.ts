@@ -1,4 +1,4 @@
-import { applyPreset } from './presets';
+import { DEFAULT_FEATURES, DEFAULT_TICKET_LABEL } from './features';
 import { qty } from './qty';
 import type { Branch, Settings } from './types';
 
@@ -32,16 +32,15 @@ export const DEFAULT_SETTINGS: Settings = {
   lowStockAt: qty(10),
   trainingMode: true,
 
-  // A carinderia under PHP 3M annual gross is a percentage-tax filer, not a
+  // A small shop under PHP 3M annual gross is a percentage-tax filer, not a
   // VAT filer. v6 hard-coded VAT on. The honest default is off — switch it on
   // in Settings once the business is actually VAT-registered.
   vatRegistered: false,
   vatRate: 0.12,
   vatLabel: 'VAT',
 
-  // Until the owner picks a shop type, the till works as it always has.
-  shopType: 'restaurant',
-  features: applyPreset('restaurant'),
+  features: { ...DEFAULT_FEATURES },
+  ticketLabel: DEFAULT_TICKET_LABEL,
   contactNumber: '',
   quoteValidDays: 7,
   checklistDismissed: [],

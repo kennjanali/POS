@@ -128,14 +128,12 @@ export function ProductForm({
           value={draft.name}
           onChange={(e) => setDraft({ ...draft, name: e.target.value })}
         />
-        {(settings.features.services || draft.kind === 'service') && (
-          <Select
-            label="Kind"
-            value={draft.kind}
-            options={Object.entries(KIND_LABELS)}
-            onChange={(kind) => setDraft({ ...draft, kind: kind as ProductKind })}
-          />
-        )}
+        <Select
+          label="Kind"
+          value={draft.kind}
+          options={Object.entries(KIND_LABELS)}
+          onChange={(kind) => setDraft({ ...draft, kind: kind as ProductKind })}
+        />
         <div className="grid grid-cols-2 gap-3">
           <Field
             label="SKU"

@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
 import { CSV_COLUMNS, exportProducts, parseCsv, previewImport, toCsv } from '@/lib/csv';
-import { PRESETS } from '@/lib/presets';
+import { DEFAULT_FEATURES } from '@/lib/features';
 import { qty } from '@/lib/qty';
 import type { Product } from '@/lib/types';
 
-const FEATURES = PRESETS.retail.features;
+const FEATURES = DEFAULT_FEATURES;
 
 function existing(over: Partial<Product> = {}): Product {
   return {
