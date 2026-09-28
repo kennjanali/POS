@@ -222,3 +222,41 @@ describe('the finish-setting-up checklist', () => {
     expect(checklistItems(S()).find((i) => i.id === 'vat')?.done).toBe(true);
   });
 });
+
+describe('going live', () => {
+  beforeEach(async () => {
+    resetStore();
+    await ownerShop();
+  });
+
+  it('wipes practice data and keeps the shop: products, codes, users, settings', () => {
+    const item = S().products.find((p) => p.kind === 'stock')!;
+    const id = S().openOrder('T1', 'dine-in');
+    S().addLine(id, item.id);
+    S().serveAll(id);
+    expect(S().payExact(id, 'cash').ok).toBe(true);
+    expect(S().createPromo({ code: 'GRAND10', percent: 10 }).ok).toBe(true);
+    const products = S().products;
+
+    usePos.setState({ licensed: { licenseId: 'LIC-TEST' } as never });
+    S().updateSettings({ trainingMode: false });
+
+    expect(S().settings.trainingMode).toBe(false);
+    expect(S().orders).toEqual([]);
+    expect(S().stockMoves).toEqual([]);
+    expect(S().closes).toEqual([]);
+    expect(S().quotes).toEqual([]);
+    expect(S().stock[S().activeBranchId]?.[item.id] ?? 0).toBe(0);
+    expect(S().products).toBe(products);
+    expect(S().promos.map((p) => p.code)).toEqual(['GRAND10']);
+    expect(S().users).toHaveLength(1);
+    expect(S().audit.some((a) => a.kind === 'data.reset' && a.message.startsWith('Went live'))).toBe(true);
+  });
+
+  it('wipes nothing without a license, because it does not go live', () => {
+    const before = S().stockMoves.length;
+    S().updateSettings({ trainingMode: false });
+    expect(S().settings.trainingMode).toBe(true);
+    expect(S().stockMoves).toHaveLength(before);
+  });
+});

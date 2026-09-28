@@ -400,7 +400,7 @@ export default function SettingsPage() {
       <Modal
         open={confirmGoLive}
         onClose={() => setConfirmGoLive(false)}
-        title="Turn off training mode"
+        title="Turn off practice mode"
         width="sm"
         footer={
           <Button
@@ -409,7 +409,7 @@ export default function SettingsPage() {
             onClick={() => {
               update({ trainingMode: false });
               setConfirmGoLive(false);
-              toast('Training mode is off — this install is now live', 'success');
+              toast('Practice mode is off — this install is now live', 'success');
             }}
           >
             Go live — this cannot be undone
@@ -417,17 +417,19 @@ export default function SettingsPage() {
         }
       >
         <p className="text-[12.5px] leading-relaxed text-ink-2">
-          Order slips stop being marked <strong>TRAINING MODE</strong> and every sale
+          Slips stop being marked <strong>PRACTICE MODE</strong> and every sale
           starts counting for real.
         </p>
         <p className="mt-2 text-[12.5px] leading-relaxed text-ink-2">
-          <strong>This is permanent.</strong> Training mode cannot be turned back
+          <strong>This is permanent.</strong> Practice mode cannot be turned back
           on, and with it off the demo loader and &ldquo;Clear all sales
           data&rdquo; are locked for good — so fabricated sales can never be
           written over your books.
         </p>
         <p className="mt-2 text-[12.5px] leading-relaxed text-ink-2">
-          Clear out any practice sales <em>before</em> you do this.
+          <strong>Practice data is cleared:</strong> every practice sale, stock movement,
+          summary and quotation. Products, prices, promo codes, users and settings stay.
+          Stock starts at 0 &mdash; count your shelf in Inventory before the first sale.
         </p>
       </Modal>
 

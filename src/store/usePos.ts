@@ -2297,14 +2297,33 @@ export const usePos = create<PosState>()(
               : state.audit;
 
           if (state.settings.trainingMode && !settings.trainingMode) {
+            // Practice data is wiped at go-live (spec section 5): practice
+            // sales, their stock movements, summaries and quotes are not the
+            // shop's books. Products, prices, users, settings and promo codes
+            // stay. Stock starts at 0 — a sample catalog's opening quantities
+            // are made up — so the first figure on the live ledger is a count.
+            // Invoice and quote numbers carry on rather than restart, so no
+            // number that was ever printed is issued twice.
+            const cleared =
+              `${state.orders.length} practice sale${state.orders.length === 1 ? '' : 's'}, ` +
+              `${state.stockMoves.length} stock movements, ${state.closes.length} summaries ` +
+              `and ${state.quotes.length} quotations`;
             return {
               ...state,
               settings,
+              orders: [],
+              stockMoves: [],
+              closes: [],
+              quotes: [],
+              stock: Object.fromEntries(state.branches.map((b) => [b.id, {}])),
+              lowStockAlerts: [],
+              activeOrderId: null,
+              promos: state.promos.map((p) => ({ ...p, firstUsedAt: null })),
               audit: log(
-                audit,
+                log(audit, 'data.reset', `Went live: cleared ${cleared}`, 'danger', state.activeBranchId),
                 'settings.golive',
-                'Training mode turned off — this install is now live and ' +
-                  'cannot be put back into training mode',
+                'Practice mode turned off — this install is now live and ' +
+                  'cannot be put back into practice mode',
                 'warn',
                 state.activeBranchId,
               ),
