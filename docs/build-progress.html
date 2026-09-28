@@ -80,7 +80,7 @@
 <h1>POS-034 &mdash; Build Progress</h1>
 <p class="sub">
   Offline POS for small shops, by kennali.com. One tablet = one shop.<br>
-  Branch <code>pos-034-redesign</code> &middot; 66 commits ahead of <code>main</code> &middot; as of 2026-09-28.<br>
+  Branch <code>pos-034-redesign</code> &middot; 68 commits ahead of <code>main</code> &middot; as of 2026-09-28.<br>
   Spec: <code>docs/superpowers/specs/2026-09-27-pos-034-design.md</code> &middot;
   Plan: <code>docs/superpowers/plans/2026-09-27-pos-034-app.md</code> (18 tasks) &middot;
   Ledger: <code>.superpowers/sdd/2026-09-27-pos-034-app/progress.md</code>
@@ -91,7 +91,7 @@
   <div class="stat"><b>0</b><span>In progress or audit</span></div>
   <div class="stat"><b>0</b><span>Not started</span></div>
   <div class="stat"><b class="yes">PASS</b><span><code>npm run check</code> &mdash; all stages</span></div>
-  <div class="stat"><b>344</b><span>Tests passing (28 files)</span></div>
+  <div class="stat"><b>346</b><span>Tests passing (28 files)</span></div>
 </div>
 
 <div class="bar" role="img" aria-label="18 of 18 tasks complete, 0 in progress, 0 in audit, 0 not started">
@@ -110,7 +110,7 @@
   <tr><th>Stage</th><th>Result</th><th>What it covers</th></tr>
   <tr><td><code>typecheck</code></td><td class="yes">PASS</td><td><code>tsc --noEmit</code></td></tr>
   <tr><td><code>lint</code></td><td class="yes">PASS</td><td><code>eslint src</code></td></tr>
-  <tr><td><code>test</code></td><td class="yes">PASS</td><td>344 tests, 28 files</td></tr>
+  <tr><td><code>test</code></td><td class="yes">PASS</td><td>346 tests, 28 files</td></tr>
   <tr><td><code>verify:auth</code></td><td class="yes">PASS</td><td>Route guard for every role, last-owner protection, PIN hashing</td></tr>
   <tr><td><code>verify:safeguards</code></td><td class="yes">PASS</td><td>First run, license offline binding, one-way practice door, daily close chain, backup encryption, receipt width, archive pruning</td></tr>
 </table>
@@ -246,7 +246,7 @@
 <h2 id="audit">Audit of Tasks 11&ndash;16</h2>
 <p class="sub">Tasks 11&ndash;16 were built while the reviewer was away and marked &ldquo;review clean&rdquo;, but no per-task review was run: the ledger has no review diffs or reports after Task 10. Six independent reviews against the plan, the spec and the global constraints found the issues below; every Critical one was reproduced before it was fixed. A task goes back to <b>Complete</b> when all of its rows are Fixed. Last updated 2026-09-28.</p>
 <div class="grid">
-  <div class="stat"><b class="yes">46</b><span>Fixed</span></div>
+  <div class="stat"><b class="yes">52</b><span>Fixed</span></div>
   <div class="stat"><b>0</b><span>Being fixed now</span></div>
   <div class="stat"><b>0</b><span>Open</span></div>
   <div class="stat"><b>0</b><span>Needs your decision</span></div>
@@ -439,10 +439,34 @@
     <td>16</td><td>Minor</td><td>Re-review: an unclosed quote in the header said &ldquo;file is empty&rdquo;; a name already starting with <code>'=</code> lost its apostrophe; the stale-preview check missed a same-name item added meanwhile</td>
     <td><span class="tag t-fixed">Fixed</span></td><td class="mono"><code>65fbeb7</code></td>
   </tr>
+  <tr id="A17-1" data-a="fixed">
+    <td>17</td><td>Important</td><td>Review: DEMO10 stays an active 10%-off code after going live, for anyone to type</td>
+    <td><span class="tag t-fixed">Fixed</span></td><td class="mono"><code>c6e0d25</code></td>
+  </tr>
+  <tr id="A17-2" data-a="fixed">
+    <td>17</td><td>Important</td><td>Review: a demo load shipped no summaries, so the nightly job would write one Today&rsquo;s summary covering all three weeks</td>
+    <td><span class="tag t-fixed">Fixed</span></td><td class="mono"><code>c6e0d25</code></td>
+  </tr>
+  <tr id="A17-3" data-a="fixed">
+    <td>17</td><td>Minor</td><td>Review: with a part-unit reorder level the short count rounded above it, leaving one item low instead of two; open-ticket labels could skip numbers</td>
+    <td><span class="tag t-fixed">Fixed</span></td><td class="mono"><code>c6e0d25</code></td>
+  </tr>
+  <tr id="A17-4" data-a="fixed">
+    <td>17</td><td>Minor</td><td>Review: a demo load restarted sale and quote numbers at 1; quotes numbered newest-first, valid-until counted from today, and made for shops with quotes switched off</td>
+    <td><span class="tag t-fixed">Fixed</span></td><td class="mono"><code>c6e0d25</code></td>
+  </tr>
+  <tr id="A17-5" data-a="fixed">
+    <td>17</td><td>Minor</td><td>Review: the chain test checked closes the app never ships; the one-branch test was trivially true</td>
+    <td><span class="tag t-fixed">Fixed</span></td><td class="mono"><code>c6e0d25</code></td>
+  </tr>
+  <tr id="A18-1" data-a="fixed">
+    <td>18</td><td>Minor</td><td>Review: &ldquo;Order&rdquo; still shows as the ticket word for retail and general with open tickets on; README layout left out three folders</td>
+    <td><span class="tag t-fixed">Fixed</span></td><td class="mono"><code>c6e0d25</code></td>
+  </tr>
   </tbody>
 </table>
 </div>
-<p class="sub" style="margin-top:8px">Also found: the ledger claims an export&rarr;import round-trip test that did not exist, and says quotes were wired into loading when only saving was. The &ldquo;Start empty&rdquo; hint (&ldquo;type items in from the sell screen&rdquo;) was flagged but is correct &mdash; the owner quick-add is on the sell screen. A second review of the fix commits reopened the rows marked <i>Re-review</i>. A browser pass at 1280&times;800 then walked the wizard with a spreadsheet import, a quote converted to payment, an owner discount, Today and This month.</p>
+<p class="sub" style="margin-top:8px">Also found: the ledger claims an export&rarr;import round-trip test that did not exist, and says quotes were wired into loading when only saving was. The &ldquo;Start empty&rdquo; hint (&ldquo;type items in from the sell screen&rdquo;) was flagged but is correct &mdash; the owner quick-add is on the sell screen. A second review of the fix commits reopened the rows marked <i>Re-review</i>. A browser pass at 1280&times;800 then walked the wizard with a spreadsheet import, a quote converted to payment, an owner discount, Today and This month. A review of Tasks 17&ndash;18 (9,720 generated demo builds, no invariant broken) raised the rows for those tasks.</p>
 <!-- audit:end -->
 
 <h2>Task 14 in detail</h2>
@@ -530,7 +554,7 @@
 <table>
   <tr><th>Item</th><th>State</th><th>Goes to</th></tr>
   <tr>
-    <td>66 commits ahead of <code>main</code> &mdash; pushed, but a single point of loss until a second remote exists</td>
+    <td>68 commits ahead of <code>main</code> &mdash; pushed, but a single point of loss until a second remote exists</td>
     <td class="no">Open</td>
     <td>Now</td>
   </tr>
