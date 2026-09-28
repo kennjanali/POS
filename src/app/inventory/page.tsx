@@ -12,6 +12,7 @@ import { PromoCodes } from '@/components/inventory/PromoCodes';
 import { StockHistory } from '@/components/inventory/StockHistory';
 import { Button } from '@/components/ui/Button';
 import { cn } from '@/components/ui/cn';
+import { Tip } from '@/components/ui/Tip';
 import { peso } from '@/lib/format';
 import { cents } from '@/lib/money';
 import { sortProducts } from '@/lib/products';
@@ -72,6 +73,9 @@ export default function InventoryPage() {
 
   return (
     <div className="flex h-full flex-col">
+      <div className="px-4 pt-3 empty:hidden">
+        <Tip id="inventory">Add stock here when a delivery arrives.</Tip>
+      </div>
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line bg-surface px-4 py-2">
         <div className="flex gap-1" role="tablist">
           {TABS.map(([id, label]) => (

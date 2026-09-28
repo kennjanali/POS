@@ -103,7 +103,7 @@ export function BranchManager() {
       (o) => o.branchId === branch.id && o.status === 'open',
     ).length;
     if (openHere > 0) {
-      toast(`${branch.name} still has ${openHere} open order(s)`, 'danger');
+      toast(`${branch.name} still has ${openHere} open sale(s)`, 'danger');
       return;
     }
 
@@ -121,7 +121,7 @@ export function BranchManager() {
   return (
     <>
       <p className="text-[12px] leading-relaxed text-ink-2">
-        Each branch keeps its own stock and its own gapless order numbers, prefixed
+        Each branch keeps its own stock and its own gapless sale numbers, prefixed
         with its branch code. Closing a branch hides it from the till without
         touching its sales history.
       </p>
@@ -249,7 +249,7 @@ export function BranchManager() {
             />
             <Field
               label="Branch code"
-              hint="Prefixes every order number from this branch. 00000 is the main branch."
+              hint="Prefixes every sale number from this branch. 00000 is the main branch."
               value={draft.branchCode}
               onChange={(e) => setDraft({ ...draft, branchCode: e.target.value })}
             />

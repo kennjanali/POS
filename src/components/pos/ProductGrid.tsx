@@ -16,6 +16,7 @@ import { cn } from '@/components/ui/cn';
 import { Field } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
 import { toast } from '@/components/ui/Toast';
+import { Tip } from '@/components/ui/Tip';
 
 interface ProductGridProps {
   /** The order a tap adds to. Called at the tap, so a retail cart opens on the first one. */
@@ -79,6 +80,7 @@ export function ProductGrid({ getOrderId, onRefused }: ProductGridProps) {
 
   return (
     <div className="flex h-full flex-col gap-3 border-r border-line p-3">
+      <Tip id="sell">Tap an item to add it.</Tip>
       <div className="relative shrink-0">
         <Search
           size={14}

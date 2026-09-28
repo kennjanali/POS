@@ -101,7 +101,7 @@ export default function SettingsPage() {
         // safely restore over the books — this only has to survive the parse.
         const result = importSnapshot(parsed);
         if (result.ok) {
-          toast(`Restored ${parsed.orders?.length ?? 0} orders`, 'success');
+          toast(`Restored ${parsed.orders?.length ?? 0} sales`, 'success');
         } else {
           toast(result.error, 'danger');
         }
@@ -208,7 +208,7 @@ export default function SettingsPage() {
         {/* ── Floor ────────────────────────────────────────────── */}
         <Section title="Floor">
           <Toggle
-            label="Show stock on menu tiles"
+            label="Show stock on item tiles"
             checked={settings.showStock}
             onChange={(showStock) => update({ showStock })}
           />
@@ -221,13 +221,13 @@ export default function SettingsPage() {
             onBlur={saveLowStock}
           />
           <Toggle
-            label="Training mode"
+            label="Practice mode"
             hint={
               !settings.trainingMode
-                ? 'This install is live. Training mode cannot be turned back on, so fabricated sales can never be written over the books.'
+                ? 'This install is live. Practice mode cannot be turned back on, so pretend sales can never be written over the books.'
                 : licensed
-                  ? 'Marks every slip as training, and unlocks Load and Remove demo data. Turning this off is permanent — it cannot be switched back on.'
-                  : 'Activate a license below to go live. Until then every slip is marked as training.'
+                  ? 'Marks every slip as practice, and unlocks the demo businesses and Remove demo data. Turning this off clears the practice data and is permanent.'
+                  : 'Activate a license below to go live. Until then every slip is marked as practice.'
             }
             checked={settings.trainingMode}
             disabled={!settings.trainingMode || !licensed}
@@ -460,8 +460,8 @@ export default function SettingsPage() {
         }
       >
         <p className="text-[12.5px] leading-relaxed text-ink-2">
-          Removes every order and stock movement on this device, leaving an empty
-          till to practise on. Menu items, branches, staff and settings all stay,
+          Removes every sale and stock movement on this device, leaving an empty
+          till to practise on. Items, branches, staff and settings all stay,
           the activity log keeps a note that this happened, and invoice numbers
           carry on rather than restarting. This cannot be undone.
         </p>

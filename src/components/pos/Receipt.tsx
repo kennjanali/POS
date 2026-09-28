@@ -22,7 +22,7 @@ export function ReceiptModal({ orderId, onClose }: ReceiptModalProps) {
     <Modal
       open
       onClose={onClose}
-      title={`Order slip — ${order.invoiceNo ?? order.label}`}
+      title={`Sale slip — ${order.invoiceNo ?? order.label}`}
       width="sm"
       footer={<SlipFooter text={text} onClose={onClose} />}
     >

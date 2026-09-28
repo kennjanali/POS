@@ -235,7 +235,7 @@ function Summary({
         <Cell label="Gross profit" value={peso(t.grossProfit, currency)} />
         <Cell label="Discounts" value={peso(t.discount, currency)} />
         {t.vat > 0 && <Cell label="Output VAT" value={peso(t.vat, currency)} />}
-        <Cell label="Voided" value={String(t.voided)} />
+        <Cell label="Cancelled" value={String(t.voided)} />
       </div>
 
       {t.busiestDay && (
@@ -248,7 +248,7 @@ function Summary({
       <div className="grid gap-4 md:grid-cols-2">
         <section>
           <h4 className="mb-2 text-[10.5px] font-bold tracking-wide text-ink-2 uppercase">
-            Collected by tender
+            Collected by method
           </h4>
           <dl className="flex flex-col gap-1">
             {TENDER_METHODS.filter((m) => t.byTender[m] > 0).map((m) => (

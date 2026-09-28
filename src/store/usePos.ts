@@ -657,7 +657,7 @@ function describeBadSnapshot(snapshot: DataSnapshot): string | null {
     );
   }
   if (!Array.isArray(snapshot.products) || snapshot.products.length === 0) {
-    return 'That backup has no menu items in it. It may be truncated.';
+    return 'That backup has no items in it. It may be truncated.';
   }
   for (const [key, value] of Object.entries({
     branches: snapshot.branches,
@@ -928,7 +928,7 @@ export const usePos = create<PosState>()(
             audit: log(
               state.audit,
               'line.void',
-              `Voided ${formatQty(line.qty)}x ${line.name} on ${orderName(order)} — ${reason}`,
+              `Cancelled ${formatQty(line.qty)}x ${line.name} on ${orderName(order)} — ${reason}`,
               'warn',
               order.branchId,
             ),
@@ -1557,7 +1557,7 @@ export const usePos = create<PosState>()(
             audit: log(
               state.audit,
               'order.void',
-              `Voided ${numbered.invoiceNo ?? order.label} — ${reason}`,
+              `Cancelled sale ${numbered.invoiceNo ?? order.label} — ${reason}`,
               'danger',
               order.branchId,
             ),
@@ -1999,7 +1999,7 @@ export const usePos = create<PosState>()(
         if (role !== 'superadmin' && isLastActiveSuperadmin(state.users, id)) {
           return {
             ok: false,
-            error: 'This is the only active superadmin. Promote someone else first.',
+            error: 'This is the only active owner. Make someone else an owner first.',
           };
         }
         set((s) => ({
@@ -2027,7 +2027,7 @@ export const usePos = create<PosState>()(
         if (!active && isLastActiveSuperadmin(state.users, id)) {
           return {
             ok: false,
-            error: 'This is the only active superadmin. You would lock yourself out.',
+            error: 'This is the only active owner. You would lock yourself out.',
           };
         }
         set((s) => ({
@@ -2133,7 +2133,7 @@ export const usePos = create<PosState>()(
               state.audit,
               'install.setup',
               `Set up ${businessName} as a ${PRESETS[input.shopType].label} shop, ` +
-                `with ${ownerName} as superadmin and ${products.length} items on the shelf`,
+                `with ${ownerName} as owner and ${products.length} items on the shelf`,
               'info',
               branch.id,
             ),
@@ -2153,7 +2153,7 @@ export const usePos = create<PosState>()(
         }
         const target = get().users.find((u) => u.id === userId);
         if (!target?.active || target.role !== 'superadmin') {
-          return { ok: false, error: 'Only an active superadmin can be recovered this way.' };
+          return { ok: false, error: 'Only an active owner can be recovered this way.' };
         }
         const result = await writePin(set, get, userId, pin);
         if (result.ok) {
@@ -2498,7 +2498,7 @@ export const usePos = create<PosState>()(
             audit: log(
               snapshot.audit ?? [],
               'data.import',
-              `Restored ${snapshot.orders?.length ?? 0} orders from a backup ` +
+              `Restored ${snapshot.orders?.length ?? 0} sales from a backup ` +
                 `exported ${snapshot.exportedAt ?? 'at an unknown time'}`,
               'warn',
               state.activeBranchId,
@@ -2548,7 +2548,7 @@ export const usePos = create<PosState>()(
           audit: log(
             state.audit,
             'data.reset',
-            `Cleared ${state.orders.length} orders and ` +
+            `Cleared ${state.orders.length} sales and ` +
               `${state.stockMoves.length} stock movements`,
             'danger',
             state.activeBranchId,
@@ -2593,7 +2593,7 @@ export const usePos = create<PosState>()(
           audit: log(
             state.audit,
             'data.backup',
-            `Backup saved — ${state.orders.length} order${state.orders.length === 1 ? '' : 's'}`,
+            `Backup saved — ${state.orders.length} sale${state.orders.length === 1 ? '' : 's'}`,
             'success',
             state.activeBranchId,
           ),

@@ -38,14 +38,14 @@ export default function GlobalError({
               margin: '0 0 6px',
             }}
           >
-            POS<span style={{ color: '#ff5c1a' }}>@034</span>
+            POS<span style={{ color: '#ff5c1a' }}>-034</span>
           </p>
           <h1 style={{ fontSize: 15, fontWeight: 700, margin: '0 0 10px' }}>
             Something broke on this screen
           </h1>
           <p style={{ fontSize: 13, lineHeight: 1.6, color: '#444444', margin: '0 0 18px' }}>
             Your sales are still saved on this device. Nothing has been lost. Try again,
-            and if it keeps happening, reload — open orders survive both.
+            and if it keeps happening, reload — open sales survive both.
           </p>
 
           <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>

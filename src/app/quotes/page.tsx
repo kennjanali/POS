@@ -11,6 +11,7 @@ import { Field } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
 import { toast } from '@/components/ui/Toast';
 import { cn } from '@/components/ui/cn';
+import { Tip } from '@/components/ui/Tip';
 import { businessDate, fmtDate, peso } from '@/lib/format';
 import { can } from '@/lib/permissions';
 import { quoteStatus } from '@/lib/quotes';
@@ -83,6 +84,9 @@ export default function QuotesPage() {
 
   return (
     <div className="flex h-full flex-col">
+      <div className="px-4 pt-3 empty:hidden">
+        <Tip id="quotes">Save a cart as a quote, then turn it into a sale later.</Tip>
+      </div>
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line bg-surface px-4 py-2">
         <h1 className="text-[15px] font-bold tracking-tight">Quotations</h1>
         <span className="text-[11px] font-bold tracking-wide text-ink-3 uppercase">

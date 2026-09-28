@@ -38,7 +38,7 @@ export function LicenseSettings() {
     return (
       <p className="text-[12px] leading-relaxed text-ink-2">
         This is the web demo. Licenses are activated in the Android app; the demo always stays in
-        training mode.
+        practice mode.
       </p>
     );
   }

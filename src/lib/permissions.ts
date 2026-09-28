@@ -69,7 +69,7 @@ export const ROLE_LABELS: Record<Role, string> = {
 
 export const ROLE_HINTS: Record<Role, string> = {
   superadmin: 'Everything, including users and settings.',
-  staff: "Takes orders and payments, makes quotes, sees today's sales.",
+  staff: "Takes sales and payments, makes quotes, sees today's sales.",
 };
 
 /** Minimum an actor has to be for a permission question. Both `User` and the

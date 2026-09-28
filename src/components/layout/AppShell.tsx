@@ -85,7 +85,7 @@ function NewOrderDialog() {
       <div className="flex flex-col gap-4">
         <div>
           <p className="mb-2 text-[11px] font-bold tracking-wide text-ink-2 uppercase">
-            Order type
+            Type
           </p>
           <div className="grid grid-cols-3 gap-1.5">
             {orderTypes.map((t) => (

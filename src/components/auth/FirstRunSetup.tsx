@@ -144,7 +144,7 @@ export function FirstRunSetup() {
           <ShoppingCart size={20} className="text-white" aria-hidden />
         </span>
         <p className="text-[22px] leading-none font-extrabold tracking-tight text-white">
-          POS<span className="text-accent">@034</span>
+          POS<span className="text-accent">-034</span>
         </p>
         <p className="mt-1.5 text-[11px] tracking-[2px] text-ink-3 uppercase">
           {restoring
@@ -230,7 +230,7 @@ export function FirstRunSetup() {
               <div className="flex gap-2.5">
                 <ShieldCheck size={16} className="mt-0.5 shrink-0 text-accent" aria-hidden />
                 <p className="text-[12.5px] leading-relaxed text-ink-2">
-                  This account is the <strong>superadmin</strong> — everything, including
+                  This account is the <strong>Owner</strong> — everything, including
                   who else gets in. Staff are added afterwards in Settings.
                 </p>
               </div>

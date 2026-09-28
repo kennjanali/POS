@@ -301,7 +301,7 @@ export default function MonthPage() {
             </dl>
             <p className="mt-3 border-t border-line pt-2 text-[11px] leading-relaxed text-ink-3">
               Reconcile the GCash and Maya figures against the wallet statement before
-              closing. Reference numbers are on each order in the history.
+              closing. Reference numbers are on each sale under Sales.
             </p>
           </section>
 

@@ -68,7 +68,7 @@ export function RestoreBackup({ onCancel }: { onCancel: () => void }) {
       <div className="flex gap-2.5">
         <CloudDownload size={16} className="mt-0.5 shrink-0 text-accent" aria-hidden />
         <p className="text-[12.5px] leading-relaxed text-ink-2">
-          Bring back sales, menu, staff and settings from the last nightly backup. You need the{' '}
+          Bring back sales, items, staff and settings from the last nightly backup. You need the{' '}
           <strong>license key</strong> and the <strong>recovery code</strong> written down at setup.
         </p>
       </div>

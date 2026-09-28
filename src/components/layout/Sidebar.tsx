@@ -66,7 +66,7 @@ export function Sidebar() {
         {!railCollapsed && (
           <span className="min-w-0 whitespace-nowrap">
             <span className="block text-[18px] leading-none font-extrabold tracking-tight text-white">
-              POS<span className="text-accent">@034</span>
+              POS<span className="text-accent">-034</span>
             </span>
             <span className="mt-0.5 block text-[8.5px] tracking-[2px] text-ink-3 uppercase">
               Point of Sale

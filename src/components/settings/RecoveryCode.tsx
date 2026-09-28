@@ -45,7 +45,7 @@ export function RecoveryCode() {
   return (
     <div className="flex flex-col gap-3">
       <p className="text-[12px] leading-relaxed text-ink-2">
-        The recovery code resets a superadmin&apos;s PIN from the lock screen and opens the
+        The recovery code resets an owner&apos;s PIN from the lock screen and opens the
         cloud backups on a new tablet. Lost the copy from setup? Issue a new one — the old code
         stops working here, but cloud backups made before today still need it.
       </p>

@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 
 import { DailyCloses } from '@/components/dashboard/DailyCloses';
 import { SetupChecklist } from '@/components/today/SetupChecklist';
+import { Tip } from '@/components/ui/Tip';
 import { businessDate, peso } from '@/lib/format';
 import { formatQty } from '@/lib/qty';
 import { daySummary } from '@/lib/today';
@@ -32,6 +33,7 @@ export default function TodayPage() {
   return (
     <div className="scroll-y h-full">
       <div className="grid gap-3 p-4">
+        <Tip id="today">Today&rsquo;s summary runs by itself at 23:59.</Tip>
         {isOwner && <SetupChecklist />}
 
         <div className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-2.5">
