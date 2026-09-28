@@ -125,6 +125,66 @@ describe('convertQuote', () => {
     return quoteIdOf('Q-0001');
   }
 
+  it('makes the converted sale the one being worked on', () => {
+    const id = quote();
+    const other = S().openOrder('Walk-in', 'walk-in');
+    S().setActiveOrder(other);
+    const result = S().convertQuote(id);
+    if (!result.ok) throw new Error(result.error);
+    expect(S().activeOrderId).toBe(result.orderId);
+  });
+
+  it('gives the quote back when its sale is thrown away unpaid', () => {
+    const id = quote();
+    const result = S().convertQuote(id);
+    if (!result.ok) throw new Error(result.error);
+    expect(S().discardOpenOrder(result.orderId).ok).toBe(true);
+
+    const back = S().quotes.find((q) => q.id === id)!;
+    expect(back.status).toBe('open');
+    expect(back.convertedSaleId).toBeNull();
+    expect(S().convertQuote(id).ok).toBe(true);
+  });
+
+  it('keeps the quote converted once its sale was paid, but it can still be re-quoted', () => {
+    const id = quote();
+    const result = S().convertQuote(id);
+    if (!result.ok) throw new Error(result.error);
+    S().serveAll(result.orderId);
+    expect(S().payExact(result.orderId, 'cash').ok).toBe(true);
+    asOwner();
+    expect(S().voidOrder(result.orderId, 'returned').ok).toBe(true);
+
+    expect(S().quotes.find((q) => q.id === id)!.status).toBe('converted');
+    expect(S().requote(id).ok).toBe(true);
+  });
+
+  it('drops a promo code that is no longer valid when re-quoting', () => {
+    asOwner();
+    expect(S().createPromo({ code: 'TIRE5', percent: 5 }).ok).toBe(true);
+    signInAs('staff');
+    const orderId = cart();
+    expect(S().applyPromo(orderId, 'TIRE5').ok).toBe(true);
+    const saved = S().saveOrderAsQuote(orderId);
+    if (!saved.ok) throw new Error(saved.error);
+    asOwner();
+    S().setPromoActive(S().promos[0]!.id, false);
+
+    const again = S().requote(saved.quoteId);
+    if (!again.ok) throw new Error(again.error);
+    const fresh = S().quotes.find((q) => q.id === again.quoteId)!;
+    expect(fresh.discount.kind).toBe('none');
+    expect(fresh.netCents).toBe(1260000);
+  });
+
+  it('refuses to quote when the shop has quotations switched off', () => {
+    preset('retail');
+    usePos.setState((s) => ({
+      settings: { ...s.settings, features: { ...s.settings.features, quotes: false } },
+    }));
+    expect(S().saveOrderAsQuote(cart()).ok).toBe(false);
+  });
+
   it('opens the sale at the quoted price, not the new one', () => {
     const id = quote();
     asOwner();

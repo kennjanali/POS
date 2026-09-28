@@ -62,7 +62,7 @@ export default function QuotesPage() {
     const result = convertQuote(quote.id, undefined, { confirmExpired: quote.shown === 'expired' });
     if (!result.ok) return toast(result.error, 'danger');
     toast(`${quote.quoteNo} converted to a sale.`, 'success');
-    if (sendToPayment) router.push('/sell');
+    if (sendToPayment) router.push(`/sell?pay=${result.orderId}`);
   }
 
   function reQuote(quote: Shown) {

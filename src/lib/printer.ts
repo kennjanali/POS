@@ -66,14 +66,15 @@ export async function printSlip(text: string, printer: ReceiptPrinter | null): P
 
 /**
  * Cheap thermal printers have no dependable code page for ñ or ₱, and print
- * garbage for them. Fold to plain ASCII: accents dropped, ₱ as P, anything
- * else unprintable as ?.
+ * garbage for them. Fold to plain ASCII: accents dropped, ₱ as P, a dash as
+ * a hyphen, anything else unprintable as ?.
  */
 export function toPrintable(text: string): string {
   return text
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
     .replace(/₱/g, 'P')
+    .replace(/[–—]/g, '-')
     .replace(/[^\x20-\x7e\n]/g, '?');
 }
 

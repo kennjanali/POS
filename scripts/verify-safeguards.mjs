@@ -559,7 +559,7 @@ console.log('\n— Thermal receipt: never wider than the paper —');
   check('the total is on the slip', slip.includes((due / 100).toFixed(2)));
   check('the slip says it is not an official receipt', slip.includes('NOT AN OFFICIAL'));
 
-  check('accents and the peso sign fold to plain ASCII', toPrintable('Niño ₱5 — ok') === 'Nino P5 ? ok',
+  check('accents and the peso sign fold to plain ASCII', toPrintable('Niño ₱5 — ok') === 'Nino P5 - ok',
     JSON.stringify(toPrintable('Niño ₱5 — ok')));
   const bytes = escpos('Hi');
   check('bytes start with a printer reset', bytes[0] === 0x1b && bytes[1] === 0x40);

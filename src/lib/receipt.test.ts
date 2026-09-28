@@ -95,7 +95,7 @@ describe('the quotation', () => {
   it('says it is not a receipt, and never says RECEIPT', () => {
     const slip = quoteTire();
     expect(slip).toContain('QUOTATION');
-    expect(slip).toContain('NOT A RECEIPT');
+    expect(slip).toContain('QUOTATION — not a receipt');
     expect(slip).not.toContain('RECEIPT OR INVOICE');
   });
 

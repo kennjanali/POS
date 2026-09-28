@@ -80,8 +80,7 @@ export function renderQuote(q: Quote, settings: Settings, width: number = COLUMN
 
   out.push(centre(settings.businessName.toUpperCase()));
   if (settings.address) out.push(centre(settings.address));
-  out.push(centre('QUOTATION'));
-  out.push(centre('NOT A RECEIPT - NOTHING PAID'));
+  out.push(centre('QUOTATION — not a receipt'));
   out.push(rule);
 
   out.push(row('Quote no.', q.quoteNo));
@@ -122,7 +121,7 @@ export function renderQuote(q: Quote, settings: Settings, width: number = COLUMN
   out.push('');
   out.push(centre('PRICES HOLD UNTIL THE DATE ABOVE.'));
   out.push(centre('PLEASE CONFIRM BEFORE WORK BEGINS.'));
-  if (settings.trainingMode) out.push(centre('*** TRAINING MODE ***'));
+  if (settings.trainingMode) out.push(centre('*** PRACTICE MODE ***'));
 
   return out.join('\n');
 }
@@ -193,7 +192,7 @@ export function renderReceipt(order: Order, settings: Settings, width: number = 
   out.push('');
   out.push(centre('THIS IS NOT AN OFFICIAL'));
   out.push(centre('RECEIPT OR INVOICE'));
-  if (settings.trainingMode) out.push(centre('*** TRAINING MODE ***'));
+  if (settings.trainingMode) out.push(centre('*** PRACTICE MODE ***'));
 
   return out.join('\n');
 }

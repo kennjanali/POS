@@ -970,6 +970,7 @@ export const usePos = create<PosState>()(
           ...s,
           activeOrderId: s.activeOrderId === orderId ? null : s.activeOrderId,
           orders: s.orders.filter((o) => o.id !== orderId),
+          quotes: reopenQuote(s.quotes, order),
           audit: log(s.audit, 'order.discard', `Discarded ${order.label}`, 'info', order.branchId),
         }));
         return { ok: true };
@@ -1023,7 +1024,7 @@ export const usePos = create<PosState>()(
       },
 
       saveOrderAsQuote: (orderId) => {
-        const refused = guard('quote.make');
+        const refused = guard('quote.make') ?? quotesOff(get());
         if (refused) return refused;
         const state = get();
         const order = state.order(orderId);
@@ -1068,7 +1069,7 @@ export const usePos = create<PosState>()(
       },
 
       convertQuote: (quoteId, now = Date.now(), options = {}) => {
-        const refused = guard('quote.make');
+        const refused = guard('quote.make') ?? quotesOff(get());
         if (refused) return refused;
         const state = get();
         const quote = state.quotes.find((q) => q.id === quoteId);
@@ -1143,6 +1144,9 @@ export const usePos = create<PosState>()(
         set((s) => ({
           ...s,
           orders: [...s.orders, order],
+          // The sale being worked on now: a retail cart shows it, ahead of
+          // any cart that was already open.
+          activeOrderId: order.id,
           quotes: s.quotes.map((q) =>
             q.id === quote.id ? { ...q, status: 'converted', convertedSaleId: order.id } : q,
           ),
@@ -1152,23 +1156,25 @@ export const usePos = create<PosState>()(
       },
 
       requote: (quoteId) => {
-        const refused = guard('quote.make');
+        const refused = guard('quote.make') ?? quotesOff(get());
         if (refused) return refused;
         const source = get().quotes.find((q) => q.id === quoteId);
         if (!source) return { ok: false, error: 'That quotation is gone.' };
-        if (source.status !== 'open') {
-          return { ok: false, error: `That quotation is already ${source.status}.` };
-        }
-        // Same items, today's prices. An item that has since left the catalogue
+        // Any quote can be re-quoted, whatever became of it: it is a new
+        // quote for the same items. Same items, today's prices. An item that has since left the catalogue
         // keeps the quoted line: a re-quote is not a stock check.
         const lines: QuoteLine[] = source.lines.map((l) => {
           const product = get().products.find((p) => p.id === l.productId);
           if (!product) return { ...l };
           return { ...l, name: product.name, unit: product.unit, unitCents: product.priceCents };
         });
+        // A new quote is made today, so a promo code on it must be valid today.
+        const promoGone =
+          source.discount.kind === 'promo' &&
+          !findUsablePromo(get().promos, source.discount.code, businessDate(Date.now()));
         const quote = newQuote(get(), {
           lines,
-          discount: source.discount,
+          discount: promoGone ? { kind: 'none' } : source.discount,
           customerName: source.customerName,
           customerPhone: source.customerPhone,
         });
@@ -1514,6 +1520,8 @@ export const usePos = create<PosState>()(
             stock: { ...state.stock, [order.branchId]: branchStock },
             stockMoves: [...moves, ...state.stockMoves],
             invoiceSeq: numbered.seq,
+            // Cancelled before it was paid, the quote never became a sale.
+            quotes: order.status === 'open' ? reopenQuote(state.quotes, order) : state.quotes,
             orders: state.orders.map((o) =>
               o.id !== orderId
                 ? o
@@ -3043,6 +3051,26 @@ function setOpenDiscount(
   return clearedPayments
     ? { ok: true, notice: 'Discount changed — enter the payment again.' }
     : { ok: true };
+}
+
+/** A shop with quotations switched off makes none, whatever the screen shows. */
+function quotesOff(state: PosState): { ok: false; error: string } | null {
+  return state.settings.features.quotes
+    ? null
+    : { ok: false, error: 'Quotations are switched off for this shop.' };
+}
+
+/**
+ * An order converted from a quote that goes away unpaid gives the quote back:
+ * the customer can still take it up, at the prices on it.
+ */
+function reopenQuote(quotes: Quote[], order: Order): Quote[] {
+  if (!order.fromQuoteId) return quotes;
+  return quotes.map((q) =>
+    q.id === order.fromQuoteId && q.status === 'converted' && q.convertedSaleId === order.id
+      ? { ...q, status: 'open', convertedSaleId: null }
+      : q,
+  );
 }
 
 function sameDiscount(a: SaleDiscount, b: SaleDiscount): boolean {

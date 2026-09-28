@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ClipboardList, X } from 'lucide-react';
 
 import { Empty } from '@/components/ui/Empty';
@@ -34,7 +34,14 @@ function currentCart(s: { orders: Order[]; activeBranchId: string; activeOrderId
 
 export default function SellPage() {
   const tickets = usePos((s) => s.settings.features.openOrders);
-  const [checkoutId, setCheckoutId] = useState<string | null>(null);
+  // A converted quote arrives as /sell?pay=<order>, straight to payment.
+  const [checkoutId, setCheckoutId] = useState<string | null>(() =>
+    typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('pay'),
+  );
+  useEffect(() => {
+    // Once read, the address is tidied so a reload does not reopen payment.
+    if (window.location.search) window.history.replaceState(null, '', window.location.pathname);
+  }, []);
   const [receiptFor, setReceiptFor] = useState<string | null>(null);
   const [quoteFor, setQuoteFor] = useState<string | null>(null);
 
