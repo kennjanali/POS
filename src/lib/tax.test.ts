@@ -40,6 +40,27 @@ describe('computeBill', () => {
     expect(bill.discount).toBe(101);
   });
 
+  it('percent rounds half-up where floating point would round it down', () => {
+    // 29% of 50 is exactly 14.5, but 50 × 0.29 is 14.4999… in floating point.
+    expect(computeBill(cents(50), NONVAT, { kind: 'percent', percent: 29 }).discount).toBe(15);
+    expect(computeBill(cents(750), NONVAT, { kind: 'percent', percent: 29 }).discount).toBe(218);
+    // Every exact half-centavo from 1 to 20000 centavos, at every whole percent.
+    for (let gross = 1; gross <= 20000; gross += 1) {
+      for (let pct = 1; pct <= 100; pct += 1) {
+        const exact = Math.floor((gross * pct + 50) / 100);
+        const got = computeBill(cents(gross), NONVAT, { kind: 'percent', percent: pct }).discount;
+        if (got !== exact) throw new Error(`${pct}% of ${gross}: ${got}, not ${exact}`);
+      }
+    }
+  });
+
+  it('strips VAT half-up at the half-centavo', () => {
+    // 14 / 1.12 is exactly 12.5.
+    const bill = computeBill(cents(14), VAT);
+    expect(bill.vatableSale).toBe(13);
+    expect(bill.vat).toBe(1);
+  });
+
   it('percent 100', () => {
     const bill = computeBill(cents(50000), NONVAT, { kind: 'percent', percent: 100 });
     expect(bill.amountDue).toBe(0);

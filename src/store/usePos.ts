@@ -838,6 +838,10 @@ export const usePos = create<PosState>()(
       },
 
       changeQty: (orderId, lineNo, delta) => {
+        // Thousandths, like every quantity; a fraction or NaN would corrupt the line.
+        if (!Number.isSafeInteger(delta) || delta === 0) {
+          return { ok: false, error: 'Enter a quantity.' };
+        }
         const state = get();
         const order = state.orders.find((o) => o.id === orderId);
         if (!order || order.status !== 'open') {
@@ -971,9 +975,19 @@ export const usePos = create<PosState>()(
         return { ok: true };
       },
 
-      clearDiscount: (orderId) => setOpenDiscount(set, get, orderId, { kind: 'none' }),
+      clearDiscount: (orderId) => {
+        // Taking a discount off changes the money as much as giving one: an
+        // owner discount comes off only by the owner.
+        const current = get().order(orderId)?.discount.kind;
+        if (current === 'none') return { ok: true };
+        const refused = guard(current === 'promo' ? 'promo.apply' : 'discount.owner');
+        if (refused) return refused;
+        return setOpenDiscount(set, get, orderId, { kind: 'none' });
+      },
 
       applyPromo: (orderId, input) => {
+        const refused = guard('promo.apply');
+        if (refused) return refused;
         const promo = findUsablePromo(get().promos, input, businessDate(Date.now()));
         if (!promo) return { ok: false, error: 'That code is not valid today.' };
         return setOpenDiscount(set, get, orderId, {
@@ -993,11 +1007,17 @@ export const usePos = create<PosState>()(
           fixedCents: 'percent' in d ? null : d.fixedCents,
           by: actorId(),
         };
-        if (discount.percent !== null && (!Number.isFinite(discount.percent) || discount.percent < 0 || discount.percent > 100)) {
-          return { ok: false, error: 'Enter a percent from 0 to 100.' };
+        if (discount.percent !== null && (!Number.isFinite(discount.percent) || discount.percent <= 0 || discount.percent > 100)) {
+          return { ok: false, error: 'Enter a percent from 1 to 100.' };
         }
-        if (discount.fixedCents !== null && (!Number.isFinite(discount.fixedCents) || discount.fixedCents < 0)) {
-          return { ok: false, error: 'Enter an amount of 0 or more.' };
+        if (discount.fixedCents !== null) {
+          if (!Number.isSafeInteger(discount.fixedCents) || discount.fixedCents <= 0) {
+            return { ok: false, error: 'Enter an amount more than 0.' };
+          }
+          const order = get().order(orderId);
+          if (order && discount.fixedCents > orderGross(order)) {
+            return { ok: false, error: 'That is more than the sale.' };
+          }
         }
         return setOpenDiscount(set, get, orderId, discount);
       },
@@ -1282,9 +1302,12 @@ export const usePos = create<PosState>()(
       },
 
       promoUses: (id) =>
-        get().orders.filter((o) => o.discount.kind === 'promo' && o.discount.promoId === id).length,
+        get().orders.filter(
+          (o) => o.status === 'closed' && o.discount.kind === 'promo' && o.discount.promoId === id,
+        ).length,
 
-      addTender: (orderId, tender) =>
+      addTender: (orderId, tender) => {
+        if (guard('order.pay')) return;
         set((state) => ({
           ...state,
           orders: state.orders.map((o) =>
@@ -1298,9 +1321,11 @@ export const usePos = create<PosState>()(
                 }
               : o,
           ),
-        })),
+        }));
+      },
 
-      removeTender: (orderId, tenderId) =>
+      removeTender: (orderId, tenderId) => {
+        if (guard('order.pay')) return;
         set((state) => ({
           ...state,
           orders: state.orders.map((o) =>
@@ -1308,9 +1333,12 @@ export const usePos = create<PosState>()(
               ? { ...o, tenders: o.tenders.filter((t) => t.id !== tenderId) }
               : o,
           ),
-        })),
+        }));
+      },
 
       closeOrder: (orderId) => {
+        const refused = guard('order.pay');
+        if (refused) return refused;
         const state = get();
         const order = state.orders.find((o) => o.id === orderId);
         if (!order || order.status !== 'open') {
@@ -1402,6 +1430,8 @@ export const usePos = create<PosState>()(
       },
 
       payExact: (orderId, method, refNo) => {
+        const refused = guard('order.pay');
+        if (refused) return refused;
         const state = get();
         const order = state.orders.find((o) => o.id === orderId);
         if (!order || order.status !== 'open') {
@@ -2996,6 +3026,9 @@ function setOpenDiscount(
   if (!order || order.status !== 'open') {
     return { ok: false, error: 'That sale is no longer open.' };
   }
+  // Re-applying the discount a sale already has changes nothing, so nothing
+  // the cashier entered is thrown away.
+  if (sameDiscount(order.discount, discount)) return { ok: true };
   const clearedPayments = order.tenders.length > 0;
   set((state) => ({
     ...state,
@@ -3006,6 +3039,13 @@ function setOpenDiscount(
   return clearedPayments
     ? { ok: true, notice: 'Discount changed — enter the payment again.' }
     : { ok: true };
+}
+
+function sameDiscount(a: SaleDiscount, b: SaleDiscount): boolean {
+  if (a.kind !== b.kind) return false;
+  if (a.kind === 'promo' && b.kind === 'promo') return a.promoId === b.promoId && a.percent === b.percent;
+  if (a.kind === 'owner' && b.kind === 'owner') return a.percent === b.percent && a.fixedCents === b.fixedCents;
+  return true;
 }
 
 /** Live bill for an open order, recomputed from current settings. */

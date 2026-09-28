@@ -6,6 +6,7 @@ import { qty } from '@/lib/qty';
 import { renderReceipt } from '@/lib/receipt';
 import type { Product } from '@/lib/types';
 import { ownerShop, resetStore, signInAs } from '@/test/store';
+import { useAuth } from './useAuth';
 import { usePos } from './usePos';
 
 const S = () => usePos.getState();
@@ -105,7 +106,8 @@ describe('createPromo', () => {
     const snapshot = S().exportSnapshot();
     expect(snapshot.promos).toHaveLength(1);
 
-    const { promos: _writtenBeforeCodesExisted, ...older } = snapshot;
+    const older: Partial<typeof snapshot> = { ...snapshot };
+    delete older.promos;
     expect(S().importSnapshot(older as typeof snapshot).ok).toBe(true);
     expect(S().promos).toEqual([]);
   });
@@ -183,6 +185,23 @@ describe('applyPromo', () => {
     expect(S().promoUses(promoIdOf('GRAND10'))).toBe(1);
   });
 
+  it('does not count a sale still open, or one cancelled, as a use', () => {
+    const open = cart();
+    S().applyPromo(open, 'GRAND10');
+    const cancelled = cart();
+    S().applyPromo(cancelled, 'GRAND10');
+    asOwner();
+    S().voidOrder(cancelled, 'customer left');
+    expect(S().promoUses(promoIdOf('GRAND10'))).toBe(0);
+  });
+
+  it('refuses a code from a signed-out till', () => {
+    const id = cart();
+    useAuth.setState({ session: null });
+    expect(S().applyPromo(id, 'GRAND10').ok).toBe(false);
+    expect(S().order(id)!.discount.kind).toBe('none');
+  });
+
   it('closes a 100% code at zero and still takes the item off the shelf', () => {
     const id = cart();
     S().applyPromo(id, 'FREEONE');
@@ -235,6 +254,43 @@ describe('one discount per sale', () => {
     expect(S().order(id)!.discount.kind).toBe('promo');
     S().applyOwnerDiscount(id, { fixedCents: cents(5000) });
     expect(S().order(id)!.discount).toMatchObject({ kind: 'owner', percent: null });
+  });
+
+  it('lets only the owner take an owner discount off', () => {
+    const id = cart();
+    S().applyOwnerDiscount(id, { percent: 20 });
+    signInAs('staff');
+    expect(S().clearDiscount(id).ok).toBe(false);
+    expect(S().order(id)!.discount.kind).toBe('owner');
+    // A promo code staff may take off, as they may put one on.
+    expect(S().applyPromo(id, 'GRAND10').ok).toBe(true);
+    expect(S().clearDiscount(id).ok).toBe(true);
+    expect(S().order(id)!.discount.kind).toBe('none');
+  });
+
+  it('keeps an entered payment when the same code is applied again', () => {
+    const id = cart();
+    S().applyPromo(id, 'GRAND10');
+    S().addTender(id, {
+      method: 'cash',
+      amountCents: cents(45000),
+      tenderedCents: cents(45000),
+      changeCents: cents(0),
+      refNo: null,
+    });
+    expect(S().applyPromo(id, ' grand10 ')).toEqual({ ok: true });
+    expect(S().order(id)!.tenders).toHaveLength(1);
+  });
+
+  it('refuses an owner discount of nothing, or of more than the sale', () => {
+    const id = cart();
+    expect(S().applyOwnerDiscount(id, { percent: 0 }).ok).toBe(false);
+    expect(S().applyOwnerDiscount(id, { fixedCents: cents(0) }).ok).toBe(false);
+    expect(S().applyOwnerDiscount(id, { fixedCents: cents(50001) })).toEqual({
+      ok: false,
+      error: 'That is more than the sale.',
+    });
+    expect(S().order(id)!.discount.kind).toBe('none');
   });
 
   it('refuses staff an owner discount', () => {

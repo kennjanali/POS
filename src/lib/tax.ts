@@ -7,7 +7,7 @@
  * never added on top.
  */
 
-import { type Centavos, cents, roundCents, scale, subC } from './money';
+import { type Centavos, cents, roundCents, subC } from './money';
 
 export interface TaxProfile {
   /**
@@ -54,7 +54,10 @@ export interface BillBreakdown {
  *   base = gross / (1 + rate)
  */
 function stripVat(gross: Centavos, rate: number): Centavos {
-  return roundCents(gross / (1 + rate));
+  // In basis points, so the division is of integers: 14 / 1.12 is 12.4999… in
+  // floating point, but 140000 / 11200 is exactly the 12.5 that rounds up.
+  const bp = Math.round(rate * 10000);
+  return roundCents((gross * 10000) / (10000 + bp));
 }
 
 export function computeBill(
@@ -66,7 +69,9 @@ export function computeBill(
   let discount = cents(0);
   if (request.kind === 'percent') {
     const pct = Math.min(100, Math.max(0, request.percent));
-    discount = scale(gross, pct / 100);
+    // gross × pct first: 50 × 29 / 100 is exactly 14.5, where 50 × 0.29 is
+    // 14.4999… and would round the half-centavo down.
+    discount = roundCents((gross * pct) / 100);
     trace.push(`${pct}% discount applied to gross.`);
   } else if (request.kind === 'fixed') {
     discount = cents(Math.min(Math.max(0, request.cents), gross));

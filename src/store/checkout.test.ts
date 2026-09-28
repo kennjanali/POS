@@ -2,9 +2,10 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { cents } from '@/lib/money';
 import { applyPreset, type ShopType } from '@/lib/presets';
-import { qty } from '@/lib/qty';
+import { qty, type Qty } from '@/lib/qty';
 import type { Product } from '@/lib/types';
 import { ownerShop, resetStore, signInAs } from '@/test/store';
+import { useAuth } from './useAuth';
 import { usePos } from './usePos';
 
 const S = () => usePos.getState();
@@ -121,6 +122,32 @@ describe('payExact', () => {
   });
 });
 
+describe('payment needs someone signed in', () => {
+  beforeEach(async () => {
+    resetStore();
+    await ownerShop();
+    preset('retail');
+    S().upsertProduct(ITEM);
+    S().receiveStock({ lines: [{ productId: 'item', qty: qty(5) }] });
+  });
+
+  it('refuses payExact, closeOrder and a payment from a signed-out till', () => {
+    const id = cart();
+    useAuth.setState({ session: null });
+    expect(S().payExact(id, 'cash').ok).toBe(false);
+    S().addTender(id, {
+      method: 'cash',
+      amountCents: cents(15000),
+      tenderedCents: cents(15000),
+      changeCents: cents(0),
+      refNo: null,
+    });
+    expect(S().order(id)?.tenders).toEqual([]);
+    expect(S().closeOrder(id).ok).toBe(false);
+    expect(S().order(id)?.status).toBe('open');
+  });
+});
+
 describe('open-order rules', () => {
   beforeEach(async () => {
     resetStore();
@@ -138,6 +165,16 @@ describe('open-order rules', () => {
     expect(S().addLine(id, 'item', qty(-1))).toEqual(refusal);
     expect(S().addLine(id, 'labor', qty(-2))).toEqual(refusal);
     expect(S().order(id)?.lines).toEqual([]);
+  });
+
+  it('refuses a change of a fraction of a thousandth, or of nothing', () => {
+    const id = S().openOrder('Job 1', 'walk-in');
+    S().addLine(id, 'item');
+    const refusal = { ok: false, error: 'Enter a quantity.' };
+    expect(S().changeQty(id, 1, 0.5 as Qty)).toEqual(refusal);
+    expect(S().changeQty(id, 1, Number.NaN as Qty)).toEqual(refusal);
+    expect(S().changeQty(id, 1, 0 as Qty)).toEqual(refusal);
+    expect(S().order(id)?.lines[0]?.qty).toBe(qty(1));
   });
 
   it('removes a line that is reduced to zero, never below', () => {
