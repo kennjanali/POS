@@ -93,8 +93,8 @@ export interface RouteSpec {
   href: string;
   label: string;
   permission: Permission;
-  /** Off for some shop types, whatever the role. A hidden route stays a
-   *  stranger: not in the nav, and not reachable by typing it. */
+  /** Off when the shop has this switch off, whatever the role. A hidden
+   *  route stays a stranger: not in the nav, and not reachable by typing it. */
   feature?: keyof Features;
 }
 

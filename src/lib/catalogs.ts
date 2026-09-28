@@ -53,7 +53,7 @@ export function stockLine(draft: Draft): CatalogItem {
 }
 
 /** A service is never on a shelf, so its opening count is always nothing. */
-export function serviceLine(draft: Draft): CatalogItem {
+function serviceLine(draft: Draft): CatalogItem {
   return { ...stockLine(draft), kind: 'service', openingQty: qty(0) };
 }
 

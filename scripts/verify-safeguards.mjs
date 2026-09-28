@@ -84,7 +84,7 @@ const product = SAMPLE_PRODUCTS[0];
 const OWNER_PIN = '481902';
 const RECOVERY = generateRecoveryCode();
 const setupInput = {
-  businessName: 'Test Carinderia',
+  businessName: 'Test Store',
   ownerName: 'Owner',
   pin: OWNER_PIN,
   recoveryCode: RECOVERY,
@@ -113,7 +113,7 @@ console.log('\n— First run: no shipped account, the wizard sets the install up
   check('the credential holds no plaintext PIN', !JSON.stringify(owner.pin).includes(OWNER_PIN));
   check('the recovery code is stored only as a hash',
     S().recovery !== null && !JSON.stringify(S().recovery).includes(RECOVERY.replace(/-/g, '')));
-  check('the business is named', S().settings.businessName === 'Test Carinderia');
+  check('the business is named', S().settings.businessName === 'Test Store');
   check('the sample catalog was loaded', S().products.length === SAMPLE_CATALOG.length);
   check('setup starts on the general switches', JSON.stringify(S().settings.features) === JSON.stringify(DEFAULT_FEATURES));
   check('a new install is in practice until the owner says otherwise',

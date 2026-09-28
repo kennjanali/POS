@@ -11,7 +11,7 @@ import { type Centavos, cents, roundCents, subC } from './money';
 
 export interface TaxProfile {
   /**
-   * Is the business VAT-registered? A carinderia grossing under PHP 3M/year
+   * Is the business VAT-registered? A small shop grossing under PHP 3M/year
    * is almost certainly NOT, and pays 3% percentage tax instead. The v6 build
    * force-enabled VAT in dbLoad() with no way to switch it off.
    */

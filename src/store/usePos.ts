@@ -135,7 +135,7 @@ export interface SetupInput {
   pin: string;
   /** Generated and shown by the wizard; only its hash is kept. */
   recoveryCode: string;
-  /** 'sample' loads the shop type's catalog; 'none' starts empty. */
+  /** 'sample' loads the sample catalog; 'none' starts empty. */
   catalog: 'sample' | 'none';
 }
 
@@ -2667,9 +2667,9 @@ export const usePos = create<PosState>()(
       // whose version differs — an empty till after an app update.
       version: 8,
       migrate: (persisted) => migrateBlobV7(persisted) as PosState,
-      // zustand's shallow merge, except that saved settings missing a field
-      // (a blob written before it existed) get its default, and missing
-      // features come from the saved shop type's preset.
+      // zustand's shallow merge, except that saved settings go through
+      // settingsFromSaved: a field the blob predates gets its default, and
+      // what the shop-type presets left behind is dropped.
       merge: (persisted, current) => {
         const p = persisted as Partial<PosState> | undefined;
         if (!p?.settings) return { ...current, ...p };
@@ -3117,14 +3117,6 @@ function sameDiscount(a: SaleDiscount, b: SaleDiscount): boolean {
   if (a.kind === 'promo' && b.kind === 'promo') return a.promoId === b.promoId && a.percent === b.percent;
   if (a.kind === 'owner' && b.kind === 'owner') return a.percent === b.percent && a.fixedCents === b.fixedCents;
   return true;
-}
-
-/** Live bill for an open order, recomputed from current settings. */
-export function useBill(orderId: string | null) {
-  const order = usePos((s) => (orderId ? s.orders.find((o) => o.id === orderId) : undefined));
-  const settings = usePos((s) => s.settings);
-  if (!order) return null;
-  return billOf(order, settings);
 }
 
 export type { TenderMethod };

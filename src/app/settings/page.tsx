@@ -404,7 +404,7 @@ export default function SettingsPage() {
           away. Going live removes all of it, DEMO10 included.
         </p>
         <p className="mt-2 text-[12.5px] leading-relaxed text-ink-2">
-          <strong>The shop type, items, sales, stock, quotations and promo codes on this
+          <strong>The switches, items, sales, stock, quotations and promo codes on this
           device are replaced.</strong>{' '}
           Staff, the license and the rest of Settings stay.
         </p>

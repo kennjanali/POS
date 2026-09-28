@@ -26,12 +26,14 @@ browser).
 
 ## What it does now
 
-- **Presets by shop type.** Setup asks four things: the kind of shop, its name, the owner and
-  their PIN, and what is on the shelf (a sample catalog, a spreadsheet, or nothing). The shop type
-  sets feature switches — open tickets (tables, jobs or a queue), a serve step, services, quotes,
-  vehicle plates, selling by the metre or kilo — and the owner can change any of them later under
-  Settings → More options. A "Finish setting up" checklist on Today covers the rest: printer,
-  address, VAT, license and staff.
+- **One general POS.** Inventory holds whatever the shop sells — goods and services side by side
+  — so it fits a sari-sari store, a hardware store, an eatery or a repair shop alike. Setup asks
+  three things: the shop's name, the owner and their PIN, and what to start with (a small mixed
+  sample, a spreadsheet, or nothing). Every shop starts on the same switches, and the owner turns
+  on what theirs needs in Settings → More options: sales kept open until paid (with their own
+  name, e.g. "Table" or "Job"), a serve step, vehicle plates, quotations, selling by the metre or
+  kilo. A "Finish setting up" checklist on Today covers the rest: printer, address, VAT, license
+  and staff.
 - **Owner and Staff.** Staff sell, take payment, make and convert quotes, apply promo codes and
   see today's sales. Inventory, prices, owner discounts, cancelling sales or quotes, reports,
   settings and users are the owner's. Every decision goes through one permission matrix
@@ -55,7 +57,8 @@ browser).
   on every slip and report, and others see none.
 - **Practice mode and demo businesses.** A new install starts in practice mode: slips are marked
   `*** PRACTICE MODE ***`, and four demo businesses (Restaurant, Hardware Store, Auto Parts &
-  Service, Car Wash) can be loaded. Going live needs a license, clears the practice data, and
+  Service, Car Wash) show how the same POS runs four different kinds of shop, each with its own
+  items and switches. Going live needs a license, clears the practice data, and
   cannot be undone.
 - **Saves that cannot half-happen.** Every change is written as one batch — the sale, its stock
   movements and its log entries together — and a failed save is retried with the next one.
@@ -70,8 +73,8 @@ browser).
 src/
   app/            routes: Today (/), sell, quotes, orders (Sales), inventory, month, settings
   components/     auth (wizard, lock screen, recovery), dashboard (Today's summary), inventory,
-                  layout, orders, pos, quotes, settings, today, ui
-  lib/            pure rules: tax, money, qty, presets, catalogs, promo, quotes, csv, closes, demo, ...
+                  layout, pos, quotes, settings, today, ui
+  lib/            pure rules: tax, money, qty, features, catalogs, promo, quotes, csv, closes, demo, ...
   store/          usePos (all business data and rules), useAuth (session only)
 scripts/          verify-auth.mjs and verify-safeguards.mjs, run by `npm run check`
 license-server/   activation, heartbeat and cloud backup (Cloudflare Worker)
