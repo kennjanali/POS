@@ -117,8 +117,8 @@ export default function SettingsPage() {
     setConfirmDemo(null);
     toast(`Building the ${business.label} demo...`);
     // Yield first so the toast paints before the work starts.
-    window.setTimeout(() => {
-      const count = loadDemoBusiness(business.shopType);
+    window.setTimeout(async () => {
+      const count = await loadDemoBusiness(business.shopType);
       toast(
         count > 0
           ? `Loaded the ${business.label} demo: ${count.toLocaleString('en-PH')} sales`
@@ -389,8 +389,9 @@ export default function SettingsPage() {
         <p className="text-[12.5px] leading-relaxed text-ink-2">
           Three weeks of pretend trading for a {confirmDemo?.label.toLowerCase()}: its
           sample items, sales with the <strong>DEMO10</strong> promo code, a few cancelled
-          sales, three open quotations, and a couple of items running low. Today is
-          included, so Today and This month have something to show straight away.
+          sales, open quotations where the shop makes them, and a couple of items running
+          low. Today is included, so Today and This month have something to show straight
+          away. Going live removes all of it, DEMO10 included.
         </p>
         <p className="mt-2 text-[12.5px] leading-relaxed text-ink-2">
           <strong>The shop type, items, sales, stock, quotations and promo codes on this

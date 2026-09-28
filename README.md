@@ -69,7 +69,8 @@ browser).
 ```
 src/
   app/            routes: Today (/), sell, quotes, orders (Sales), inventory, month, settings
-  components/     auth (wizard, lock screen, recovery), inventory, pos, quotes, today, settings, ui
+  components/     auth (wizard, lock screen, recovery), dashboard (Today's summary), inventory,
+                  layout, orders, pos, quotes, settings, today, ui
   lib/            pure rules: tax, money, qty, presets, catalogs, promo, quotes, csv, closes, demo, ...
   store/          usePos (all business data and rules), useAuth (session only)
 scripts/          verify-auth.mjs and verify-safeguards.mjs, run by `npm run check`

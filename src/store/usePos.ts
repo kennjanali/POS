@@ -6,7 +6,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import { APP_VERSION, LICENSE_SERVER_URL, PRODUCT_NAME } from '@/lib/brand';
 import { buildClose, inWindow, signClose } from '@/lib/closes';
 import { createBackupKey, sealBackup, uploadBackup, type BackupKey } from '@/lib/cloudBackup';
-import { buildDemoData, DEMO_BUSINESSES } from '@/lib/demo';
+import { buildDemoData, closeDemoDays, DEMO_BUSINESSES, DEMO_PROMO_CODE } from '@/lib/demo';
 import { deviceFingerprint } from '@/lib/device';
 import { verifyLicense, type License } from '@/lib/license';
 import {
@@ -312,7 +312,7 @@ interface PosState {
    */
   /** Practice mode only: replaces the shop with a demo business of this type.
    *  Returns the number of sales written, or 0 when refused. */
-  loadDemoBusiness: (shopType: ShopType, options?: { days?: number; salesPerDay?: number }) => number;
+  loadDemoBusiness: (shopType: ShopType, options?: { days?: number; salesPerDay?: number }) => Promise<number>;
   // ── monthly archive ─────────────────────────────────────────────────
   /** Finished months still held on this device, newest first. */
   archivableMonths: () => { month: string; orders: number; net: Centavos }[];
@@ -2320,7 +2320,11 @@ export const usePos = create<PosState>()(
               stock: Object.fromEntries(state.branches.map((b) => [b.id, {}])),
               lowStockAlerts: [],
               activeOrderId: null,
-              promos: state.promos.map((p) => ({ ...p, firstUsedAt: null })),
+              // The owner's codes stay. The demo's DEMO10 is practice data, and
+              // left on a live till it would be 10% off for anyone who types it.
+              promos: state.promos
+                .filter((p) => !(p.code === DEMO_PROMO_CODE && p.note.startsWith('Demo')))
+                .map((p) => ({ ...p, firstUsedAt: null })),
               audit: log(
                 log(audit, 'data.reset', `Went live: cleared ${cleared}`, 'danger', state.activeBranchId),
                 'settings.golive',
@@ -2336,7 +2340,7 @@ export const usePos = create<PosState>()(
         return { ok: true };
       },
 
-      loadDemoBusiness: (shopType, options) => {
+      loadDemoBusiness: async (shopType, options) => {
         const state = get();
         // Same lock as practice mode itself: a live install must never be
         // able to write fabricated sales over its books.
@@ -2344,13 +2348,21 @@ export const usePos = create<PosState>()(
         if (guard('settings.manage')) return 0;
 
         const branch = state.branches[0] ?? DEFAULT_BRANCH;
+        const now = Date.now();
         const demo = buildDemoData({
           shopType,
           settings: state.settings,
           branch,
           days: options?.days,
           salesPerDay: options?.salesPerDay,
+          now,
+          // Numbers carry on from any practice slip already printed.
+          invoiceSeq: state.invoiceSeq[branch.id] ?? 0,
+          quoteSeq: state.quoteSeq,
         });
+        // Every past day already summarised, so the first summary after the
+        // load covers today and not the whole demo.
+        const closes = await closeDemoDays(demo.orders, now);
         const sales = demo.orders.filter((o) => o.status !== 'open').length;
         const label = DEMO_BUSINESSES.find((b) => b.shopType === shopType)?.label ?? PRESETS[shopType].label;
 
@@ -2367,9 +2379,8 @@ export const usePos = create<PosState>()(
           quotes: demo.quotes,
           quoteSeq: demo.quoteSeq,
           promos: demo.promos,
-          // Summaries describe the sales being replaced; they go with them.
-          closes: [],
-          invoiceSeq: demo.invoiceSeq,
+          closes,
+          invoiceSeq: { ...s.invoiceSeq, ...demo.invoiceSeq },
           lowStockAlerts: [],
           activeOrderId: null,
           audit: log(

@@ -15,6 +15,7 @@
  */
 
 import { seedCatalog } from './catalogs';
+import { buildClose, signClose } from './closes';
 import { businessDate } from './format';
 import { uuidv7 } from './id';
 import { discountRequest } from './migrate';
@@ -26,6 +27,7 @@ import { QUICK_LABELS } from './seed';
 import { computeBill } from './tax';
 import type {
   Branch,
+  DailyClose,
   Order,
   OrderLine,
   OrderType,
@@ -50,6 +52,9 @@ export interface DemoOptions {
   salesPerDay?: number;
   /** End of the generated window. Defaults to now. */
   now?: number;
+  /** The last sale and quote numbers already issued, so none is issued twice. */
+  invoiceSeq?: number;
+  quoteSeq?: number;
 }
 
 export interface DemoDataset {
@@ -126,7 +131,7 @@ const SEEDS: Record<ShopType, number> = {
 };
 
 export function buildDemoData(options: DemoOptions): DemoDataset {
-  const { shopType, branch, days = 21, salesPerDay = 30, now = Date.now() } = options;
+  const { shopType, branch, days = 21, salesPerDay = 30, now = Date.now(), invoiceSeq = 0, quoteSeq = 1 } = options;
   const features = applyPreset(shopType);
   const settings: Settings = { ...options.settings, shopType, features };
   const rand = rng(SEEDS[shopType]);
@@ -168,13 +173,14 @@ export function buildDemoData(options: DemoOptions): DemoDataset {
     active: true,
     startsOn: null,
     endsOn: null,
-    createdAt: windowStart - 7_200_000,
+    // Made before anything that uses it, quotes included.
+    createdAt: Math.min(windowStart, now - 4 * 86_400_000) - 7_200_000,
     firstUsedAt: null,
   };
   const promoDiscount: SaleDiscount = { kind: 'promo', promoId: promo.id, code: promo.code, percent: promo.percent };
 
   const orders: Order[] = [];
-  let invoiceNo = 0;
+  let invoiceNo = invoiceSeq;
   const plates = features.vehiclePlate;
   const orderTypes = PRESETS[shopType].orderTypes;
 
@@ -262,6 +268,7 @@ export function buildDemoData(options: DemoOptions): DemoDataset {
   // hold stock rather than take it, unless a line was already served.
   if (features.openOrders) {
     const live = 2 + Math.floor(rand() * 2);
+    let opened = 0;
     for (let i = 0; i < live; i++) {
       const openedAt = now - (35 - i * 12) * 60_000;
       const lines = buildLines(rand, products, settings).filter(
@@ -270,7 +277,8 @@ export function buildDemoData(options: DemoOptions): DemoDataset {
       if (lines.length === 0) continue;
       const order = blankOrder(rand, bid, openedAt, lines, pick(rand, orderTypes), shopType, plates);
       order.status = 'open';
-      order.label = `${ticketWord(shopType)} ${i + 1}`;
+      opened += 1;
+      order.label = `${ticketWord(shopType)} ${opened}`;
       order.lines = order.lines.map((line, n) => {
         // With a serve step the first line has gone out; served stock is taken.
         const served = features.serveStep && n === 0;
@@ -287,23 +295,26 @@ export function buildDemoData(options: DemoOptions): DemoDataset {
   // Two items came up short on a shelf count just now, so the low-stock list has
   // something on it. Counted down to at or below the reorder level, never
   // below what the open tickets are holding.
+  // Low the way the app judges it: what is left after open tickets' holds is
+  // at or under the reorder level. The count keeps the holds on the shelf.
   const held = holds(orders);
-  const candidates = stocked.filter((p) => (onHand[p.id] ?? 0) > settings.lowStockAt);
+  const level = settings.lowStockAt;
+  const candidates = stocked.filter((p) => (onHand[p.id] ?? 0) - (held.get(p.id) ?? 0) > level);
   const short = new Set<string>();
   while (short.size < Math.min(2, candidates.length)) short.add(pick(rand, candidates).id);
   for (const productId of short) {
-    const floor = held.get(productId) ?? 0;
-    const counted = Math.max(floor, roundUpToWhole(Math.floor(rand() * (settings.lowStockAt + 1)))) as Qty;
+    // Whole units left over, rounded down, so a part-unit level is still met.
+    const counted = ((held.get(productId) ?? 0) + Math.floor((rand() * level) / 1000) * 1000) as Qty;
     const delta = counted - (onHand[productId] ?? 0);
     if (delta >= 0) continue;
     shift(productId, delta);
     move({ productId, delta: delta as Qty, reason: 'count', refOrderId: null, note: 'Short on the shelf count', at: now - 60_000 });
   }
 
-  // Three quotations still open: customers who asked and have not come back.
+  // Three quotations still open, where the shop makes quotes: customers who
+  // asked and have not come back. Oldest first, so the numbers run in time order.
   const quotes: Quote[] = [];
-  const today = businessDate(now);
-  for (let i = 0; i < 3; i++) {
+  for (let i = features.quotes ? 2 : -1; i >= 0; i--) {
     const createdAt = now - (i + 1) * 86_400_000 - Math.floor(rand() * 3_600_000);
     const lines: QuoteLine[] = buildLines(rand, products, settings).map((l) => ({
       lineNo: l.lineNo,
@@ -315,11 +326,11 @@ export function buildDemoData(options: DemoOptions): DemoDataset {
       qty: l.qty,
     }));
     const gross = lines.reduce<Centavos>((sum, l) => addC(sum, lineTotal(l.unitCents, l.qty)), cents(0));
-    const discount: SaleDiscount = i === 0 ? promoDiscount : { kind: 'none' };
+    const discount: SaleDiscount = i === 2 ? promoDiscount : { kind: 'none' };
     const bill = computeBill(gross, settings, discountRequest(discount));
     quotes.push({
       id: uuidv7(),
-      quoteNo: nextQuoteNo(i + 1),
+      quoteNo: nextQuoteNo(quoteSeq + quotes.length),
       status: 'open',
       lines,
       discount,
@@ -328,7 +339,7 @@ export function buildDemoData(options: DemoOptions): DemoDataset {
       netCents: bill.amountDue,
       customerName: pick(rand, CUSTOMERS),
       customerPhone: `0917${String(1_000_000 + Math.floor(rand() * 8_999_999))}`,
-      validUntil: addDays(today, settings.quoteValidDays),
+      validUntil: addDays(businessDate(createdAt), settings.quoteValidDays),
       createdAt,
       createdBy: null,
       convertedSaleId: null,
@@ -345,8 +356,26 @@ export function buildDemoData(options: DemoOptions): DemoDataset {
     quotes,
     promos: [promo],
     invoiceSeq: { [bid]: invoiceNo },
-    quoteSeq: quotes.length + 1,
+    quoteSeq: quoteSeq + quotes.length,
   };
+}
+
+/**
+ * Today's summary for every past day of a demo, chained and signed the way
+ * the till does it at 23:59. Without them the first summary after loading
+ * would cover the whole demo in one day.
+ */
+export async function closeDemoDays(orders: Order[], now: number): Promise<DailyClose[]> {
+  const paid = orders.filter((o) => o.closedAt !== null).map((o) => o.closedAt!);
+  if (paid.length === 0) return [];
+  const closes: DailyClose[] = [];
+  const today = startOfDay(now);
+  for (let day = startOfDay(Math.min(...paid)); day < today; day = startOfDay(day + 36 * 3_600_000)) {
+    const at = day + (23 * 60 + 59) * 60_000;
+    const previous = closes.at(-1) ?? null;
+    closes.push(await signClose(buildClose({ id: uuidv7(), orders, previous, now: at, actor: null })));
+  }
+  return closes;
 }
 
 /** What open tickets hold, by product: unserved stock lines. */

@@ -99,7 +99,7 @@ export function applyPreset(t: ShopType): Features {
   return { ...PRESETS[t].features };
 }
 
-/** What an open order is called on screen: the preset's word, or "Order". */
+/** What an open ticket is called on screen: the preset's word, or "Sale". */
 export function ticketWord(t: ShopType): string {
-  return PRESETS[t].ticketLabel ?? 'Order';
+  return PRESETS[t].ticketLabel ?? 'Sale';
 }

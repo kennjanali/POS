@@ -788,7 +788,7 @@ console.log('— Demo business: one branch, numbers never clash —');
     ],
   }));
 
-  const written = S().loadDemoBusiness('restaurant', { days: 2, salesPerDay: 3 });
+  const written = await S().loadDemoBusiness('restaurant', { days: 2, salesPerDay: 3 });
   const branches = S().branches;
   const main = branches[0].id;
 
