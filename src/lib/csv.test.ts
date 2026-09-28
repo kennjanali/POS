@@ -335,6 +335,39 @@ describe('previewImport matching', () => {
   });
 });
 
+describe('previewImport and broken files', () => {
+  it('names the line of a quote that is never closed, and keeps the lines before it', () => {
+    const preview = previewImport(
+      file(
+        'Cement,CE-01,Hardware,stock,pcs,70,60,,',
+        '"Nails,NA-01,Hardware,stock,pcs,18,9,,',
+        'Rice,RI-01,Grains,stock,pcs,45,30,,',
+      ),
+      [],
+      FEATURES,
+    );
+    expect(preview.rows.map((r) => r.product.name)).toEqual(['Cement']);
+    expect(preview.errors).toEqual([
+      {
+        row: 3,
+        message: 'A quote (") on this line is never closed, so it and the lines after it could not be read.',
+      },
+    ]);
+  });
+});
+
+describe('exportProducts and spreadsheet formulas', () => {
+  it('writes a name that looks like a formula as text, and reads it back unchanged', () => {
+    const risky = existing({ name: '=HYPERLINK("x")', sku: '+SKU' });
+    const csv = exportProducts([risky], {});
+    expect(parseCsv(csv)[1]!.slice(0, 2)).toEqual(['\'=HYPERLINK("x")', "'+SKU"]);
+
+    const back = previewImport(csv, [], FEATURES);
+    expect(back.errors).toEqual([]);
+    expect(back.rows[0]?.product).toMatchObject({ name: '=HYPERLINK("x")', sku: '+SKU' });
+  });
+});
+
 describe('exportProducts', () => {
   it('writes the same columns, with the on-hand count in opening_qty', () => {
     expect(exportProducts([existing({ unit: 'm' })], { p1: qty(2.4) })).toBe(

@@ -55,6 +55,7 @@ import { computeBill, type BillBreakdown } from '@/lib/tax';
 import { UPGRADE_RESET_NOTE } from '@/lib/stockHistory';
 import { DEFAULT_BRANCH, DEFAULT_SETTINGS } from '@/lib/seed';
 import { OPENING_STOCK, seedCatalog } from '@/lib/catalogs';
+import { dismissed } from '@/lib/checklist';
 import type { ImportPreview } from '@/lib/csv';
 import { actorId, useAuth } from './useAuth';
 import { REFERENCED_METHODS, TENDER_LABELS } from '@/lib/types';
@@ -2251,6 +2252,8 @@ export const usePos = create<PosState>()(
         if (refused) return refused;
         set((state) => {
           const settings = { ...state.settings, ...patch };
+          // Setting the VAT switch either way answers the checklist's question.
+          if ('vatRegistered' in patch) settings.checklistDismissed = dismissed(settings, 'vat');
 
           // Leaving training mode is a one-way door. A POS that has gone live
           // must not be able to re-enter it: training mode unlocks the demo

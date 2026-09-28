@@ -6,7 +6,7 @@ import { qty } from '@/lib/qty';
 import { DEFAULT_SETTINGS } from '@/lib/seed';
 import { usePos, type SetupInput } from '@/store/usePos';
 import { useAuth } from '@/store/useAuth';
-import { resetStore } from '@/test/store';
+import { ownerShop, resetStore } from '@/test/store';
 
 const S = () => usePos.getState();
 
@@ -201,14 +201,24 @@ describe('the finish-setting-up checklist', () => {
     expect(checklistItems(S()).find((i) => i.id === 'staff')?.done).toBe(true);
   });
 
-  it('points every job at a place the owner can act', () => {
-    for (const item of checklistItems({
-      settings: DEFAULT_SETTINGS,
-      licensed: null,
-      users: [],
-    })) {
-      expect(item.href).toBe('/settings');
-      expect(item.label.length).toBeGreaterThan(0);
-    }
+  it('points every job at the Settings section that does it', () => {
+    const hrefs = checklistItems({ settings: DEFAULT_SETTINGS, licensed: null, users: [] }).map(
+      (item) => item.href,
+    );
+    expect(hrefs).toEqual([
+      '/settings#receipt-printer',
+      '/settings#business',
+      '/settings#tax',
+      '/settings#license',
+      '/settings#users',
+    ]);
+  });
+
+  it('counts the VAT question answered once the VAT switch is set, either way', async () => {
+    resetStore();
+    await ownerShop();
+    expect(checklistItems(S()).find((i) => i.id === 'vat')?.done).toBe(false);
+    S().updateSettings({ vatRegistered: false });
+    expect(checklistItems(S()).find((i) => i.id === 'vat')?.done).toBe(true);
   });
 });

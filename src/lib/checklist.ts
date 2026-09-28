@@ -31,17 +31,40 @@ function retired(id: ChecklistId, state: ChecklistState): boolean {
   return state.settings.checklistDismissed.includes(id);
 }
 
-const JOBS: { id: ChecklistId; label: string; done: (state: ChecklistState) => boolean }[] = [
+/** Each job links to the Settings section that does it. */
+const JOBS: {
+  id: ChecklistId;
+  label: string;
+  section: string;
+  done: (state: ChecklistState) => boolean;
+}[] = [
   // The printer is absent until one is paired, and null is how it is unset.
-  { id: 'printer', label: 'Pair a receipt printer', done: (s) => s.settings.printer != null },
-  { id: 'address', label: 'Add the shop address', done: (s) => s.settings.address.trim() !== '' },
+  {
+    id: 'printer',
+    label: 'Pair a receipt printer',
+    section: 'receipt-printer',
+    done: (s) => s.settings.printer != null,
+  },
+  {
+    id: 'address',
+    label: 'Add the shop address',
+    section: 'business',
+    done: (s) => s.settings.address.trim() !== '',
+  },
   // Nothing to check against: a business is VAT-registered or it is not, and
-  // only the owner knows. Answering it once retires the question.
-  { id: 'vat', label: 'Confirm whether you are VAT-registered', done: (s) => retired('vat', s) },
-  { id: 'license', label: 'Activate your license', done: (s) => s.licensed !== null },
+  // only the owner knows. Answering it once — the VAT switch in Settings, or
+  // "not now" here — retires the question.
+  {
+    id: 'vat',
+    label: 'Confirm whether you are VAT-registered',
+    section: 'tax',
+    done: (s) => retired('vat', s),
+  },
+  { id: 'license', label: 'Activate your license', section: 'license', done: (s) => s.licensed !== null },
   {
     id: 'staff',
     label: 'Add the staff who will sign in',
+    section: 'users',
     done: (s) => s.users.filter((u) => u.active).length > 1,
   },
 ];
@@ -50,11 +73,11 @@ const JOBS: { id: ChecklistId; label: string; done: (state: ChecklistState) => b
  *  has retired counts as done whichever rule it has: "not now" on the printer
  *  is as final an answer as pairing one. */
 export function checklistItems(state: ChecklistState): ChecklistItem[] {
-  return JOBS.map(({ id, label, done }) => ({
+  return JOBS.map(({ id, label, section, done }) => ({
     id,
     done: retired(id, state) || done(state),
     label,
-    href: '/settings',
+    href: `/settings#${section}`,
   }));
 }
 

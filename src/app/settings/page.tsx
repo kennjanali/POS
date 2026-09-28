@@ -477,7 +477,9 @@ function Section({
 }) {
   return (
     <section
-      className={`rounded-lg border border-line bg-surface p-4 ${className ?? ''}`}
+      // The Finish-setting-up checklist links straight to a section.
+      id={title.toLowerCase().replace(/\s+/g, '-')}
+      className={`scroll-mt-4 rounded-lg border border-line bg-surface p-4 ${className ?? ''}`}
     >
       <h2 className="mb-3 text-[11px] font-bold tracking-wide text-ink-2 uppercase">
         {title}

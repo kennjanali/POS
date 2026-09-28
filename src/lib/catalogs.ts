@@ -37,7 +37,7 @@ const RESTAURANT: CatalogItem[] = [
   { name: 'Half Chicken', category: '', price: 175, cost: 95, unit: 'pcs', opening: 20 },
   { name: 'Pork BBQ', category: '', price: 35, cost: 18, unit: 'pcs', opening: 100 },
   { name: 'Pork Chop BBQ', category: '', price: 120, cost: 65, unit: 'pcs', opening: 30 },
-  { name: 'Limpio', category: '', price: 150, cost: 80, unit: 'pcs', opening: 20 },
+  { name: 'Liempo', category: '', price: 150, cost: 80, unit: 'pcs', opening: 20 },
   { name: 'Kanin (1 cup)', category: '', price: 15, cost: 6, unit: 'cup', opening: 60 },
   { name: 'Garlic Rice', category: '', price: 25, cost: 10, unit: 'cup', opening: 60 },
   { name: 'Coke 1.5L', category: '', price: 85, cost: 45, unit: 'btl', opening: 24 },

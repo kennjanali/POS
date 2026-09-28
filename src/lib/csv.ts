@@ -37,12 +37,22 @@ const HEADER_LINE = CSV_COLUMNS.join(', ');
  * the quoting; nothing is trimmed here.
  */
 export function parseCsv(text: string): string[][] {
+  return parse(text).rows;
+}
+
+/**
+ * The parser itself. `openQuote` is the record (1-based) where a quote was
+ * opened and never closed: everything after it was swallowed into one field,
+ * and the preview has to say so rather than quietly lose the rest of the file.
+ */
+function parse(text: string): { rows: string[][]; openQuote: number | null } {
   const body = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
   const rows: string[][] = [];
   let row: string[] = [];
   let field = '';
   let started = false;
   let quoted = false;
+  let openedAt = 0;
 
   const endField = () => {
     row.push(field);
@@ -74,6 +84,7 @@ export function parseCsv(text: string): string[][] {
     if (ch === '"') {
       quoted = true;
       started = true;
+      openedAt = rows.length + 1;
     } else if (ch === ',') {
       endField();
     } else if (ch === '\r' || ch === '\n') {
@@ -84,6 +95,7 @@ export function parseCsv(text: string): string[][] {
       started = true;
     }
   }
+  const openQuote = quoted ? openedAt : null;
   // A file with no final newline still has a last row worth reading.
   if (field !== '' || row.length > 0 || started) endRow();
 
@@ -92,8 +104,18 @@ export function parseCsv(text: string): string[][] {
   while (rows.length > 0 && rows[rows.length - 1]!.every((f) => f.trim() === '')) {
     rows.pop();
   }
-  return rows;
+  return { rows, openQuote };
 }
+
+/**
+ * A spreadsheet runs a cell that starts with = + - or @ as a formula, so a
+ * product called "=HYPERLINK(...)" would do something when the file is opened.
+ * Text cells like that go out with a leading apostrophe, and come back in
+ * without it.
+ */
+const FORMULA = /^[=+\-@]/;
+const guardText = (text: string) => (FORMULA.test(text) ? `'${text}` : text);
+const unguardText = (text: string) => (/^'[=+\-@]/.test(text) ? text.slice(1) : text);
 
 /** Quote only what has to be quoted: a comma, a quote or a line break. */
 function quoteField(field: string): string {
@@ -153,7 +175,11 @@ export function previewImport(
   features: Features,
   onHand: Record<string, Qty> = {},
 ): ImportPreview {
-  const table = parseCsv(text);
+  const { rows: table, openQuote } = parse(text);
+  if (openQuote !== null) {
+    // The last record holds the unclosed quote and everything after it.
+    table.splice(openQuote - 1);
+  }
   if (table.length === 0) {
     return { rows: [], errors: [{ row: 1, message: 'That file is empty.' }] };
   }
@@ -169,7 +195,8 @@ export function previewImport(
       ],
     };
   }
-  const cell = (row: string[], column: string): string => (row[index.get(column)!] ?? '').trim();
+  const cell = (row: string[], column: string): string =>
+    unguardText((row[index.get(column)!] ?? '').trim());
 
   const rows: ImportRow[] = [];
   const errors: { row: number; message: string }[] = [];
@@ -288,6 +315,12 @@ export function previewImport(
     });
   }
 
+  if (openQuote !== null) {
+    errors.push({
+      row: openQuote,
+      message: 'A quote (") on this line is never closed, so it and the lines after it could not be read.',
+    });
+  }
   return { rows, errors };
 }
 
@@ -311,11 +344,11 @@ export function exportProducts(products: Product[], stock: Record<string, Qty>):
   return BOM + toCsv([
     CSV_COLUMNS as unknown as string[],
     ...products.map((p) => [
-      p.name,
-      p.sku ?? '',
-      p.category,
+      guardText(p.name),
+      guardText(p.sku ?? ''),
+      guardText(p.category),
       p.kind,
-      p.unit,
+      guardText(p.unit),
       (p.priceCents / 100).toFixed(2),
       (p.costCents / 100).toFixed(2),
       p.reorderLevel === null ? '' : formatQty(p.reorderLevel),
