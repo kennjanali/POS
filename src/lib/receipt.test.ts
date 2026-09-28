@@ -56,6 +56,21 @@ describe('the slip', () => {
     expect(sellTire()).not.toContain('VAT');
   });
 
+  it('keeps the VAT a sale was closed with when the shop changes its registration', () => {
+    const before = S().orders.length;
+    sellTire();
+    const unregistered = S().orders[before]!;
+    S().updateSettings({ vatRegistered: true });
+    // Closed before registering: a reprint does not grow a VAT line.
+    expect(renderReceipt(unregistered, S().settings)).not.toContain('VAT');
+
+    sellTire();
+    const registered = S().orders[before + 1]!;
+    S().updateSettings({ vatRegistered: false });
+    // Closed while registered: its VAT stays on the reprint.
+    expect(renderReceipt(registered, S().settings)).toContain('VAT (12%) included');
+  });
+
   it('prints the plate', () => {
     expect(sellTire({ vehiclePlate: 'ABC 1234' })).toMatch(/Plate\s+ABC 1234/);
   });

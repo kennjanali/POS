@@ -45,7 +45,11 @@ export default function OrdersPage() {
   const users = usePos((s) => s.users);
   const currency = usePos((s) => s.settings.currency);
   /** A shop that is not VAT-registered never shows a VAT column. */
-  const vatRegistered = usePos((s) => s.settings.vatRegistered);
+  // The column follows the sales: a shop that has left VAT registration still
+  // sees the VAT frozen on the sales it made while registered.
+  const vatRegistered = usePos(
+    (s) => s.settings.vatRegistered || s.orders.some((o) => o.vatCents > 0),
+  );
   const voidOrder = usePos((s) => s.voidOrder);
   // Unmaking a sale stays with the owner.
   const canVoid = useAuth((s) => can(s.session, 'sale.cancel'));

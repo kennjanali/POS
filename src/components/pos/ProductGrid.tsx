@@ -20,9 +20,11 @@ import { toast } from '@/components/ui/Toast';
 interface ProductGridProps {
   /** The order a tap adds to. Called at the tap, so a retail cart opens on the first one. */
   getOrderId: () => string;
+  /** Called with that order when the tap was refused, so a cart opened for it can go. */
+  onRefused?: (orderId: string) => void;
 }
 
-export function ProductGrid({ getOrderId }: ProductGridProps) {
+export function ProductGrid({ getOrderId, onRefused }: ProductGridProps) {
   const products = usePos((s) => s.products);
   const stock = usePos((s) => s.stock);
   const orders = usePos((s) => s.orders);
@@ -47,8 +49,12 @@ export function ProductGrid({ getOrderId }: ProductGridProps) {
   const held = useMemo(() => heldStock(orders, branchId), [orders, branchId]);
 
   function add(productId: string, q?: Qty): UserResult {
-    const result = addLine(getOrderId(), productId, q);
-    if (!result.ok) toast(result.error, 'danger');
+    const orderId = getOrderId();
+    const result = addLine(orderId, productId, q);
+    if (!result.ok) {
+      toast(result.error, 'danger');
+      onRefused?.(orderId);
+    }
     return result;
   }
 

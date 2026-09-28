@@ -152,9 +152,10 @@ export function renderReceipt(order: Order, settings: Settings, width: number = 
 
   out.push(row('Gross', amount(order.grossCents)));
 
-  // VAT is frozen on the sale, so a sale closed while the shop was
-  // VAT-registered keeps its VAT line on a reprint.
-  const showVat = settings.vatRegistered || order.vatCents > 0;
+  // VAT is frozen on the sale: one closed while the shop was VAT-registered
+  // keeps its VAT line on a reprint, and one closed before registering, with
+  // no VAT on it, does not grow a "VAT 0.00" line afterwards.
+  const showVat = order.vatCents > 0;
   if (showVat && order.vatExemptCents > 0) {
     out.push(row(`${settings.vatLabel}-exempt sale`, amount(order.vatExemptCents)));
   }

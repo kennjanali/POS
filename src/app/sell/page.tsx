@@ -81,10 +81,18 @@ function RetailCart({ onCheckout }: { onCheckout: (orderId: string) => void }) {
     return currentCart(s)?.id ?? s.openOrder('Walk-in', 'walk-in');
   }
 
+  // A first tap that was refused must not leave an empty cart behind.
+  function dropIfEmpty(orderId: string) {
+    const order = usePos.getState().order(orderId);
+    if (order && order.lines.length === 0 && order.tenders.length === 0) {
+      usePos.getState().discardOpenOrder(orderId);
+    }
+  }
+
   return (
     <div className="flex h-full">
       <div className="min-w-0 flex-1">
-        <ProductGrid getOrderId={cartId} />
+        <ProductGrid getOrderId={cartId} onRefused={dropIfEmpty} />
       </div>
       <div className="w-[360px] shrink-0">
         <OrderPanel order={cart} onCheckout={() => cart && onCheckout(cart.id)} />
