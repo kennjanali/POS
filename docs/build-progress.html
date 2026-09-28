@@ -80,26 +80,26 @@
 <h1>POS-034 &mdash; Build Progress</h1>
 <p class="sub">
   Offline POS for small shops, by kennali.com. One tablet = one shop.<br>
-  Branch <code>pos-034-redesign</code> &middot; 57 commits ahead of <code>main</code> &middot; as of 2026-09-28.<br>
+  Branch <code>pos-034-redesign</code> &middot; 59 commits ahead of <code>main</code> &middot; as of 2026-09-28.<br>
   Spec: <code>docs/superpowers/specs/2026-09-27-pos-034-design.md</code> &middot;
   Plan: <code>docs/superpowers/plans/2026-09-27-pos-034-app.md</code> (18 tasks) &middot;
   Ledger: <code>.superpowers/sdd/2026-09-27-pos-034-app/progress.md</code>
 </p>
 
 <div class="grid">
-  <div class="stat"><b>15<span class="n">/18</span></b><span>Tasks complete</span></div>
-  <div class="stat"><b>1</b><span>In audit</span></div>
+  <div class="stat"><b>16<span class="n">/18</span></b><span>Tasks complete</span></div>
+  <div class="stat"><b>0</b><span>In audit</span></div>
   <div class="stat"><b>2</b><span>Not started</span></div>
   <div class="stat"><b class="yes">PASS</b><span><code>npm run check</code> &mdash; all 6 stages</span></div>
-  <div class="stat"><b>294</b><span>Tests passing (26 files)</span></div>
+  <div class="stat"><b>296</b><span>Tests passing (26 files)</span></div>
 </div>
 
-<div class="bar" role="img" aria-label="15 of 18 tasks complete, 1 in audit, 2 not started">
-  <i class="d" style="width:83.3%"></i><i class="a" style="width:5.6%"></i><i class="n" style="width:11.1%"></i>
+<div class="bar" role="img" aria-label="16 of 18 tasks complete, 0 in audit, 2 not started">
+  <i class="d" style="width:88.9%"></i><i class="a" style="width:0.0%"></i><i class="n" style="width:11.1%"></i>
 </div>
 <div class="legend">
-  <span><i class="dot" style="background:var(--ok)"></i>15 complete</span>
-  <span><i class="dot" style="background:var(--no)"></i>1 in audit</span>
+  <span><i class="dot" style="background:var(--ok)"></i>16 complete</span>
+  <span><i class="dot" style="background:var(--no)"></i>0 in audit</span>
   <span><i class="dot" style="background:var(--idle-soft);border:1px solid var(--line)"></i>2 not started</span>
 </div>
 
@@ -109,7 +109,7 @@
   <tr><th>Stage</th><th>Result</th><th>What it covers</th></tr>
   <tr><td><code>typecheck</code></td><td class="yes">PASS</td><td><code>tsc --noEmit</code></td></tr>
   <tr><td><code>lint</code></td><td class="yes">PASS</td><td><code>eslint src</code></td></tr>
-  <tr><td><code>test</code></td><td class="yes">PASS</td><td>294 tests, 26 files</td></tr>
+  <tr><td><code>test</code></td><td class="yes">PASS</td><td>296 tests, 26 files</td></tr>
   <tr><td><code>verify:auth</code></td><td class="yes">PASS</td><td>Route guard for every role, last-owner protection, PIN hashing</td></tr>
   <tr><td><code>verify:demo</code></td><td class="yes">PASS</td><td>Demo data: frozen totals, gapless numbers, stock sums to on hand</td></tr>
   <tr><td><code>verify:safeguards</code></td><td class="yes">PASS</td><td>First run, license offline binding, one-way practice door, daily close chain, backup encryption, receipt width, archive pruning</td></tr>
@@ -119,8 +119,8 @@
 <h2>Tasks</h2>
 <div class="chips" role="group" aria-label="Filter tasks by status">
   <button type="button" data-f="all" aria-pressed="true">All 18</button>
-  <button type="button" data-f="done" aria-pressed="false">Complete (15)</button>
-  <button type="button" data-f="audit" aria-pressed="false">Audit (1)</button>
+  <button type="button" data-f="done" aria-pressed="false">Complete (16)</button>
+  <button type="button" data-f="audit" aria-pressed="false">Audit (0)</button>
   <button type="button" data-f="idle" aria-pressed="false">Not started (2)</button>
 </div>
 <div class="scroll">
@@ -213,9 +213,9 @@
       <td class="mono">19ded5f</td>
       <td><code>/</code> Today, <code>/sell</code>, <code>/month</code> for the owner, <code>today.ts</code>, close format 2 (VAT, promo/owner split, expected vs counted cash)</td>
     </tr>
-    <tr data-s="audit">
+    <tr data-s="done">
       <td>15</td><td>Setup wizard (four questions) and the Finish-setting-up checklist</td>
-      <td><span class="tag t-audit">Audit</span></td>
+      <td><span class="tag t-done">Complete</span></td>
       <td class="mono">8f9207a</td>
       <td><code>catalogs.ts</code> with 10&ndash;15 sample items per shop type, 4-step wizard, <code>checklist.ts</code> and a 5-item checklist on Today</td>
     </tr>
@@ -245,8 +245,8 @@
 <h2 id="audit">Audit of Tasks 11&ndash;16</h2>
 <p class="sub">Tasks 11&ndash;16 were built while the reviewer was away and marked &ldquo;review clean&rdquo;, but no per-task review was run: the ledger has no review diffs or reports after Task 10. Six independent reviews against the plan, the spec and the global constraints found the issues below; every Critical one was reproduced before it was fixed. A task goes back to <b>Complete</b> when all of its rows are Fixed. Last updated 2026-09-28.</p>
 <div class="grid">
-  <div class="stat"><b class="yes">44</b><span>Fixed</span></div>
-  <div class="stat"><b>1</b><span>Being fixed now</span></div>
+  <div class="stat"><b class="yes">45</b><span>Fixed</span></div>
+  <div class="stat"><b>0</b><span>Being fixed now</span></div>
   <div class="stat"><b>0</b><span>Open</span></div>
   <div class="stat"><b>0</b><span>Needs your decision</span></div>
 </div>
@@ -390,9 +390,9 @@
     <td>15</td><td>Minor</td><td>Sample menu says &ldquo;Limpio&rdquo; for &ldquo;Liempo&rdquo;; every checklist link is a bare <code>/settings</code></td>
     <td><span class="tag t-fixed">Fixed</span></td><td class="mono"><code>9ebe6c2</code></td>
   </tr>
-  <tr id="A15-4" data-a="wip">
+  <tr id="A15-4" data-a="fixed">
     <td>15</td><td>Decided</td><td>Practice sales and sample opening stock carry into live: nothing wipes practice data at go-live, though spec &sect;5 says it is wiped. No plan task builds this &mdash; <b>you chose: wipe practice data at go-live</b></td>
-    <td><span class="tag t-audit">Fixing</span></td><td class="mono">&mdash;</td>
+    <td><span class="tag t-fixed">Fixed</span></td><td class="mono"><code>44997c8</code></td>
   </tr>
   <tr id="A16-1" data-a="fixed">
     <td>16</td><td>Critical</td><td><b>Export then import doubled the shelf.</b> Matching was by SKU only and sample items have none: a 12-item shop became 24</td>
@@ -525,7 +525,7 @@
 <table>
   <tr><th>Item</th><th>State</th><th>Goes to</th></tr>
   <tr>
-    <td>57 commits ahead of <code>main</code> &mdash; pushed, but a single point of loss until a second remote exists</td>
+    <td>59 commits ahead of <code>main</code> &mdash; pushed, but a single point of loss until a second remote exists</td>
     <td class="no">Open</td>
     <td>Now</td>
   </tr>
