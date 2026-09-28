@@ -80,26 +80,26 @@
 <h1>POS-034 &mdash; Build Progress</h1>
 <p class="sub">
   Offline POS for small shops, by kennali.com. One tablet = one shop.<br>
-  Branch <code>pos-034-redesign</code> &middot; 48 commits ahead of <code>main</code> &middot; as of 2026-09-28.<br>
+  Branch <code>pos-034-redesign</code> &middot; 50 commits ahead of <code>main</code> &middot; as of 2026-09-28.<br>
   Spec: <code>docs/superpowers/specs/2026-09-27-pos-034-design.md</code> &middot;
   Plan: <code>docs/superpowers/plans/2026-09-27-pos-034-app.md</code> (18 tasks) &middot;
   Ledger: <code>.superpowers/sdd/2026-09-27-pos-034-app/progress.md</code>
 </p>
 
 <div class="grid">
-  <div class="stat"><b>11<span class="n">/18</span></b><span>Tasks complete</span></div>
-  <div class="stat"><b>5</b><span>In audit</span></div>
+  <div class="stat"><b>12<span class="n">/18</span></b><span>Tasks complete</span></div>
+  <div class="stat"><b>4</b><span>In audit</span></div>
   <div class="stat"><b>2</b><span>Not started</span></div>
   <div class="stat"><b class="yes">PASS</b><span><code>npm run check</code> &mdash; all 6 stages</span></div>
-  <div class="stat"><b>273</b><span>Tests passing (26 files)</span></div>
+  <div class="stat"><b>278</b><span>Tests passing (26 files)</span></div>
 </div>
 
-<div class="bar" role="img" aria-label="11 of 18 tasks complete, 5 in audit, 2 not started">
-  <i class="d" style="width:61.1%"></i><i class="a" style="width:27.8%"></i><i class="n" style="width:11.1%"></i>
+<div class="bar" role="img" aria-label="12 of 18 tasks complete, 4 in audit, 2 not started">
+  <i class="d" style="width:66.7%"></i><i class="a" style="width:22.2%"></i><i class="n" style="width:11.1%"></i>
 </div>
 <div class="legend">
-  <span><i class="dot" style="background:var(--ok)"></i>11 complete</span>
-  <span><i class="dot" style="background:var(--no)"></i>5 in audit</span>
+  <span><i class="dot" style="background:var(--ok)"></i>12 complete</span>
+  <span><i class="dot" style="background:var(--no)"></i>4 in audit</span>
   <span><i class="dot" style="background:var(--idle-soft);border:1px solid var(--line)"></i>2 not started</span>
 </div>
 
@@ -109,7 +109,7 @@
   <tr><th>Stage</th><th>Result</th><th>What it covers</th></tr>
   <tr><td><code>typecheck</code></td><td class="yes">PASS</td><td><code>tsc --noEmit</code></td></tr>
   <tr><td><code>lint</code></td><td class="yes">PASS</td><td><code>eslint src</code></td></tr>
-  <tr><td><code>test</code></td><td class="yes">PASS</td><td>273 tests, 26 files</td></tr>
+  <tr><td><code>test</code></td><td class="yes">PASS</td><td>278 tests, 26 files</td></tr>
   <tr><td><code>verify:auth</code></td><td class="yes">PASS</td><td>Route guard for every role, last-owner protection, PIN hashing</td></tr>
   <tr><td><code>verify:demo</code></td><td class="yes">PASS</td><td>Demo data: frozen totals, gapless numbers, stock sums to on hand</td></tr>
   <tr><td><code>verify:safeguards</code></td><td class="yes">PASS</td><td>First run, license offline binding, one-way practice door, daily close chain, backup encryption, receipt width, archive pruning</td></tr>
@@ -119,8 +119,8 @@
 <h2>Tasks</h2>
 <div class="chips" role="group" aria-label="Filter tasks by status">
   <button type="button" data-f="all" aria-pressed="true">All 18</button>
-  <button type="button" data-f="done" aria-pressed="false">Complete (11)</button>
-  <button type="button" data-f="audit" aria-pressed="false">Audit (5)</button>
+  <button type="button" data-f="done" aria-pressed="false">Complete (12)</button>
+  <button type="button" data-f="audit" aria-pressed="false">Audit (4)</button>
   <button type="button" data-f="idle" aria-pressed="false">Not started (2)</button>
 </div>
 <div class="scroll">
@@ -201,9 +201,9 @@
       <td class="mono">3a331f7</td>
       <td><code>promo.ts</code>, owner-made codes staff can apply, one discount per sale, locked after first use</td>
     </tr>
-    <tr data-s="audit">
+    <tr data-s="done">
       <td>13</td><td>Quotations</td>
-      <td><span class="tag t-audit">Audit</span></td>
+      <td><span class="tag t-done">Complete</span></td>
       <td class="mono">f9032a0</td>
       <td><code>quotes.ts</code>, <code>/quotes</code> page, save a cart as a quote, convert at quoted prices, re-quote, cancel</td>
     </tr>
@@ -245,9 +245,9 @@
 <h2 id="audit">Audit of Tasks 11&ndash;16</h2>
 <p class="sub">Tasks 11&ndash;16 were built while the reviewer was away and marked &ldquo;review clean&rdquo;, but no per-task review was run: the ledger has no review diffs or reports after Task 10. Six independent reviews against the plan, the spec and the global constraints found the issues below; every Critical one was reproduced before it was fixed. A task goes back to <b>Complete</b> when all of its rows are Fixed. Last updated 2026-09-28.</p>
 <div class="grid">
-  <div class="stat"><b class="yes">22</b><span>Fixed</span></div>
+  <div class="stat"><b class="yes">26</b><span>Fixed</span></div>
   <div class="stat"><b>0</b><span>Being fixed now</span></div>
-  <div class="stat"><b>13</b><span>Open</span></div>
+  <div class="stat"><b>9</b><span>Open</span></div>
   <div class="stat"><b>1</b><span>Needs your decision</span></div>
 </div>
 <div class="scroll" style="margin-top:10px">
@@ -314,21 +314,21 @@
     <td>13</td><td>Critical</td><td><b>Quote numbers restarted at Q-0001</b> after a restart: <code>quoteSeq</code> was never saved</td>
     <td><span class="tag t-fixed">Fixed</span></td><td class="mono"><code>e6ecbab</code></td>
   </tr>
-  <tr id="A13-3" data-a="open">
+  <tr id="A13-3" data-a="fixed">
     <td>13</td><td>Important</td><td>Retail: a converted quote is not sent to payment, and hides behind an open cart</td>
-    <td><span class="tag t-open">Open</span></td><td class="mono">&mdash;</td>
+    <td><span class="tag t-fixed">Fixed</span></td><td class="mono"><code>555f61a</code></td>
   </tr>
-  <tr id="A13-4" data-a="open">
+  <tr id="A13-4" data-a="fixed">
     <td>13</td><td>Important</td><td>A converted quote whose sale is discarded or cancelled can never be converted or re-quoted again</td>
-    <td><span class="tag t-open">Open</span></td><td class="mono">&mdash;</td>
+    <td><span class="tag t-fixed">Fixed</span></td><td class="mono"><code>555f61a</code></td>
   </tr>
-  <tr id="A13-5" data-a="open">
+  <tr id="A13-5" data-a="fixed">
     <td>13</td><td>Important</td><td>Re-quote copies the old promo without checking it is valid today (spec: valid on the day the quote is made)</td>
-    <td><span class="tag t-open">Open</span></td><td class="mono">&mdash;</td>
+    <td><span class="tag t-fixed">Fixed</span></td><td class="mono"><code>555f61a</code></td>
   </tr>
-  <tr id="A13-6" data-a="open">
+  <tr id="A13-6" data-a="fixed">
     <td>13</td><td>Minor</td><td>Quote slip prints &ldquo;NOT A RECEIPT - NOTHING PAID&rdquo; and &ldquo;TRAINING MODE&rdquo;, not the fixed copy; the store does not check <code>features.quotes</code></td>
-    <td><span class="tag t-open">Open</span></td><td class="mono">&mdash;</td>
+    <td><span class="tag t-fixed">Fixed</span></td><td class="mono"><code>555f61a</code></td>
   </tr>
   <tr id="A14-1" data-a="fixed">
     <td>14</td><td>Important</td><td>Staff see past days&rsquo; summaries on Today and can close the day; the summary is the owner&rsquo;s (spec &sect;3a, &sect;8)</td>
@@ -489,7 +489,7 @@
 <table>
   <tr><th>Item</th><th>State</th><th>Goes to</th></tr>
   <tr>
-    <td>48 commits ahead of <code>main</code> &mdash; pushed, but a single point of loss until a second remote exists</td>
+    <td>50 commits ahead of <code>main</code> &mdash; pushed, but a single point of loss until a second remote exists</td>
     <td class="no">Open</td>
     <td>Now</td>
   </tr>
