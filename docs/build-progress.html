@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>POS-034 â€” Build Progress</title>
+<title>POS-034 — Build Progress</title>
 <style>
   :root {
     --bg: #f0ede9; --panel: #ffffff; --ink: #1a1a1a; --ink-2: #555; --line: #d9d4ce;
@@ -56,6 +56,11 @@
   .t-done { background: var(--ok); color: #fff; }
   .t-wait { background: var(--wait); color: #241a00; }
   .t-idle { background: var(--idle-soft); color: var(--ink-2); }
+  .t-audit { background: var(--no); color: #fff; }
+  .t-fixed { background: var(--ok); color: #fff; }
+  .t-open { background: var(--wait); color: #241a00; }
+  .t-ask { background: var(--accent); color: #fff; }
+  .bar .a { background: var(--no); }
 
   .chips { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 10px; }
   .chips button { font: inherit; font-size: 13px; cursor: pointer; border: 1px solid var(--line);
@@ -75,26 +80,26 @@
 <h1>POS-034 &mdash; Build Progress</h1>
 <p class="sub">
   Offline POS for small shops, by kennali.com. One tablet = one shop.<br>
-  Branch <code>pos-034-redesign</code> &middot; 42 commits ahead of <code>main</code> &middot; as of 2026-09-28.<br>
+  Branch <code>pos-034-redesign</code> &middot; 46 commits ahead of <code>main</code> &middot; as of 2026-09-28.<br>
   Spec: <code>docs/superpowers/specs/2026-09-27-pos-034-design.md</code> &middot;
   Plan: <code>docs/superpowers/plans/2026-09-27-pos-034-app.md</code> (18 tasks) &middot;
   Ledger: <code>.superpowers/sdd/2026-09-27-pos-034-app/progress.md</code>
 </p>
 
 <div class="grid">
-  <div class="stat"><b>16<span class="n">/18</span></b><span>Tasks complete</span></div>
-  <div class="stat"><b>0</b><span>In progress</span></div>
+  <div class="stat"><b>10<span class="n">/18</span></b><span>Tasks complete</span></div>
+  <div class="stat"><b>6</b><span>In audit</span></div>
   <div class="stat"><b>2</b><span>Not started</span></div>
-  <div class="stat"><b class="yes">PASS</b><span><code>npm run check</code> â€” all 6 stages</span></div>
-  <div class="stat"><b>247</b><span>Tests passing (26 files)</span></div>
+  <div class="stat"><b class="yes">PASS</b><span><code>npm run check</code> &mdash; all 6 stages</span></div>
+  <div class="stat"><b>270</b><span>Tests passing (26 files)</span></div>
 </div>
 
-<div class="bar" role="img" aria-label="16 of 18 tasks complete, 0 in progress, 2 not started">
-  <i class="d" style="width:88.9%"></i><i class="w" style="width:0%"></i><i class="n" style="width:11.1%"></i>
+<div class="bar" role="img" aria-label="10 of 18 tasks complete, 6 in audit, 2 not started">
+  <i class="d" style="width:55.6%"></i><i class="a" style="width:33.3%"></i><i class="n" style="width:11.1%"></i>
 </div>
 <div class="legend">
-  <span><i class="dot" style="background:var(--ok)"></i>16 complete</span>
-  <span><i class="dot" style="background:var(--wait)"></i>0 in progress</span>
+  <span><i class="dot" style="background:var(--ok)"></i>10 complete</span>
+  <span><i class="dot" style="background:var(--no)"></i>6 in audit</span>
   <span><i class="dot" style="background:var(--idle-soft);border:1px solid var(--line)"></i>2 not started</span>
 </div>
 
@@ -104,7 +109,7 @@
   <tr><th>Stage</th><th>Result</th><th>What it covers</th></tr>
   <tr><td><code>typecheck</code></td><td class="yes">PASS</td><td><code>tsc --noEmit</code></td></tr>
   <tr><td><code>lint</code></td><td class="yes">PASS</td><td><code>eslint src</code></td></tr>
-  <tr><td><code>test</code></td><td class="yes">PASS</td><td>247 tests, 26 files</td></tr>
+  <tr><td><code>test</code></td><td class="yes">PASS</td><td>270 tests, 26 files</td></tr>
   <tr><td><code>verify:auth</code></td><td class="yes">PASS</td><td>Route guard for every role, last-owner protection, PIN hashing</td></tr>
   <tr><td><code>verify:demo</code></td><td class="yes">PASS</td><td>Demo data: frozen totals, gapless numbers, stock sums to on hand</td></tr>
   <tr><td><code>verify:safeguards</code></td><td class="yes">PASS</td><td>First run, license offline binding, one-way practice door, daily close chain, backup encryption, receipt width, archive pruning</td></tr>
@@ -114,8 +119,8 @@
 <h2>Tasks</h2>
 <div class="chips" role="group" aria-label="Filter tasks by status">
   <button type="button" data-f="all" aria-pressed="true">All 18</button>
-  <button type="button" data-f="done" aria-pressed="false">Complete (16)</button>
-  <button type="button" data-f="wait" aria-pressed="false">In progress (0)</button>
+  <button type="button" data-f="done" aria-pressed="false">Complete (10)</button>
+  <button type="button" data-f="audit" aria-pressed="false">Audit (6)</button>
   <button type="button" data-f="idle" aria-pressed="false">Not started (2)</button>
 </div>
 <div class="scroll">
@@ -184,39 +189,39 @@
       <td class="mono">dc0ccc0..be7c5aa</td>
       <td>Products, services, add stock, count, damage, quick-add, per-item stock history, low-stock bell</td>
     </tr>
-    <tr data-s="done">
+    <tr data-s="audit">
       <td>11</td><td>Sell screen and payment, the easy way</td>
-      <td><span class="tag t-done">Complete</span></td>
+      <td><span class="tag t-audit">Audit</span></td>
       <td class="mono">15cfa95</td>
       <td><code>payExact</code> one-tap cash/GCash; retail cart vs ticket floor; VAT line on the slip; Sales-history VAT column</td>
     </tr>
-    <tr data-s="done">
+    <tr data-s="audit">
       <td>12</td><td>Promo codes</td>
-      <td><span class="tag t-done">Complete</span></td>
+      <td><span class="tag t-audit">Audit</span></td>
       <td class="mono">3a331f7</td>
       <td><code>promo.ts</code>, owner-made codes staff can apply, one discount per sale, locked after first use</td>
     </tr>
-    <tr data-s="done">
+    <tr data-s="audit">
       <td>13</td><td>Quotations</td>
-      <td><span class="tag t-done">Complete</span></td>
+      <td><span class="tag t-audit">Audit</span></td>
       <td class="mono">f9032a0</td>
       <td><code>quotes.ts</code>, <code>/quotes</code> page, save a cart as a quote, convert at quoted prices, re-quote, cancel</td>
     </tr>
-    <tr data-s="done">
+    <tr data-s="audit">
       <td>14</td><td>Today, This month, and Today's summary</td>
-      <td><span class="tag t-done">Complete</span></td>
+      <td><span class="tag t-audit">Audit</span></td>
       <td class="mono">19ded5f</td>
       <td><code>/</code> Today, <code>/sell</code>, <code>/month</code> for the owner, <code>today.ts</code>, close format 2 (VAT, promo/owner split, expected vs counted cash)</td>
     </tr>
-    <tr data-s="done">
+    <tr data-s="audit">
       <td>15</td><td>Setup wizard (four questions) and the Finish-setting-up checklist</td>
-      <td><span class="tag t-done">Complete</span></td>
+      <td><span class="tag t-audit">Audit</span></td>
       <td class="mono">8f9207a</td>
       <td><code>catalogs.ts</code> with 10&ndash;15 sample items per shop type, 4-step wizard, <code>checklist.ts</code> and a 5-item checklist on Today</td>
     </tr>
-    <tr data-s="done">
+    <tr data-s="audit">
       <td>16</td><td>Spreadsheet (CSV) import and export</td>
-      <td><span class="tag t-done">Complete</span></td>
+      <td><span class="tag t-audit">Audit</span></td>
       <td class="mono">8eb0c9a</td>
       <td><code>csv.ts</code> (RFC 4180), preview with per-row errors, import good rows only, export as <code>pos034-products-YYYY-MM-DD.csv</code></td>
     </tr>
@@ -235,6 +240,169 @@
   </tbody>
 </table>
 </div>
+
+<!-- audit:start -->
+<h2 id="audit">Audit of Tasks 11&ndash;16</h2>
+<p class="sub">Tasks 11&ndash;16 were built while the reviewer was away and marked &ldquo;review clean&rdquo;, but no per-task review was run: the ledger has no review diffs or reports after Task 10. Six independent reviews against the plan, the spec and the global constraints found the issues below; every Critical one was reproduced before it was fixed. A task goes back to <b>Complete</b> when all of its rows are Fixed. Last updated 2026-09-28.</p>
+<div class="grid">
+  <div class="stat"><b class="yes">16</b><span>Fixed</span></div>
+  <div class="stat"><b>0</b><span>Being fixed now</span></div>
+  <div class="stat"><b>19</b><span>Open</span></div>
+  <div class="stat"><b>1</b><span>Needs your decision</span></div>
+</div>
+<div class="scroll" style="margin-top:10px">
+<table id="audit-table">
+  <thead><tr><th>Task</th><th>Severity</th><th>Finding</th><th>State</th><th>Commit</th></tr></thead>
+  <tbody>
+  <tr id="A11-1" data-a="fixed">
+    <td>11</td><td>Important</td><td><code>payExact</code>, <code>closeOrder</code> and taking a payment did not re-check permission: a signed-out till could close a sale</td>
+    <td><span class="tag t-fixed">Fixed</span></td><td class="mono"><code>b47bc3c</code></td>
+  </tr>
+  <tr id="A11-2" data-a="fixed">
+    <td>11</td><td>Important</td><td><code>changeQty</code> accepted a fraction of a thousandth or NaN (the Task 9 carry-over fixed <code>addLine</code> only)</td>
+    <td><span class="tag t-fixed">Fixed</span></td><td class="mono"><code>b47bc3c</code></td>
+  </tr>
+  <tr id="A11-3" data-a="open">
+    <td>11</td><td>Minor</td><td>Reprinting a pre-VAT sale after registering prints <i>VAT (12%) included 0.00</i>; the slip should follow the sale&rsquo;s frozen VAT (spec &sect;6.2b)</td>
+    <td><span class="tag t-open">Open</span></td><td class="mono">&mdash;</td>
+  </tr>
+  <tr id="A11-4" data-a="open">
+    <td>11</td><td>Minor</td><td>Topbar titles still say &ldquo;Point of Sale&rdquo; and &ldquo;Orders&rdquo; (Topbar was in the plan&rsquo;s file list)</td>
+    <td><span class="tag t-open">Open</span></td><td class="mono">&mdash;</td>
+  </tr>
+  <tr id="A11-5" data-a="open">
+    <td>11</td><td>Minor</td><td>A refused first tap in retail leaves an empty Walk-in cart and an <code>order.open</code> log line</td>
+    <td><span class="tag t-open">Open</span></td><td class="mono">&mdash;</td>
+  </tr>
+  <tr id="A12-1" data-a="fixed">
+    <td>12</td><td>Important</td><td><code>applyPromo</code> had no <code>promo.apply</code> check</td>
+    <td><span class="tag t-fixed">Fixed</span></td><td class="mono"><code>b47bc3c</code></td>
+  </tr>
+  <tr id="A12-2" data-a="fixed">
+    <td>12</td><td>Important</td><td><code>promoUses</code> counted open and cancelled sales, so &ldquo;Sales used&rdquo; was too high</td>
+    <td><span class="tag t-fixed">Fixed</span></td><td class="mono"><code>b47bc3c</code></td>
+  </tr>
+  <tr id="A12-3" data-a="fixed">
+    <td>12</td><td>Important</td><td><code>clearDiscount</code> had no check and &ldquo;Remove discount&rdquo; showed to staff: staff could take off an owner discount</td>
+    <td><span class="tag t-fixed">Fixed</span></td><td class="mono"><code>b47bc3c</code></td>
+  </tr>
+  <tr id="A12-4" data-a="fixed">
+    <td>12</td><td>Important</td><td>Percent discounts and the VAT strip rounded an exact half-centavo down in floating point: 29% of 50&cent; gave 14, not 15. Spec &sect;6.2a requires half-up. Dates from Task 3</td>
+    <td><span class="tag t-fixed">Fixed</span></td><td class="mono"><code>b47bc3c</code></td>
+  </tr>
+  <tr id="A12-5" data-a="fixed">
+    <td>12</td><td>Minor</td><td>Re-applying the same code wiped an entered payment; a 0 or larger-than-the-sale owner discount was accepted</td>
+    <td><span class="tag t-fixed">Fixed</span></td><td class="mono"><code>b47bc3c</code></td>
+  </tr>
+  <tr id="A12-6" data-a="open">
+    <td>12</td><td>Minor</td><td>Spec &sect;6.2a: a code replacing an owner discount (and vice versa) needs a confirm</td>
+    <td><span class="tag t-open">Open</span></td><td class="mono">&mdash;</td>
+  </tr>
+  <tr id="A12-7" data-a="open">
+    <td>12</td><td>Minor</td><td>An unused code can be edited while an open sale holds it, so the lock freezes values no sale used</td>
+    <td><span class="tag t-open">Open</span></td><td class="mono">&mdash;</td>
+  </tr>
+  <tr id="A12-8" data-a="open">
+    <td>12</td><td>Minor</td><td>Practice reset clears sales but leaves codes locked by practice sales</td>
+    <td><span class="tag t-open">Open</span></td><td class="mono">&mdash;</td>
+  </tr>
+  <tr id="A13-1" data-a="fixed">
+    <td>13</td><td>Critical</td><td><b>Quotations vanished on restart.</b> Loading read the quote rows but never put them in state; the next save deleted them from disk</td>
+    <td><span class="tag t-fixed">Fixed</span></td><td class="mono"><code>e6ecbab</code></td>
+  </tr>
+  <tr id="A13-2" data-a="fixed">
+    <td>13</td><td>Critical</td><td><b>Quote numbers restarted at Q-0001</b> after a restart: <code>quoteSeq</code> was never saved</td>
+    <td><span class="tag t-fixed">Fixed</span></td><td class="mono"><code>e6ecbab</code></td>
+  </tr>
+  <tr id="A13-3" data-a="open">
+    <td>13</td><td>Important</td><td>Retail: a converted quote is not sent to payment, and hides behind an open cart</td>
+    <td><span class="tag t-open">Open</span></td><td class="mono">&mdash;</td>
+  </tr>
+  <tr id="A13-4" data-a="open">
+    <td>13</td><td>Important</td><td>A converted quote whose sale is discarded or cancelled can never be converted or re-quoted again</td>
+    <td><span class="tag t-open">Open</span></td><td class="mono">&mdash;</td>
+  </tr>
+  <tr id="A13-5" data-a="open">
+    <td>13</td><td>Important</td><td>Re-quote copies the old promo without checking it is valid today (spec: valid on the day the quote is made)</td>
+    <td><span class="tag t-open">Open</span></td><td class="mono">&mdash;</td>
+  </tr>
+  <tr id="A13-6" data-a="open">
+    <td>13</td><td>Minor</td><td>Quote slip prints &ldquo;NOT A RECEIPT - NOTHING PAID&rdquo; and &ldquo;TRAINING MODE&rdquo;, not the fixed copy; the store does not check <code>features.quotes</code></td>
+    <td><span class="tag t-open">Open</span></td><td class="mono">&mdash;</td>
+  </tr>
+  <tr id="A14-1" data-a="open">
+    <td>14</td><td>Important</td><td>Staff see past days&rsquo; summaries on Today and can close the day; the summary is the owner&rsquo;s (spec &sect;3a, &sect;8)</td>
+    <td><span class="tag t-open">Open</span></td><td class="mono">&mdash;</td>
+  </tr>
+  <tr id="A14-2" data-a="open">
+    <td>14</td><td>Important</td><td>Today is missing gross, the promo/owner discount lines and expected cash (spec &sect;7)</td>
+    <td><span class="tag t-open">Open</span></td><td class="mono">&mdash;</td>
+  </tr>
+  <tr id="A14-3" data-a="open">
+    <td>14</td><td>Important</td><td>This month has no calendar-month period (it opens on today) and no discount total per promo code (spec &sect;6.2)</td>
+    <td><span class="tag t-open">Open</span></td><td class="mono">&mdash;</td>
+  </tr>
+  <tr id="A14-4" data-a="open">
+    <td>14</td><td>Important</td><td>&ldquo;Daily close #&rdquo; is still on screen and on the slip; it must read &ldquo;Today&rsquo;s summary&rdquo;</td>
+    <td><span class="tag t-open">Open</span></td><td class="mono">&mdash;</td>
+  </tr>
+  <tr id="A14-5" data-a="open">
+    <td>14</td><td>Minor</td><td>A negative counted cash is accepted and hashed for good; copy still points at the removed Dashboard</td>
+    <td><span class="tag t-open">Open</span></td><td class="mono">&mdash;</td>
+  </tr>
+  <tr id="A14-6" data-a="open">
+    <td>14</td><td>Minor</td><td><code>today.test.ts</code> splits the plan&rsquo;s single scenario and never checks the promo discount with a cancelled sale present</td>
+    <td><span class="tag t-open">Open</span></td><td class="mono">&mdash;</td>
+  </tr>
+  <tr id="A15-1" data-a="fixed">
+    <td>15</td><td>Important</td><td>&ldquo;Import a spreadsheet&rdquo; in the wizard was still disabled; Task 16 never wired it</td>
+    <td><span class="tag t-fixed">Fixed</span></td><td class="mono"><code>77fa3ce</code></td>
+  </tr>
+  <tr id="A15-2" data-a="open">
+    <td>15</td><td>Important</td><td>The VAT checklist item is only ever done by pressing &ldquo;Not now&rdquo;; turning VAT on in Settings does not clear it</td>
+    <td><span class="tag t-open">Open</span></td><td class="mono">&mdash;</td>
+  </tr>
+  <tr id="A15-3" data-a="open">
+    <td>15</td><td>Minor</td><td>Sample menu says &ldquo;Limpio&rdquo; for &ldquo;Liempo&rdquo;; every checklist link is a bare <code>/settings</code></td>
+    <td><span class="tag t-open">Open</span></td><td class="mono">&mdash;</td>
+  </tr>
+  <tr id="A15-4" data-a="ask">
+    <td>15</td><td>Decision</td><td>Practice sales and sample opening stock carry into live: nothing wipes practice data at go-live, though spec &sect;5 says it is wiped. No plan task builds this</td>
+    <td><span class="tag t-ask">Needs you</span></td><td class="mono">&mdash;</td>
+  </tr>
+  <tr id="A16-1" data-a="fixed">
+    <td>16</td><td>Critical</td><td><b>Export then import doubled the shelf.</b> Matching was by SKU only and sample items have none: a 12-item shop became 24</td>
+    <td><span class="tag t-fixed">Fixed</span></td><td class="mono"><code>77fa3ce</code></td>
+  </tr>
+  <tr id="A16-2" data-a="fixed">
+    <td>16</td><td>Important</td><td>An item with 0 on hand could not be re-imported &mdash; the whole row, price edit included, was refused</td>
+    <td><span class="tag t-fixed">Fixed</span></td><td class="mono"><code>77fa3ce</code></td>
+  </tr>
+  <tr id="A16-3" data-a="fixed">
+    <td>16</td><td>Important</td><td>A match could change unit m&rarr;pcs with 2.5 on hand, or half-turn a stock item into a service</td>
+    <td><span class="tag t-fixed">Fixed</span></td><td class="mono"><code>77fa3ce</code></td>
+  </tr>
+  <tr id="A16-4" data-a="fixed">
+    <td>16</td><td>Important</td><td>A SKU matching a removed item &ldquo;updated&rdquo; an item nobody could see; a stale preview could create a duplicate SKU</td>
+    <td><span class="tag t-fixed">Fixed</span></td><td class="mono"><code>77fa3ce</code></td>
+  </tr>
+  <tr id="A16-5" data-a="fixed">
+    <td>16</td><td>Important</td><td>Carried from Task 8: restoring a v7 backup did not count negative stock back to zero</td>
+    <td><span class="tag t-fixed">Fixed</span></td><td class="mono"><code>77fa3ce</code></td>
+  </tr>
+  <tr id="A16-6" data-a="fixed">
+    <td>16</td><td>Minor</td><td>&ldquo;12abc&rdquo; read as &#8369;12 and a bad cost as 0; the error count counted messages, not rows; the template needed a file first; no BOM for Excel</td>
+    <td><span class="tag t-fixed">Fixed</span></td><td class="mono"><code>77fa3ce</code></td>
+  </tr>
+  <tr id="A16-7" data-a="open">
+    <td>16</td><td>Minor</td><td>An unterminated quote swallows the rest of the file silently; a name starting with <code>=</code> is exported as a formula</td>
+    <td><span class="tag t-open">Open</span></td><td class="mono">&mdash;</td>
+  </tr>
+  </tbody>
+</table>
+</div>
+<p class="sub" style="margin-top:8px">Also found: the ledger claims an export&rarr;import round-trip test that did not exist, and says quotes were wired into loading when only saving was. The &ldquo;Start empty&rdquo; hint (&ldquo;type items in from the sell screen&rdquo;) was flagged but is correct &mdash; the owner quick-add is on the sell screen.</p>
+<!-- audit:end -->
 
 <h2>Task 14 in detail</h2>
 <p class="sub">Today, This month, and Today&rsquo;s summary. Committed as <code>Today home screen, This month for the owner, and a richer Today's summary</code>.</p>
@@ -279,7 +447,7 @@
     <h3 style="margin-top:0">Decisions and still to do</h3>
     <ul class="tight">
       <li>The wizard used to ask for the address and the VAT status. It does not any more: a new owner is not ready to be asked, and the checklist is a better place for a question that can wait. The <code>checklistDismissed</code> answer is what settles VAT</li>
-      <li>&ldquo;Import a spreadsheet&rdquo; is on the fourth step but <b>disabled</b>, because the import screen is Task 16 and does not exist yet. It is not offered as a choice that would set the shop up empty and then go nowhere</li>
+      <li class="strike">&ldquo;Import a spreadsheet&rdquo; was left <b>disabled</b> for Task 16 to switch on; Task 16 never did. <b>Fixed in the audit</b> (<code>77fa3ce</code>): the file is previewed on step 4 and imported once the owner is signed in</li>
       <li>The checklist answers live behind Settings, which staff cannot open, so the card is owner-only &mdash; the same gate as Running low</li>
       <li><code>checklistItems</code> sits in <code>src/lib/checklist.ts</code> rather than the component: <code>jsx: preserve</code> means a <code>.tsx</code> file cannot be imported into a node test at all, and this logic is testable</li>
       <li>Manual pass at 1280&times;800: clear site data, walk the four steps, read the recovery code, and confirm the checklist appears on Today with five open jobs. All routes prerender and the export serves 200; the new screens have no component test &mdash; the project has no component harness</li>
@@ -321,7 +489,7 @@
 <table>
   <tr><th>Item</th><th>State</th><th>Goes to</th></tr>
   <tr>
-    <td>42 commits ahead of <code>main</code> &mdash; pushed, but a single point of loss until a second remote exists</td>
+    <td>46 commits ahead of <code>main</code> &mdash; pushed, but a single point of loss until a second remote exists</td>
     <td class="no">Open</td>
     <td>Now</td>
   </tr>
@@ -342,7 +510,7 @@
   </tr>
   <tr>
     <td>The <code>SAVED</code> list in <code>usePos.ts</code> must gain promos and quotes</td>
-    <td class="yes">Done â€” both joined in Tasks 12 and 13</td>
+    <td class="yes">Done — both joined in Tasks 12 and 13</td>
     <td>Closed</td>
   </tr>
   <tr>
@@ -352,8 +520,8 @@
   </tr>
   <tr>
     <td><code>importSnapshot</code> of a v7 backup doesn't reset negative stock</td>
-    <td class="n">Deferred</td>
-    <td>Task 16</td>
+    <td class="yes">Done in the audit (<code>77fa3ce</code>); Task 16 had skipped it</td>
+    <td>Closed</td>
   </tr>
   <tr>
     <td>Wording, README, and the stale <code>brand.ts</code> comment still say POS@034 / superadmin / waiter</td>
@@ -382,7 +550,7 @@
   <li><b>New rules:</b> stock can never go below zero; one discount per sale and it comes from the owner; no price is ever typed at the counter; every sale is paid in full &mdash; no credit.</li>
 </ul>
 
-<p class="sub" style="margin-top:36px">Generated 2026-09-28 from the SDD ledger and the git log. Regenerate after each task commit.</p>
+<p class="sub" style="margin-top:36px">Generated 2026-09-28 from the SDD ledger and the git log. Updated with every fix commit during the audit.</p>
 
 </main>
 <script>
