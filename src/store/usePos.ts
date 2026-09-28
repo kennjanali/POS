@@ -56,7 +56,7 @@ import { UPGRADE_RESET_NOTE } from '@/lib/stockHistory';
 import { DEFAULT_BRANCH, DEFAULT_SETTINGS } from '@/lib/seed';
 import { OPENING_STOCK, seedCatalog } from '@/lib/catalogs';
 import { dismissed } from '@/lib/checklist';
-import type { ImportPreview } from '@/lib/csv';
+import { nameKey, type ImportPreview } from '@/lib/csv';
 import { actorId, useAuth } from './useAuth';
 import { REFERENCED_METHODS, TENDER_LABELS } from '@/lib/types';
 import type {
@@ -988,7 +988,9 @@ export const usePos = create<PosState>()(
       },
 
       applyPromo: (orderId, input) => {
-        const refused = guard('promo.apply');
+        // A code replaces an owner discount, and only the owner may take one off.
+        const replacesOwner = get().order(orderId)?.discount.kind === 'owner';
+        const refused = guard('promo.apply') ?? (replacesOwner ? guard('discount.owner') : null);
         if (refused) return refused;
         const promo = findUsablePromo(get().promos, input, businessDate(Date.now()));
         if (!promo) return { ok: false, error: 'That code is not valid today.' };
@@ -1169,13 +1171,18 @@ export const usePos = create<PosState>()(
           if (!product) return { ...l };
           return { ...l, name: product.name, unit: product.unit, unitCents: product.priceCents };
         });
-        // A new quote is made today, so a promo code on it must be valid today.
-        const promoGone =
-          source.discount.kind === 'promo' &&
-          !findUsablePromo(get().promos, source.discount.code, businessDate(Date.now()));
+        // A new quote is made today, so a promo code on it must be valid today,
+        // and carries the code as it stands today.
+        let discount: SaleDiscount = source.discount;
+        if (source.discount.kind === 'promo') {
+          const promo = findUsablePromo(get().promos, source.discount.code, businessDate(Date.now()));
+          discount = promo
+            ? { kind: 'promo', promoId: promo.id, code: promo.code, percent: promo.percent }
+            : { kind: 'none' };
+        }
         const quote = newQuote(get(), {
           lines,
-          discount: promoGone ? { kind: 'none' } : source.discount,
+          discount,
           customerName: source.customerName,
           customerPhone: source.customerPhone,
         });
@@ -1260,11 +1267,13 @@ export const usePos = create<PosState>()(
         }
         // An open sale carries the code and percent it was given; changing them
         // underneath it would lock the code on values no sale used.
-        const held = get().orders.some(
-          (o) => o.status === 'open' && o.discount.kind === 'promo' && o.discount.promoId === id,
-        );
-        if (held) {
+        const holds = (d: SaleDiscount) => d.kind === 'promo' && d.promoId === id;
+        if (get().orders.some((o) => o.status === 'open' && holds(o.discount))) {
           return { ok: false, error: 'An open sale is using this code. Finish or clear that sale first.' };
+        }
+        // An open quote converts at the code and percent written on it.
+        if (get().quotes.some((q) => q.status === 'open' && holds(q.discount))) {
+          return { ok: false, error: 'An open quotation is using this code. Turn it off and make a new one.' };
         }
         const invalid = badPromoInput(
           get().promos.filter((p) => p.id !== id),
@@ -1854,7 +1863,11 @@ export const usePos = create<PosState>()(
         const { products: shelf } = get();
         const stale = preview.rows.some((row) =>
           row.matchId === null
-            ? row.product.sku !== null && shelf.some((p) => p.sku === row.product.sku)
+            ? shelf.some((p) =>
+                row.product.sku !== null
+                  ? p.sku === row.product.sku
+                  : p.sku === null && nameKey(p.name) === nameKey(row.product.name),
+              )
             : !shelf.some((p) => p.id === row.matchId),
         );
         if (stale) {
@@ -1878,6 +1891,9 @@ export const usePos = create<PosState>()(
                 ...current,
                 // A file that names a removed item brings it back.
                 active: true,
+                // A SKU filled in for an item that had none is kept; one it
+                // already has is what the row was matched by.
+                sku: current.sku ?? row.product.sku,
                 category: row.product.category,
                 unit: row.product.unit,
                 priceCents: row.product.priceCents,
@@ -2596,6 +2612,9 @@ export const usePos = create<PosState>()(
       },
 
       closeDay: async (countedCashCents) => {
+        // The nightly close runs by itself, signed in or not. A close with a
+        // count is the owner's, taken by hand.
+        if (countedCashCents != null && guard('reports.view')) return null;
         if (get().unclosedSales() === 0) return null;
         // The count is hashed into the chain and can never be corrected.
         if (countedCashCents != null && (!Number.isSafeInteger(countedCashCents) || countedCashCents < 0)) {

@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { ClipboardList, X } from 'lucide-react';
 
 import { Empty } from '@/components/ui/Empty';
@@ -33,15 +34,27 @@ function currentCart(s: { orders: Order[]; activeBranchId: string; activeOrderId
 }
 
 export default function SellPage() {
-  const tickets = usePos((s) => s.settings.features.openOrders);
-  // A converted quote arrives as /sell?pay=<order>, straight to payment.
-  const [checkoutId, setCheckoutId] = useState<string | null>(() =>
-    typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('pay'),
+  // useSearchParams needs a Suspense boundary in a static export.
+  return (
+    <Suspense fallback={null}>
+      <Sell />
+    </Suspense>
   );
+}
+
+function Sell() {
+  const tickets = usePos((s) => s.settings.features.openOrders);
+  const [checkoutId, setCheckoutId] = useState<string | null>(null);
+
+  // A converted quote arrives as /sell?pay=<order>, straight to payment. The
+  // address is tidied once it is read, so a reload does not reopen payment.
+  const router = useRouter();
+  const pay = useSearchParams().get('pay');
   useEffect(() => {
-    // Once read, the address is tidied so a reload does not reopen payment.
-    if (window.location.search) window.history.replaceState(null, '', window.location.pathname);
-  }, []);
+    if (!pay) return;
+    setCheckoutId(pay);
+    router.replace('/sell');
+  }, [pay, router]);
   const [receiptFor, setReceiptFor] = useState<string | null>(null);
   const [quoteFor, setQuoteFor] = useState<string | null>(null);
 

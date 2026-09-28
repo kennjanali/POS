@@ -6,7 +6,8 @@ import { businessDate } from '@/lib/format';
 import { renderClose } from '@/lib/receipt';
 import { daySummary } from '@/lib/today';
 import type { Order, SaleDiscount, TenderMethod } from '@/lib/types';
-import { ownerShop, resetStore } from '@/test/store';
+import { ownerShop, resetStore, signInAs } from '@/test/store';
+import { useAuth } from '@/store/useAuth';
 import { usePos } from '@/store/usePos';
 
 /** Local midday, so the business date is the same wherever the suite runs. */
@@ -240,6 +241,15 @@ describe('daySummary through the till (the plan scenario)', () => {
     item('big', 1120);
     expect(S().payExact(sale('big'), 'cash').ok).toBe(true);
     expect(daySummary(S().orders, businessDate(Date.now())).vat).toBe(12000);
+  });
+
+  it('lets only the owner close the day with a count; the nightly close needs nobody', async () => {
+    item('three', 300);
+    expect(S().payExact(sale('three'), 'cash').ok).toBe(true);
+    signInAs('staff');
+    expect(await S().closeDay(cents(30000))).toBeNull();
+    useAuth.setState({ session: null });
+    expect(await S().closeDay()).not.toBeNull();
   });
 
   it("refuses a negative count, and the slip reads Today's summary", async () => {

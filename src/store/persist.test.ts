@@ -337,6 +337,7 @@ describe('reloading', () => {
   it('keeps quotations and their numbering across a restart', async () => {
     const first = quote();
     await settle();
+    expect(JSON.parse(kv.get('pos034-v7')!).state.quoteSeq).toBe(2);
 
     await reload();
     expect(S().quotes.map((q) => q.id)).toEqual([first]);

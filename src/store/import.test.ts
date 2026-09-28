@@ -147,6 +147,17 @@ describe('applyImport', () => {
     expect(byName(first.name).priceCents).toBe(99950);
   });
 
+  it('gives an item without a SKU the one the file fills in, without copying it', async () => {
+    await ownerShop();
+    const item = S().products.find((p) => p.kind === 'stock')!;
+    const before = S().products.length;
+    const held = onHand(item.id);
+    S().applyImport(preview(file(`${item.name},NEW-1,Food,stock,${item.unit},80,40,,99`)));
+    expect(S().products).toHaveLength(before);
+    expect(byName(item.name).sku).toBe('NEW-1');
+    expect(onHand(item.id)).toBe(held);
+  });
+
   it('brings back a removed item that the file names', async () => {
     await ownerShop();
     const item = S().products[0]!;

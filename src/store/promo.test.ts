@@ -195,6 +195,15 @@ describe('applyPromo', () => {
     });
   });
 
+  it('will not edit a code an open quotation carries', () => {
+    preset('auto');
+    const id = cart();
+    S().applyPromo(id, 'GRAND10');
+    expect(S().saveOrderAsQuote(id).ok).toBe(true);
+    asOwner();
+    expect(S().updatePromo(promoIdOf('GRAND10'), { code: 'GRAND20', percent: 20 }).ok).toBe(false);
+  });
+
   it('unlocks the codes when practice sales are cleared', () => {
     const id = cart();
     S().applyPromo(id, 'GRAND10');
@@ -283,9 +292,18 @@ describe('one discount per sale', () => {
     expect(S().clearDiscount(id).ok).toBe(false);
     expect(S().order(id)!.discount.kind).toBe('owner');
     // A promo code staff may take off, as they may put one on.
-    expect(S().applyPromo(id, 'GRAND10').ok).toBe(true);
-    expect(S().clearDiscount(id).ok).toBe(true);
-    expect(S().order(id)!.discount.kind).toBe('none');
+    const other = cart();
+    expect(S().applyPromo(other, 'GRAND10').ok).toBe(true);
+    expect(S().clearDiscount(other).ok).toBe(true);
+    expect(S().order(other)!.discount.kind).toBe('none');
+  });
+
+  it('will not let staff replace an owner discount with a code', () => {
+    const id = cart();
+    S().applyOwnerDiscount(id, { percent: 50 });
+    signInAs('staff');
+    expect(S().applyPromo(id, 'GRAND10')).toEqual({ ok: false, error: 'Only the owner can do that.' });
+    expect(S().order(id)!.discount.kind).toBe('owner');
   });
 
   it('keeps an entered payment when the same code is applied again', () => {

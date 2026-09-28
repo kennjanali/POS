@@ -113,9 +113,9 @@ function parse(text: string): { rows: string[][]; openQuote: number | null } {
  * Text cells like that go out with a leading apostrophe, and come back in
  * without it.
  */
-const FORMULA = /^[=+\-@]/;
+const FORMULA = /^'?[=+\-@]/;
 const guardText = (text: string) => (FORMULA.test(text) ? `'${text}` : text);
-const unguardText = (text: string) => (/^'[=+\-@]/.test(text) ? text.slice(1) : text);
+const unguardText = (text: string) => (/^'(?='?[=+\-@])/.test(text) ? text.slice(1) : text);
 
 /** Quote only what has to be quoted: a comma, a quote or a line break. */
 function quoteField(field: string): string {
@@ -150,17 +150,19 @@ const KINDS: readonly string[] = ['stock', 'service'];
  * cell is checked before it is read.
  */
 function isAmount(text: string): boolean {
-  return /^-?(?:₱|php)?\s*-?(?:\d[\d,]*)?(?:\.\d+)?$/i.test(text) && /\d/.test(text);
+  // Thousands in groups of three, at most two decimals: "1,2,3" and "25.505"
+  // are typos, not prices.
+  return /^-?\s*(?:₱|php|p)?\s*(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?$/i.test(text);
 }
 
 /** A quantity cell: blank or zero means none; anything else goes through parseQty. */
 function readQty(text: string, decimals: boolean): Qty | null {
-  if (text === '' || /^0*(?:\.0*)?$/.test(text)) return qty(0);
+  if (text === '' || /^(?:0+(?:\.0*)?|0*\.0+)$/.test(text)) return qty(0);
   return parseQty(text, decimals);
 }
 
 /** Names match the way an owner reads them: ignoring case and stray spaces. */
-const nameKey = (name: string) => name.trim().replace(/\s+/g, ' ').toLowerCase();
+export const nameKey = (name: string) => name.trim().replace(/\s+/g, ' ').toLowerCase();
 
 /**
  * Read a file into rows and errors without touching anything.
@@ -181,7 +183,11 @@ export function previewImport(
     table.splice(openQuote - 1);
   }
   if (table.length === 0) {
-    return { rows: [], errors: [{ row: 1, message: 'That file is empty.' }] };
+    const message =
+      openQuote === 1
+        ? 'A quote (") on the first line is never closed, so the file could not be read.'
+        : 'That file is empty.';
+    return { rows: [], errors: [{ row: 1, message }] };
   }
 
   const header = table[0]!.map((h) => h.trim().toLowerCase());
@@ -211,6 +217,7 @@ export function previewImport(
   }
   const seen = new Set<string>();
   const seenNames = new Set<string>();
+  const matched = new Set<string>();
 
   for (let i = 1; i < table.length; i += 1) {
     const source = table[i]!;
@@ -260,13 +267,22 @@ export function previewImport(
       if (seen.has(sku)) add(`SKU ${sku} appears twice in this file.`);
       seen.add(sku);
       match = bySku.get(sku) ?? null;
-    } else if (name !== '') {
+    }
+    // A new SKU may be one the owner just filled in for an item that had none,
+    // so an unknown SKU still looks for the item by name.
+    if (match === null && name !== '') {
       const key = nameKey(name);
-      if (seenNames.has(key)) add(`${name} appears twice in this file. Give one of them a SKU.`);
-      seenNames.add(key);
+      if (sku === '') {
+        if (seenNames.has(key)) add(`${name} appears twice in this file. Give one of them a SKU.`);
+        seenNames.add(key);
+      }
       const named = byName.get(key) ?? [];
       if (named.length > 1) add(`More than one item is called ${name}. Give it a SKU to choose one.`);
       match = named.length === 1 ? named[0]! : null;
+    }
+    if (match) {
+      if (matched.has(match.id)) add(`${match.name} is on more than one line of this file.`);
+      matched.add(match.id);
     }
 
     if (match && kind !== null && match.kind !== kind) {

@@ -103,6 +103,11 @@ export function Checkout({ order, open, onClose, onPaid, onQuoted }: CheckoutPro
   /** Apply now, or ask first when it would replace the other kind of discount. */
   function applyDiscount(kind: 'promo' | 'owner', label: string, run: () => void) {
     const current = order.discount.kind;
+    // Only the owner may take an owner discount off, so staff are told, not asked.
+    if (current === 'owner' && !canDiscount) {
+      toast('An owner discount is on this sale. Only the owner can change it.', 'danger');
+      return;
+    }
     if (current !== 'none' && current !== kind) setReplacing({ run, with: label });
     else run();
   }
@@ -520,12 +525,11 @@ export function Checkout({ order, open, onClose, onPaid, onQuoted }: CheckoutPro
       width="md"
       footer={
         <div className="flex gap-2">
-          {order.discount.kind !== 'none' && (
+          {(order.discount.kind === 'promo' || (order.discount.kind !== 'none' && canDiscount)) && (
             <Button
               variant="secondary"
               onClick={() => {
-                showRefusal(clearDiscount(order.id));
-                setDiscountOpen(false);
+                if (showRefusal(clearDiscount(order.id)).ok) setDiscountOpen(false);
               }}
             >
               Remove discount

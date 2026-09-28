@@ -335,6 +335,54 @@ describe('previewImport matching', () => {
   });
 });
 
+describe('previewImport, second round', () => {
+  it('matches by name when the owner filled in a SKU for an item that had none', () => {
+    const shelf = [existing({ id: 'coke', name: 'Coke', sku: null })];
+    const preview = previewImport(file('Coke,CK-1,Drinks,stock,pcs,25,15,,5'), shelf, FEATURES);
+    expect(preview.errors).toEqual([]);
+    expect(preview.rows[0]?.matchId).toBe('coke');
+    expect(preview.rows[0]?.product.sku).toBe('CK-1');
+  });
+
+  it('refuses two lines that land on the same item', () => {
+    const shelf = [existing({ id: 'coke', name: 'Coke', sku: null })];
+    const preview = previewImport(
+      file('Coke,CK-1,Drinks,stock,pcs,25,15,,', 'Coke,CK-2,Drinks,stock,pcs,26,15,,'),
+      shelf,
+      FEATURES,
+    );
+    expect(preview.errors).toEqual([{ row: 3, message: 'Coke is on more than one line of this file.' }]);
+  });
+
+  it('reads the amounts people type and refuses the typos', () => {
+    const price = (text: string) =>
+      previewImport(file(`A,A-1,X,stock,pcs,"${text}",1,,`), [], FEATURES);
+    for (const ok of ['25', '₱1,250.50', 'PHP 25', 'P25', '1,250', '0.5']) {
+      expect(price(ok).errors, ok).toEqual([]);
+    }
+    for (const bad of ['1,2,3', '1,,,', '--5', '-₱-5', '25.505', '.', '12abc']) {
+      expect(price(bad).errors[0]?.message, bad).toBe('Price is not a number.');
+    }
+  });
+
+  it('refuses "." as a quantity rather than reading it as none', () => {
+    const preview = previewImport(file('A,A-1,X,stock,pcs,5,1,,.'), [], FEATURES);
+    expect(preview.errors[0]?.message).toBe('. is not a whole number of pcs.');
+  });
+
+  it('says a quote on the header line is never closed', () => {
+    const preview = previewImport('"name,sku\r\nA,1\r\n', [], FEATURES);
+    expect(preview.errors[0]?.message).toBe(
+      'A quote (") on the first line is never closed, so the file could not be read.',
+    );
+  });
+
+  it("keeps a name that already starts with an apostrophe and a formula sign", () => {
+    const csv = exportProducts([existing({ name: "'=already" })], {});
+    expect(previewImport(csv, [], FEATURES).rows[0]?.product.name).toBe("'=already");
+  });
+});
+
 describe('previewImport and broken files', () => {
   it('names the line of a quote that is never closed, and keeps the lines before it', () => {
     const preview = previewImport(
