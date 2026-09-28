@@ -18,7 +18,7 @@ import { usePos } from '@/store/usePos';
 const SHOWN = 7;
 
 /**
- * The day's close: taken by itself at 23:59 (or on the next launch), or here
+ * Today's summary (the daily close): taken by itself at 23:59 (or on the next launch), or here
  * whenever the owner counts the till. Each close covers the sales since the
  * one before, so closing early just starts the next window early.
  */
@@ -34,8 +34,15 @@ export function DailyCloses() {
   const [counted, setCounted] = useState('');
 
   async function closeNow() {
+    const typed = counted.trim();
+    // parsePesos keeps a minus sign and reads "abc" as 0; either would be
+    // hashed into the close for good, so it is checked first.
+    if (typed && !/^\d[\d,]*(\.\d{1,2})?$/.test(typed)) {
+      toast('Enter the counted cash as an amount, like 5250.50.', 'danger');
+      return;
+    }
     setBusy(true);
-    const close = await closeDay(counted.trim() ? parsePesos(counted) : undefined);
+    const close = await closeDay(typed ? parsePesos(typed) : undefined);
     setBusy(false);
     if (close) {
       setShown(close);
@@ -114,7 +121,7 @@ function CloseSlip({ close, onClose }: { close: DailyClose; onClose: () => void 
     <Modal
       open
       onClose={onClose}
-      title={`Daily close #${close.no}`}
+      title={`Today’s summary #${close.no}`}
       width="sm"
       footer={<SlipFooter text={text} onClose={onClose} />}
     >

@@ -9,9 +9,11 @@ import { formatQty, lineTotal, type Qty } from '@/lib/qty';
 import { TENDER_LABELS, TENDER_METHODS, type TenderMethod } from '@/lib/types';
 import { usePos } from '@/store/usePos';
 
-type Range = 'today' | '7d' | '30d' | 'all';
+type Range = 'month' | 'today' | '7d' | '30d' | 'all';
 
-const RANGES: { key: Range; label: string; days: number | null }[] = [
+/** `days` 0 is the business day; `month` is the calendar month it falls in. */
+const RANGES: { key: Range; label: string; days: number | null | 'month' }[] = [
+  { key: 'month', label: 'This month', days: 'month' },
   { key: 'today', label: 'Today', days: 0 },
   { key: '7d', label: 'Last 7 days', days: 7 },
   { key: '30d', label: 'Last 30 days', days: 30 },
@@ -26,7 +28,7 @@ export default function MonthPage() {
   const branchId = usePos((s) => s.activeBranchId);
   const branches = usePos((s) => s.branches);
 
-  const [range, setRange] = useState<Range>('today');
+  const [range, setRange] = useState<Range>('month');
 
   const stats = useMemo(() => {
     const spec = RANGES.find((r) => r.key === range);
@@ -34,6 +36,8 @@ export default function MonthPage() {
     const today = businessDate(now);
 
     const inRange = (at: number) => {
+      // Business dates are YYYY-MM-DD, so the month is the first seven.
+      if (spec?.days === 'month') return businessDate(at).slice(0, 7) === today.slice(0, 7);
       if (spec?.days === 0) return businessDate(at) === today;
       if (spec?.days == null) return true;
       return at >= now - spec.days * 86_400_000;
@@ -127,10 +131,13 @@ export default function MonthPage() {
 
     // Counted over the same rows as every other tile, so the codes line up
     // with the period and the branch on screen rather than with all time.
-    const uses = new Map<string, number>();
+    const uses = new Map<string, { sales: number; given: number }>();
     for (const order of scoped) {
       if (order.discount.kind !== 'promo') continue;
-      uses.set(order.discount.promoId, (uses.get(order.discount.promoId) ?? 0) + 1);
+      const entry = uses.get(order.discount.promoId) ?? { sales: 0, given: 0 };
+      entry.sales += 1;
+      entry.given += order.discountCents;
+      uses.set(order.discount.promoId, entry);
     }
 
     return {
@@ -149,9 +156,9 @@ export default function MonthPage() {
       top,
       voided,
       usedPromos: promos
-        .map((promo) => ({ promo, uses: uses.get(promo.id) ?? 0 }))
-        .filter((row) => row.uses > 0)
-        .sort((a, b) => b.uses - a.uses),
+        .map((promo) => ({ promo, ...(uses.get(promo.id) ?? { sales: 0, given: 0 }) }))
+        .filter((row) => row.sales > 0)
+        .sort((a, b) => b.sales - a.sales),
     };
   }, [orders, products, range, branchId, branches, promos]);
 
@@ -193,9 +200,9 @@ export default function MonthPage() {
 
         <div className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-2.5">
           <Stat label="Net sales" value={peso(cents(stats.net), settings.currency)} big />
-          <Stat label="Orders" value={String(stats.count)} />
+          <Stat label="Sales" value={String(stats.count)} />
           <Stat
-            label="Average order"
+            label="Average sale"
             value={peso(cents(stats.average), settings.currency)}
           />
           <Stat
@@ -229,7 +236,7 @@ export default function MonthPage() {
           {settings.vatRegistered && (
             <Stat label="Output VAT" value={peso(cents(stats.vat), settings.currency)} />
           )}
-          <Stat label="Voided orders" value={String(stats.voided)} tone="bad" />
+          <Stat label="Cancelled sales" value={String(stats.voided)} tone="bad" />
         </div>
 
         {stats.byBranch.length > 1 && (
@@ -257,7 +264,7 @@ export default function MonthPage() {
                     <span className="tnum shrink-0">
                       <strong>{peso(cents(net), settings.currency)}</strong>
                       <span className="ml-2 text-ink-3">
-                        {count} order{count === 1 ? '' : 's'} · avg{' '}
+                        {count} sale{count === 1 ? '' : 's'} · avg{' '}
                         {peso(cents(average), settings.currency)}
                       </span>
                     </span>
@@ -280,7 +287,7 @@ export default function MonthPage() {
           {/* Tender breakdown — this IS the Z-reading breakdown BIR wants. */}
           <section className="rounded-lg border border-line bg-surface p-3.5">
             <h3 className="mb-3 text-[11px] font-bold tracking-wide text-ink-2 uppercase">
-              Collected by tender
+              Collected by method
             </h3>
             <dl className="flex flex-col gap-1.5">
               {TENDER_METHODS.map((m) => (
@@ -339,7 +346,7 @@ export default function MonthPage() {
               </p>
             ) : (
               <ul className="flex list-none flex-col gap-1.5 p-0">
-                {stats.usedPromos.map(({ promo, uses }) => (
+                {stats.usedPromos.map(({ promo, sales, given }) => (
                   <li
                     key={promo.id}
                     className="flex items-baseline justify-between gap-3 text-[12.5px]"
@@ -349,7 +356,7 @@ export default function MonthPage() {
                       {!promo.active && <span className="ml-2 text-ink-3">off</span>}
                     </span>
                     <span className="tnum shrink-0 text-ink-2">
-                      {uses} sale{uses === 1 ? '' : 's'}
+                      {sales} sale{sales === 1 ? '' : 's'} · -{peso(cents(given), settings.currency)}
                     </span>
                   </li>
                 ))}

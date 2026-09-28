@@ -388,7 +388,7 @@ export default function SettingsPage() {
           Writes 30 days of pretend trading — roughly 40 orders a day across three
           branches, with some owner discounts, every tender type, a few
           voided sales, and live tables on the floor right now. Today is included,
-          so the Dashboard has something to show straight away.
+          so Today and This month have something to show straight away.
         </p>
         <p className="mt-2 text-[12.5px] leading-relaxed text-ink-2">
           <strong>Every order, stock movement and order number already on this

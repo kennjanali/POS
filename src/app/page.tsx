@@ -19,6 +19,8 @@ export default function TodayPage() {
   const settings = usePos((s) => s.settings);
   // Low stock is the owner's working list; staff see the day's money only.
   const isOwner = useAuth((s) => can(s.session, 'inventory.manage'));
+  // Past days' summaries are reports; staff see today's money only.
+  const seesSummaries = useAuth((s) => can(s.session, 'reports.view'));
 
   const day = businessDate(Date.now());
   const s = useMemo(() => daySummary(orders, day), [orders, day]);
@@ -36,10 +38,33 @@ export default function TodayPage() {
           <Tile label="Net sales" value={peso(s.net, settings.currency)} big />
           <Tile label="Sales" value={String(s.sales)} />
           <Tile label="Collected" value={peso(s.collectedTotal, settings.currency)} />
-          {settings.vatRegistered && <Tile label="Output VAT" value={peso(s.vat, settings.currency)} />}
+          {settings.vatRegistered && <Tile label="VAT collected" value={peso(s.vat, settings.currency)} />}
+          <Tile label="Expected cash in drawer" value={peso(s.expectedCash, settings.currency)} />
         </div>
 
         <div className="grid gap-3 lg:grid-cols-2">
+          <section className="rounded-lg border border-line bg-surface p-3.5">
+            <h3 className="mb-3 text-[11px] font-bold tracking-wide text-ink-2 uppercase">
+              Sales today
+            </h3>
+            <dl className="flex flex-col gap-1.5">
+              <Row label="Gross" value={peso(s.gross, settings.currency)} />
+              {s.promoDiscount > 0 && (
+                <Row label="Promo codes" value={`-${peso(s.promoDiscount, settings.currency)}`} />
+              )}
+              {s.ownerDiscount > 0 && (
+                <Row label="Owner discounts" value={`-${peso(s.ownerDiscount, settings.currency)}`} />
+              )}
+              <Row label="Net sales" value={peso(s.net, settings.currency)} total />
+            </dl>
+            {s.cancelled > 0 && (
+              <p className="mt-3 border-t border-line pt-2 text-[11.5px] text-ink-2">
+                {s.cancelled} sale{s.cancelled === 1 ? '' : 's'} cancelled today -{' '}
+                {peso(s.cancelledCents, settings.currency)}.
+              </p>
+            )}
+          </section>
+
           <section className="rounded-lg border border-line bg-surface p-3.5">
             <h3 className="mb-3 text-[11px] font-bold tracking-wide text-ink-2 uppercase">
               Collected today
@@ -61,12 +86,6 @@ export default function TodayPage() {
                   <dd className="tnum font-bold">{peso(s.collectedTotal, settings.currency)}</dd>
                 </div>
               </dl>
-            )}
-            {s.cancelled > 0 && (
-              <p className="mt-3 border-t border-line pt-2 text-[11.5px] text-ink-2">
-                {s.cancelled} sale{s.cancelled === 1 ? '' : 's'} cancelled today -{' '}
-                {peso(s.cancelledCents, settings.currency)}.
-              </p>
             )}
           </section>
 
@@ -100,8 +119,19 @@ export default function TodayPage() {
           )}
         </div>
 
-        <DailyCloses />
+        {seesSummaries && <DailyCloses />}
       </div>
+    </div>
+  );
+}
+
+function Row({ label, value, total }: { label: string; value: string; total?: boolean }) {
+  return (
+    <div
+      className={`flex items-baseline justify-between text-[12.5px] ${total ? 'border-t border-line pt-1.5' : ''}`}
+    >
+      <dt className="text-ink-2">{label}</dt>
+      <dd className="tnum font-bold">{value}</dd>
     </div>
   );
 }

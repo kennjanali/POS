@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { cents } from '@/lib/money';
 import { QTY_ONE } from '@/lib/qty';
+import { businessDate } from '@/lib/format';
+import { renderClose } from '@/lib/receipt';
 import { daySummary } from '@/lib/today';
 import type { Order, SaleDiscount, TenderMethod } from '@/lib/types';
 import { ownerShop, resetStore } from '@/test/store';
@@ -176,5 +178,79 @@ describe('daySummary', () => {
 
     expect(s.sales).toBe(0);
     expect(s.cancelled).toBe(0);
+  });
+});
+
+describe('daySummary through the till (the plan scenario)', () => {
+  beforeEach(async () => {
+    resetStore();
+    await ownerShop();
+  });
+
+  const S = () => usePos.getState();
+
+  function item(id: string, pesos: number) {
+    S().upsertProduct({
+      id,
+      name: id,
+      kind: 'service',
+      sku: null,
+      category: '',
+      unit: 'job',
+      priceCents: cents(pesos * 100),
+      costCents: cents(0),
+      vatExempt: false,
+      active: true,
+      reorderLevel: null,
+    });
+  }
+
+  function sale(productId: string): string {
+    const id = S().openOrder('Walk-in', 'walk-in');
+    S().addLine(id, productId);
+    S().serveAll(id);
+    return id;
+  }
+
+  it('₱500 cash with a 10% promo, ₱300 GCash, one cancelled: net 75000, promo 5000', () => {
+    item('five', 500);
+    item('three', 300);
+    expect(S().createPromo({ code: 'GRAND10', percent: 10 }).ok).toBe(true);
+
+    const a = sale('five');
+    expect(S().applyPromo(a, 'GRAND10').ok).toBe(true);
+    expect(S().payExact(a, 'cash').ok).toBe(true);
+    const b = sale('three');
+    expect(S().payExact(b, 'gcash', '1234567890').ok).toBe(true);
+    const c = sale('three');
+    expect(S().payExact(c, 'cash').ok).toBe(true);
+    expect(S().voidOrder(c, 'wrong item').ok).toBe(true);
+
+    const day = daySummary(S().orders, businessDate(Date.now()));
+    expect(day.net).toBe(75000);
+    expect(day.promoDiscount).toBe(5000);
+    expect(day.collected.cash).toBe(45000);
+    expect(day.collected.gcash).toBe(30000);
+    expect(day.cancelled).toBe(1);
+    expect(day.expectedCash).toBe(45000);
+  });
+
+  it('a ₱1,120 sale on a VAT-registered shop gives vat 12000', () => {
+    usePos.setState((s) => ({ settings: { ...s.settings, vatRegistered: true } }));
+    item('big', 1120);
+    expect(S().payExact(sale('big'), 'cash').ok).toBe(true);
+    expect(daySummary(S().orders, businessDate(Date.now())).vat).toBe(12000);
+  });
+
+  it("refuses a negative count, and the slip reads Today's summary", async () => {
+    item('three', 300);
+    expect(S().payExact(sale('three'), 'cash').ok).toBe(true);
+    expect(await S().closeDay(cents(-100))).toBeNull();
+
+    const close = await S().closeDay(cents(30000));
+    expect(close?.countedCashCents).toBe(30000);
+    const slip = renderClose(close!, S().settings);
+    expect(slip).toContain("TODAY'S SUMMARY #");
+    expect(slip).not.toMatch(/daily close|output vat/i);
   });
 });

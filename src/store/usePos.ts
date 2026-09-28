@@ -2575,6 +2575,10 @@ export const usePos = create<PosState>()(
 
       closeDay: async (countedCashCents) => {
         if (get().unclosedSales() === 0) return null;
+        // The count is hashed into the chain and can never be corrected.
+        if (countedCashCents != null && (!Number.isSafeInteger(countedCashCents) || countedCashCents < 0)) {
+          return null;
+        }
         const previous = get().closes.at(-1) ?? null;
         const close = await signClose(
           buildClose({
@@ -2595,7 +2599,7 @@ export const usePos = create<PosState>()(
           audit: log(
             s.audit,
             'day.close',
-            `Daily close #${close.no} — ${close.orders} sale${close.orders === 1 ? '' : 's'}, ` +
+            `Today's summary #${close.no} — ${close.orders} sale${close.orders === 1 ? '' : 's'}, ` +
               `net ${(close.netCents / 100).toFixed(2)}`,
             'success',
             s.activeBranchId,

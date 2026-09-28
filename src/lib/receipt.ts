@@ -30,12 +30,12 @@ function layout(width: number) {
   };
 }
 
-/** The owner's end-of-day count, printed from the Dashboard. */
+/** Today's summary (the daily close), printed from the Today screen. */
 export function renderClose(close: DailyClose, settings: Settings, width: number = COLUMNS[58]): string {
   const { row, centre, rule } = layout(width);
   const out = [
     centre(settings.businessName.toUpperCase()),
-    centre(`DAILY CLOSE #${close.no}`),
+    centre(`TODAY'S SUMMARY #${close.no}`),
     rule,
     row('Date', fmtDate(close.closedAt)),
     row('Closed at', fmtTime(close.closedAt)),
@@ -44,7 +44,10 @@ export function renderClose(close: DailyClose, settings: Settings, width: number
     row('Gross', amount(close.grossCents)),
     row('Discounts', `-${amount(close.discountCents)}`),
   ];
-  if (close.voidedEarlierCents > 0) out.push(row('Voids, earlier days', `-${amount(close.voidedEarlierCents)}`));
+  // The split only exists on a close that carries it.
+  if (close.promoDiscountCents) out.push(row('  of which promo', `-${amount(close.promoDiscountCents)}`));
+  if (close.ownerDiscountCents) out.push(row('  of which owner', `-${amount(close.ownerDiscountCents)}`));
+  if (close.voidedEarlierCents > 0) out.push(row('Cancelled, earlier days', `-${amount(close.voidedEarlierCents)}`));
   out.push(row('NET', amount(close.netCents)), rule);
   for (const method of TENDER_METHODS) {
     if (close.tenders[method] > 0) out.push(row(TENDER_LABELS[method], amount(close.tenders[method])));
@@ -60,15 +63,9 @@ export function renderClose(close: DailyClose, settings: Settings, width: number
       );
     }
   }
-  // The split only exists on a close that carries it, and VAT is not a line a
-  // shop that is not registered may print.
-  if (close.promoDiscountCents || close.ownerDiscountCents) {
-    if (close.promoDiscountCents) out.push(row('  of which promo', `-${amount(close.promoDiscountCents)}`));
-    if (close.ownerDiscountCents) out.push(row('  of which owner', `-${amount(close.ownerDiscountCents)}`));
-  }
-  if (settings.vatRegistered && close.vatCents) {
-    out.push(row('Output VAT', amount(close.vatCents)));
-  }
+  // VAT as it was frozen on the close: a day taken while registered keeps its
+  // VAT line, and a shop that has never been registered prints none.
+  if (close.vatCents) out.push(row('VAT collected', amount(close.vatCents)));
   out.push(rule, row('Running total', amount(close.runningNetCents)), row('Check', close.hash.slice(0, 12)));
   return out.join('\n');
 }

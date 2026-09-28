@@ -202,7 +202,7 @@ export function MonthlyArchive() {
           You do not have to do this — keeping the month costs you nothing in
           speed. Only remove it if you want the device tidy. Afterwards you can
           still reopen the file here for the numbers, but those sales will no
-          longer show on the Orders page or the Dashboard.
+          longer show under Sales or This month.
         </p>
       </Modal>
     </div>

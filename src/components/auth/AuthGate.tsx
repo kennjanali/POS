@@ -14,7 +14,7 @@ import { useAuth } from '@/store/useAuth';
  * account, the keypad, and the route guard.
  *
  * The guard is the part that matters. Hiding a nav link only tidies the rail —
- * a waiter who types /dashboard has to land back on the POS, and must not see
+ * staff who type /month have to land back on Today, and must not see
  * the page for even one frame on the way.
  */
 export function AuthGate({ children }: { children: React.ReactNode }) {
