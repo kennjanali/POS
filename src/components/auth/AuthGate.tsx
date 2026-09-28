@@ -23,6 +23,9 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
 
   const posHydrated = usePos((s) => s.hydrated);
   const users = usePos((s) => s.users);
+  // Routes like /quotes exist only when the shop has them switched on. Left
+  // out, every feature reads as off and the page can never be opened.
+  const features = usePos((s) => s.settings.features);
 
   const authHydrated = useAuth((s) => s.hydrated);
   const session = useAuth((s) => s.session);
@@ -37,12 +40,14 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     refresh(users.find((u) => u.id === session.userId));
   }, [posHydrated, session, users, refresh]);
 
-  const allowed = canVisit(session, pathname);
+  const allowed = canVisit(session, pathname, features);
 
   useEffect(() => {
-    if (!session || allowed) return;
-    router.replace(landingFor(session));
-  }, [session, allowed, router, pathname]);
+    // Not before the saved settings are back: until then the features are
+    // the defaults, and a shop's own routes would look switched off.
+    if (!posHydrated || !session || allowed) return;
+    router.replace(landingFor(session, features));
+  }, [posHydrated, session, allowed, router, pathname, features]);
 
   if (!posHydrated || !authHydrated) {
     return (
