@@ -80,7 +80,7 @@
 <h1>POS-034 &mdash; Build Progress</h1>
 <p class="sub">
   Offline POS for small shops, by kennali.com. One tablet = one shop.<br>
-  Branch <code>pos-034-redesign</code> &middot; 69 commits ahead of <code>main</code> &middot; as of 2026-09-28.<br>
+  Branch <code>pos-034-redesign</code> &middot; 72 commits ahead of <code>main</code> &middot; as of 2026-09-28.<br>
   Spec: <code>docs/superpowers/specs/2026-09-27-pos-034-design.md</code> &middot;
   Plan: <code>docs/superpowers/plans/2026-09-27-pos-034-app.md</code> (23 tasks: 18 in Plan A, 5 in Revision 2) &middot;
   Ledger: <code>.superpowers/sdd/2026-09-27-pos-034-app/progress.md</code>
@@ -88,20 +88,20 @@
 
 <div class="grid">
   <div class="stat"><b>18<span class="n">/23</span></b><span>Tasks complete</span></div>
-  <div class="stat"><b>1</b><span>In progress or audit</span></div>
-  <div class="stat"><b>4</b><span>Not started</span></div>
+  <div class="stat"><b>5</b><span>In progress or audit</span></div>
+  <div class="stat"><b>0</b><span>Not started</span></div>
   <div class="stat"><b class="yes">PASS</b><span><code>npm run check</code> &mdash; all stages</span></div>
-  <div class="stat"><b>346</b><span>Tests passing (28 files)</span></div>
+  <div class="stat"><b>350</b><span>Tests passing (28 files)</span></div>
 </div>
 
-<div class="bar" role="img" aria-label="18 of 23 tasks complete, 1 in progress, 0 in audit, 4 not started">
-  <i class="d" style="width:78.3%"></i><i class="w" style="width:4.3%"></i><i class="a" style="width:0.0%"></i><i class="n" style="width:17.4%"></i>
+<div class="bar" role="img" aria-label="18 of 23 tasks complete, 1 in progress, 4 in audit, 0 not started">
+  <i class="d" style="width:78.3%"></i><i class="w" style="width:4.3%"></i><i class="a" style="width:17.4%"></i><i class="n" style="width:0.0%"></i>
 </div>
 <div class="legend">
   <span><i class="dot" style="background:var(--ok)"></i>18 complete</span>
   <span><i class="dot" style="background:var(--wait)"></i>1 in progress</span>
-  <span><i class="dot" style="background:var(--no)"></i>0 in audit</span>
-  <span><i class="dot" style="background:var(--idle-soft);border:1px solid var(--line)"></i>4 not started</span>
+  <span><i class="dot" style="background:var(--no)"></i>4 in audit</span>
+  <span><i class="dot" style="background:var(--idle-soft);border:1px solid var(--line)"></i>0 not started</span>
 </div>
 
 <h2>Quality gate</h2>
@@ -110,7 +110,7 @@
   <tr><th>Stage</th><th>Result</th><th>What it covers</th></tr>
   <tr><td><code>typecheck</code></td><td class="yes">PASS</td><td><code>tsc --noEmit</code></td></tr>
   <tr><td><code>lint</code></td><td class="yes">PASS</td><td><code>eslint src</code></td></tr>
-  <tr><td><code>test</code></td><td class="yes">PASS</td><td>346 tests, 28 files</td></tr>
+  <tr><td><code>test</code></td><td class="yes">PASS</td><td>350 tests, 28 files</td></tr>
   <tr><td><code>verify:auth</code></td><td class="yes">PASS</td><td>Route guard for every role, last-owner protection, PIN hashing</td></tr>
   <tr><td><code>verify:safeguards</code></td><td class="yes">PASS</td><td>First run, license offline binding, one-way practice door, daily close chain, backup encryption, receipt width, archive pruning</td></tr>
 </table>
@@ -121,8 +121,8 @@
   <button type="button" data-f="all" aria-pressed="true">All 23</button>
   <button type="button" data-f="done" aria-pressed="false">Complete (18)</button>
   <button type="button" data-f="wait" aria-pressed="false">In progress (1)</button>
-  <button type="button" data-f="audit" aria-pressed="false">Audit (0)</button>
-  <button type="button" data-f="idle" aria-pressed="false">Not started (4)</button>
+  <button type="button" data-f="audit" aria-pressed="false">Audit (4)</button>
+  <button type="button" data-f="idle" aria-pressed="false">Not started (0)</button>
 </div>
 <div class="scroll">
 <table id="tasks">
@@ -238,33 +238,33 @@
       <td class="mono">865c99d</td>
       <td><code>Tip</code> component, plain words everywhere, README rewritten for POS-034, device pass on the emulator</td>
     </tr>
-    <tr data-s="wait">
+    <tr data-s="audit">
       <td>19</td><td>General defaults replace shop types</td>
-      <td><span class="tag t-wait">In progress</span></td>
-      <td class="mono">&mdash;</td>
+      <td><span class="tag t-audit">Audit</span></td>
+      <td class="mono">6cc047c</td>
       <td>One set of switches for every shop, a renameable ticket word, order types by switch; <code>ShopType</code> and presets removed</td>
     </tr>
-    <tr data-s="idle">
+    <tr data-s="audit">
       <td>20</td><td>Three-question setup and a mixed sample catalog</td>
-      <td><span class="tag t-idle">Not started</span></td>
-      <td class="mono">&mdash;</td>
+      <td><span class="tag t-audit">Audit</span></td>
+      <td class="mono">6cc047c</td>
       <td>Shop name, owner + PIN, start with sample / import / empty; sample has products and services</td>
     </tr>
-    <tr data-s="idle">
+    <tr data-s="audit">
       <td>21</td><td>Demo businesses carry their own setup</td>
-      <td><span class="tag t-idle">Not started</span></td>
-      <td class="mono">&mdash;</td>
+      <td><span class="tag t-audit">Audit</span></td>
+      <td class="mono">6cc047c</td>
       <td>Restaurant, Hardware Store, Auto Parts &amp; Service, Car Wash each bring their catalog, switches and ticket word</td>
     </tr>
-    <tr data-s="idle">
+    <tr data-s="audit">
       <td>22</td><td>Remove orphaned code and copy</td>
-      <td><span class="tag t-idle">Not started</span></td>
-      <td class="mono">&mdash;</td>
+      <td><span class="tag t-audit">Audit</span></td>
+      <td class="mono">a55735b</td>
       <td>No shop-type code, copy or tests left; spec updated to the general-POS model</td>
     </tr>
-    <tr data-s="idle">
+    <tr data-s="wait">
       <td>23</td><td>Audit</td>
-      <td><span class="tag t-idle">Not started</span></td>
+      <td><span class="tag t-wait">In progress</span></td>
       <td class="mono">&mdash;</td>
       <td>Independent reviews of 19&ndash;22, browser pass, every finding fixed or recorded</td>
     </tr>
@@ -597,7 +597,7 @@
 <table>
   <tr><th>Item</th><th>State</th><th>Goes to</th></tr>
   <tr>
-    <td>69 commits ahead of <code>main</code> &mdash; pushed, but a single point of loss until a second remote exists</td>
+    <td>72 commits ahead of <code>main</code> &mdash; pushed, but a single point of loss until a second remote exists</td>
     <td class="no">Open</td>
     <td>Now</td>
   </tr>
